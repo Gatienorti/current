@@ -1,0 +1,56 @@
+name: Compatibility
+
+'on':
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      rows: ${{ steps.rows.outputs.rows }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - id: rows
+        run: |
+          python3 - <<'PY'
+          import json, os
+          with open('tests/compatibility/matrix.json') as source:
+              matrix = json.load(source)
+          rows = {'include': [{'row': name, 'php': data['php']} for name, data in matrix.items()]}
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              print('rows=' + json.dumps(rows), file=output)
+          PY
+  test:
+    needs: matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix.outputs.rows) }}
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      LENS_REDIS_HOST: 127.0.0.1
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, dom, pdo_sqlite, sqlite3, redis, pcntl
+          tools: composer:v2
+          coverage: none
+      - run: composer validate --no-check-publish
+      - name: Resolve and test isolated consumer
+        run: php tests/compatibility/run.php "${{ matrix.row }}"

@@ -1,0 +1,34 @@
+name: horizon-lens-adapt-lab
+services:
+  adapt-web:
+    &adapt-application
+    image: sail-8.4/app:latest
+    entrypoint: ["php"]
+    command: ["-S", "0.0.0.0:8000", "/workspace/integrations/adapt/server.php"]
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      # Resolve the host Composer path dependency ../../horizon-lens from /opt/adapt.
+      - .:/horizon-lens:ro
+      - ${ADAPT_PATH:-../ADAPT/adapt-run-web}:/opt/adapt:ro
+    environment:
+      APP_ENV: testing
+      ADAPT_PATH: /opt/adapt
+      LENS_ADAPT_STATE: /workspace/prototype/storage/adapt-preview
+      LENS_ADAPT_REDIS_HOST: adapt-redis
+    networks: [default, preview]
+    ports:
+      - "127.0.0.1:8098:8000"
+    depends_on: [adapt-redis]
+  adapt-horizon:
+    <<: *adapt-application
+    command: ["/workspace/integrations/adapt/artisan", "horizon", "--environment=testing"]
+    ports: []
+    networks: [default]
+  adapt-redis:
+    image: redis:7-alpine
+    networks: [default]
+networks:
+  default:
+    internal: true
+  preview: {}

@@ -1,0 +1,5 @@
+<?php
+
+require __DIR__.'/bootstrap.php';
+$app = bootAdaptLab();
+exit($app->handleCommand(new \Symfony\Component\Console\Input\ArgvInput));

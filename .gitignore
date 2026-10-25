@@ -1,0 +1,33 @@
+/vendor/
+/node_modules/
+/.phpunit.cache/
+/prototype/.env
+/prototype/bootstrap/cache/*.php
+/prototype/storage/**
+!/prototype/storage/.gitkeep
+
+# Local credentials, editor state and generated artifacts
+.env
+.env.*
+!.env.example
+.DS_Store
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.log
+
+# Local-only research and review artifacts
+/docs/screenshots/
+/docs/benchmarks/
+/docs/verification/
+/experiments/
+/.local-docs-backup/
+/PLAN.md
+/ARCHITECTURE.md
+/docs/RESEARCH.md
+/docs/DEVELOPMENT.md
+/docs/ADAPT-INTEGRATION.md
+/docs/DEPENDENCIES.json
+/docs/PERFORMANCE.md
+/docs/NATIVE-RELIABILITY.md
+/tests/native/fixtures/*.json

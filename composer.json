@@ -1,0 +1,42 @@
+{
+    "name": "horizon-lens/horizon-lens",
+    "description": "Current: job investigation and execution history for Laravel Horizon.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2",
+        "illuminate/database": "^11.44 || ^12.0 || ^13.0",
+        "illuminate/queue": "^11.44 || ^12.0 || ^13.0",
+        "illuminate/support": "^11.44 || ^12.0 || ^13.0",
+        "laravel/horizon": "^5.30",
+        "nikic/php-parser": "^5.7"
+    },
+    "require-dev": {
+        "laravel/framework": "^11.44 || ^12.0 || ^13.0",
+        "mockery/mockery": "^1.6",
+        "phpunit/phpunit": "^10.5 || ^11.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "HorizonLens\\": "src/",
+            "Current\\": "src/Current/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "HorizonLens\\Tests\\": "tests/",
+            "HorizonLens\\Prototype\\": "prototype/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "HorizonLens\\LensServiceProvider"
+            ]
+        }
+    },
+    "scripts": {
+        "test": "phpunit -c phpunit.xml",
+        "test:compatibility": "php tests/compatibility/run.php"
+    }
+}

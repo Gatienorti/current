@@ -1,0 +1,26 @@
+name: horizon-lens-lab
+services:
+  lens-web:
+    image: sail-8.4/app:latest
+    entrypoint: ["php"]
+    command: ["prototype/artisan", "serve", "--host=0.0.0.0", "--port=8000", "--no-reload"]
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - ${VEHIFY_PATH:-../vehify/vehify-web}:/opt/vehify:ro
+    environment:
+      APP_ENV: local
+      LENS_VENDOR_AUTOLOAD: /opt/vehify/vendor/autoload.php
+      APP_PACKAGES_CACHE: /workspace/prototype/bootstrap/cache/packages.php
+      APP_SERVICES_CACHE: /workspace/prototype/bootstrap/cache/services.php
+    networks: [default, preview]
+    ports:
+      - "127.0.0.1:8097:8000"
+    depends_on: [lens-redis]
+  lens-redis:
+    image: redis:7-alpine
+    networks: [default]
+networks:
+  default:
+    internal: true
+  preview: {}
