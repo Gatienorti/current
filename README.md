@@ -80,6 +80,7 @@ Current remains an early beta. Isolated integration and compatibility tests have
 
 - [Installation and configuration](docs/INSTALLATION.md)
 - [Compatibility and verification](docs/COMPATIBILITY.md)
+- Scoped overhead measurements
 - [Contributing and running tests](CONTRIBUTING.md)
 - [Security reporting](SECURITY.md)
 - Architecture, research, and development plan
