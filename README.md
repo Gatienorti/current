@@ -27,10 +27,9 @@ Light, dark, and system appearance are included. Live data refreshes every five 
 
 ## Get started
 
-Current is preparing its first public beta and is **not on Packagist yet**. Install the development branch from GitHub in a development application, following the [installation guide](docs/INSTALLATION.md):
+Current is available on [Packagist](https://packagist.org/packages/gatienorti/current) as **dev-main**. A tagged beta release is still pending. Install the development branch in a development application, following the [installation guide](docs/INSTALLATION.md):
 
 ```sh
-composer config repositories.current vcs https://github.com/Gatienorti/current
 composer require gatienorti/current:dev-main
 php artisan current:install
 ```

@@ -4,10 +4,9 @@ Current runs alongside an existing Horizon installation. Laravel 11.44+, 12 and 
 
 ## 1. Install the development beta
 
-The source is public at [Gatienorti/current](https://github.com/Gatienorti/current), but the package is not on Packagist yet. Its Composer identifier is `gatienorti/current`. Install the development branch in a **disposable application** first:
+The source is public at [Gatienorti/current](https://github.com/Gatienorti/current), and the development branch is available on [Packagist](https://packagist.org/packages/gatienorti/current). A tagged beta release is still pending. Its Composer identifier is `gatienorti/current`. Install the development branch in a **disposable application** first:
 
 ```sh
-composer config repositories.current vcs https://github.com/Gatienorti/current
 composer require gatienorti/current:dev-main
 php artisan current:install
 ```
@@ -177,7 +176,7 @@ On failure details, select **Debug with AI**. The modal shows the selected attem
 
 ## Updating the beta checkout
 
-After updating the package, run `php artisan current:install` to apply any new package migrations (use `--force` in production), review newly documented settings, rebuild deployment caches and restart long-lived processes. The installer preserves existing configuration; it does not merge new settings into a published file. Existing captured history remains subject to its original retention. The development package is `gatienorti/current`; no Packagist release or beta tag has been published.
+After updating the package, run `php artisan current:install` to apply any new package migrations (use `--force` in production), review newly documented settings, rebuild deployment caches and restart long-lived processes. The installer preserves existing configuration; it does not merge new settings into a published file. Existing captured history remains subject to its original retention. The development package is `gatienorti/current`; Packagist currently lists dev-main, with no tagged beta yet.
 
 ## Incoming webhook proof of concept
 
@@ -404,6 +403,6 @@ Capture status and coverage appear at the bottom. Disabled capture can still hav
 
 The package now uses `gatienorti/current`, the `Current\` PHP namespace, `Current\CurrentServiceProvider`, `current.*` route/view/config names, and `CURRENT_*` environment settings. The existing `Current\Current::step` API stays unchanged.
 
-For an installation using the previous Composer package name, remove that requirement with `composer remove horizon-lens/horizon-lens --no-update`, add the GitHub VCS repository above, and require `gatienorti/current:dev-main`. Update explicit provider imports and capture calls to the Current namespace. Move any published `config/horizon-lens.php` settings into `config/current.php` and rename `HORIZON_LENS_*` environment settings to `CURRENT_*`. Review your configured history connection before restarting workers.
+For an installation using the previous Composer package name, remove that requirement with `composer remove horizon-lens/horizon-lens --no-update`, then require `gatienorti/current:dev-main`. Update explicit provider imports and capture calls to the Current namespace. Move any published `config/horizon-lens.php` settings into `config/current.php` and rename `HORIZON_LENS_*` environment settings to `CURRENT_*`. Review your configured history connection before restarting workers.
 
 Rebuild Composer autoloading and Laravel config/route/view caches through your deployment process. Restart long-lived workers so queued application code uses the new package. The original database migration filename and `lens_*` SQL tables are intentionally preserved as storage identifiers; no history rewrite is required. A small old-provider entry point lets existing Composer discovery boot during this transition. Old names stored in historical observations and Git history are not rewritten.
