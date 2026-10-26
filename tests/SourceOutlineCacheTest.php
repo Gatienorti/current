@@ -1,10 +1,10 @@
 <?php
 
-namespace HorizonLens\Tests;
+namespace Current\Tests;
 
-use HorizonLens\Prototype\Jobs\OrderInvestigationJob;
-use HorizonLens\Prototype\Jobs\PaymentJob;
-use HorizonLens\SourceOutline;
+use Current\Prototype\Jobs\OrderInvestigationJob;
+use Current\Prototype\Jobs\PaymentJob;
+use Current\SourceOutline;
 use Mockery;
 use PhpParser\ParserFactory;
 
@@ -37,7 +37,7 @@ final class SourceOutlineCacheTest extends TestCase
         file_put_contents($file, $source);
         $this->files[] = $file;
         require $file;
-        config()->set('horizon-lens.source_roots', [dirname($file)]);
+        config()->set('current.source_roots', [dirname($file)]);
 
         return [$class, $file, $source];
     }
@@ -72,7 +72,7 @@ final class SourceOutlineCacheTest extends TestCase
         $this->assertNotSame($first['source_hash'], $second['source_hash']);
         $this->assertStringContainsString('other_call()', $second['source_operations']);
         $this->assertStringNotContainsString('first_call()', $second['source_operations']);
-        config()->set('horizon-lens.source_revision', 'next-release');
+        config()->set('current.source_revision', 'next-release');
         $this->assertSame('next-release', $outline->capture($class)['source_revision']);
     }
 
@@ -82,14 +82,14 @@ final class SourceOutlineCacheTest extends TestCase
         $this->expectParses(2);
         $outline = app(SourceOutline::class);
         $this->assertCount(2, json_decode($outline->capture($class)['source_operations'], true));
-        config()->set('horizon-lens.max_source_operations', 1);
+        config()->set('current.max_source_operations', 1);
         $this->assertCount(1, json_decode($outline->capture($class)['source_operations'], true));
-        config()->set('horizon-lens.source_roots', []);
+        config()->set('current.source_roots', []);
         $this->assertSame([], $outline->capture($class));
-        config()->set('horizon-lens.source_roots', [dirname($file)]);
-        config()->set('horizon-lens.max_source_bytes', 10);
+        config()->set('current.source_roots', [dirname($file)]);
+        config()->set('current.max_source_bytes', 10);
         $this->assertSame([], $outline->capture($class));
-        config()->set('horizon-lens.max_source_bytes', 262144);
+        config()->set('current.max_source_bytes', 262144);
         $this->assertCount(1, json_decode($outline->capture($class)['source_operations'], true));
     }
 
@@ -99,14 +99,14 @@ final class SourceOutlineCacheTest extends TestCase
         [$b] = $this->fixture();
         [$c] = $this->fixture();
         $this->expectParses(6);
-        config()->set('horizon-lens.source_cache_entries', 2);
+        config()->set('current.source_cache_entries', 2);
         $outline = app(SourceOutline::class);
         $aResult = $outline->capture($a);
         $bResult = $outline->capture($b);
         $this->assertSame($aResult, $outline->capture($a));
         $this->assertNotEmpty($outline->capture($c));
         $this->assertSame($bResult, $outline->capture($b)); // B was least recently used.
-        config()->set('horizon-lens.source_cache_entries', 0);
+        config()->set('current.source_cache_entries', 0);
         $this->assertSame($aResult, $outline->capture($a));
         $this->assertSame($aResult, $outline->capture($a));
     }
@@ -114,8 +114,8 @@ final class SourceOutlineCacheTest extends TestCase
     public function test_json_byte_budget_evicts_even_below_the_entry_limit(): void
     {
         $this->expectParses(17);
-        config()->set('horizon-lens.source_cache_entries', 128);
-        config()->set('horizon-lens.max_source_operations', 1000);
+        config()->set('current.source_cache_entries', 128);
+        config()->set('current.max_source_operations', 1000);
         $outline = app(SourceOutline::class);
         $firstClass = null;
         $firstResult = null;

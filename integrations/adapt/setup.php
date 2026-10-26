@@ -3,7 +3,7 @@
 use App\Jobs\FetchGarminActivityDetail;
 use App\Jobs\SendPushNotificationJob;
 use App\Jobs\TrainingPlan\CreateTrainingPhasesJob;
-use HorizonLens\AdaptLab\Fixtures;
+use Current\AdaptLab\Fixtures;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;

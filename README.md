@@ -31,13 +31,13 @@ Current is preparing its first public beta and is **not on Packagist yet**. Inst
 
 ```sh
 composer config repositories.current vcs https://github.com/Gatienorti/current
-composer require horizon-lens/horizon-lens:dev-main
+composer require gatienorti/current:dev-main
 php artisan current:install
 ```
 
 Open **`/current`** using your application's existing Horizon access. The installer publishes configuration, creates a dedicated SQLite history store, and runs Current's migrations. Restart long-lived workers after installation and keep Laravel's scheduler running for pruning.
 
-The Composer identifier still uses the development name; the dashboard and public API are branded Current. No hosted account, Node build, or WebSocket server is required for jobs.
+The Composer package is `gatienorti/current`, matching its GitHub home. No hosted account, Node build, or WebSocket server is required for jobs.
 
 **Requirements:** PHP 8.2+, Laravel 11.44/12/13, and Horizon 5.30+ within 5.x, subject to compatible version pairs. Laravel 13 requires PHP 8.3+. See the [compatibility matrix](docs/COMPATIBILITY.md) for tested combinations and database limits.
 

@@ -1,8 +1,8 @@
 <?php
 
-namespace HorizonLens\Tests;
+namespace Current\Tests;
 
-use HorizonLens\HorizonAdapter;
+use Current\HorizonAdapter;
 use Laravel\Horizon\Contracts\JobRepository;
 use Laravel\Horizon\Contracts\MasterSupervisorRepository;
 use Laravel\Horizon\Contracts\MetricsRepository;
@@ -49,7 +49,7 @@ final class DashboardTest extends TestCase
         config()->set('horizon.trim.recent', 60);
         config()->set('horizon.trim.recent_failed', 10080);
         $this->store()->newJob('history-only', 'redis', 'history-queue', ['data' => ['commandName' => 'HistoryJob']]);
-        $response = $this->get('/horizon-lens/dashboard')->assertOk()
+        $response = $this->get('/current/dashboard')->assertOk()
             ->assertSee('Jobs Past Hour')->assertSee('Failed Jobs Past 7 Days')->assertSee('Active')
             ->assertSee('149')->assertSee('36')->assertSee('slow-queue')->assertSee('busy-queue')
             ->assertSee('title="master:payments">payments</strong>', false)
@@ -70,7 +70,7 @@ final class DashboardTest extends TestCase
         foreach (['first', 'second', 'other'] as $queue) {
             $this->store()->newJob('multi-'.$queue, 'redis', $queue, ['data' => ['commandName' => 'GroupJob']]);
         }
-        $response = $this->get('/horizon-lens/monitoring?'.http_build_query(['queue' => ['first', 'second'], 'job_class' => 'GroupJob']))->assertOk();
+        $response = $this->get('/current/monitoring?'.http_build_query(['queue' => ['first', 'second'], 'job_class' => 'GroupJob']))->assertOk();
         $this->assertSame(2, $response->viewData('total'));
         $this->assertSame(['first', 'second'], $response->viewData('filters')['queue']);
         $response->assertSee('name="queue[]" multiple', false)
@@ -82,9 +82,9 @@ final class DashboardTest extends TestCase
             $this->assertSame([$remaining], $parameters['queue']);
             $this->assertSame('GroupJob', $parameters['job_class']);
         }
-        $this->get('/horizon-lens/monitoring?'.http_build_query(['queue' => ['first', 'second'], 'job_class' => 'AbsentJob']))->assertOk()->assertViewHas('total', 0);
-        $this->get('/horizon-lens/monitoring?queue=first')->assertOk()->assertViewHas('total', 1);
-        $this->get('/horizon-lens/monitoring?queue%5B0%5D=')->assertOk()->assertViewHas('total', 3);
+        $this->get('/current/monitoring?'.http_build_query(['queue' => ['first', 'second'], 'job_class' => 'AbsentJob']))->assertOk()->assertViewHas('total', 0);
+        $this->get('/current/monitoring?queue=first')->assertOk()->assertViewHas('total', 1);
+        $this->get('/current/monitoring?queue%5B0%5D=')->assertOk()->assertViewHas('total', 3);
     }
 
     public function test_empty_master_and_supervisor_reads_mean_inactive_with_zero_processes(): void
@@ -94,7 +94,7 @@ final class DashboardTest extends TestCase
             $repository->shouldReceive('all')->andReturn([]);
             $this->app->instance($contract, $repository);
         }
-        $response = $this->get('/horizon-lens')->assertOk()->assertSee('Inactive')->assertSee('No supervisors reporting')->assertSee('No queues reported by Horizon supervisors');
+        $response = $this->get('/current')->assertOk()->assertSee('Inactive')->assertSee('No supervisors reporting')->assertSee('No queues reported by Horizon supervisors');
         $this->assertSame('inactive', $response->viewData('horizon')['masters']['data']['status']);
         $this->assertSame([], $response->viewData('horizon')['supervisors']['data']);
         $this->assertSame('dashboard', $response->viewData('section'));
@@ -108,7 +108,7 @@ final class DashboardTest extends TestCase
             $this->app->instance($contract, $repository);
         }
         $this->store()->newJob('history-survives-outage', 'redis', 'retained', ['data' => ['commandName' => 'RetainedHistoryJob']]);
-        $response = $this->get('/horizon-lens/dashboard')->assertOk()->assertSee('Unavailable')
+        $response = $this->get('/current/dashboard')->assertOk()->assertSee('Unavailable')
             ->assertSee('Queue workload is unavailable')->assertSee('RetainedHistoryJob')->assertDontSee('private-connection-detail');
         $this->assertFalse($response->viewData('horizon')['masters']['available']);
         $this->assertFalse($response->viewData('horizon')['supervisors']['available']);

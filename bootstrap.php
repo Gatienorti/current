@@ -9,10 +9,8 @@ if (! is_file($autoload)) {
     throw new RuntimeException('Run composer install or set LENS_VENDOR_AUTOLOAD to a supported Laravel/Horizon vendor/autoload.php.');
 }
 $loader = require $autoload;
-$loader->addPsr4('HorizonLens\\Tests\\', __DIR__.'/tests/');
-$loader->addPsr4('HorizonLens\\Prototype\\', __DIR__.'/prototype/');
-$loader->addPsr4('HorizonLens\\', __DIR__.'/src/');
-
-$loader->addPsr4('Current\\', __DIR__.'/src/Current/');
+$loader->addPsr4('Current\\Tests\\', __DIR__.'/tests/');
+$loader->addPsr4('Current\\Prototype\\', __DIR__.'/prototype/');
+$loader->addPsr4('Current\\', __DIR__.'/src/');
 
 return $loader;

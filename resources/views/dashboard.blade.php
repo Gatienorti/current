@@ -1,4 +1,4 @@
-@extends('horizon-lens::layout')
+@extends('current::layout')
 @section('title', 'Dashboard')
 @section('content')
 @php
@@ -18,7 +18,7 @@
         ['Max Throughput', !$horizon['metrics']['available'] ? 'Unavailable' : ($horizon['metrics']['data']['max_throughput'] ?: '—'), 'Queue with highest reported throughput', 'queue-metric'],
     ];
 @endphp
-<div class="page-heading"><div><h1>Dashboard</h1></div><a class="button secondary" href="{{ request()->fullUrl() }}">@include('horizon-lens::icon', ['iconName' => 'refresh']) Refresh</a></div>
+<div class="page-heading"><div><h1>Dashboard</h1></div><a class="button secondary" href="{{ request()->fullUrl() }}">@include('current::icon', ['iconName' => 'refresh']) Refresh</a></div>
 <div data-live-region="dashboard">
 <div class="horizon-stats-grid">
     @foreach($cards as [$label, $value, $caption, $style])
@@ -32,7 +32,7 @@
     @else
     <div class="table-scroll"><table><thead><tr><th>QUEUE / GROUP</th><th>READY JOBS</th><th>WORKER PROCESSES</th><th>ESTIMATED WAIT</th><th></th></tr></thead><tbody>
     @forelse($horizon['workload']['data'] as $queue)
-        <tr><td><span class="queue-name">{{ $queue['name'] }}</span></td><td class="mono">{{ number_format($queue['length']) }}</td><td class="mono">{{ number_format($queue['processes']) }}</td><td class="mono">{{ number_format($queue['wait']) }}s</td><td><a class="text-link" href="{{ route('horizon-lens.monitoring', ['queue' => $queue['split'] ? array_column($queue['split'], 'name') : $queue['name']]) }}">Inspect jobs @include('horizon-lens::icon', ['iconName' => 'arrow-right'])</a></td></tr>
+        <tr><td><span class="queue-name">{{ $queue['name'] }}</span></td><td class="mono">{{ number_format($queue['length']) }}</td><td class="mono">{{ number_format($queue['processes']) }}</td><td class="mono">{{ number_format($queue['wait']) }}s</td><td><a class="text-link" href="{{ route('current.monitoring', ['queue' => $queue['split'] ? array_column($queue['split'], 'name') : $queue['name']]) }}">Inspect jobs @include('current::icon', ['iconName' => 'arrow-right'])</a></td></tr>
     @empty
         <tr><td colspan="5"><div class="empty-state compact"><h3>No queues reported by Horizon supervisors</h3><p>Queues and allocated workers appear here when Horizon supervisors report them. This does not prove that every application queue is empty.</p></div></td></tr>
     @endforelse
@@ -51,9 +51,9 @@
     @endif
 </section>
 <div class="dashboard-grid">
-    <section class="panel"><div class="panel-heading"><h2>Recorded queues</h2><a class="text-link" href="{{ route('horizon-lens.monitoring') }}">Monitoring @include('horizon-lens::icon', ['iconName' => 'arrow-right'])</a></div><div class="table-scroll"><table><thead><tr><th>QUEUE</th><th>RETAINED JOBS</th><th></th></tr></thead><tbody>@forelse($queueSummary as $queue)<tr><td><span class="queue-name">{{ $queue->queue }}</span></td><td class="mono">{{ $queue->jobs }}</td><td><a class="text-link" href="{{ route('horizon-lens.monitoring', ['queue' => $queue->queue]) }}">Inspect @include('horizon-lens::icon', ['iconName' => 'arrow-right'])</a></td></tr>@empty<tr><td colspan="3"><div class="empty-state compact"><p>No queues captured yet.</p></div></td></tr>@endforelse</tbody></table></div></section>
-    <section class="panel"><div class="panel-heading"><h2>Recent observations</h2><a class="text-link" href="{{ route('horizon-lens.recent') }}">Recent jobs @include('horizon-lens::icon', ['iconName' => 'arrow-right'])</a></div><div class="table-scroll"><table><thead><tr><th>JOB</th><th>STATUS</th><th>QUEUE</th></tr></thead><tbody>@forelse($jobs->take(5) as $job)<tr><td><a class="job-name" href="{{ route('horizon-lens.show', ['id' => $job->id, 'return' => $detailContext]) }}">{{ class_basename($job->job_class) }}</a><div class="job-uuid">{{ gmdate('M j, H:i:s', (int) $job->observed_at) }} UTC</div></td><td>@include('horizon-lens::status', ['status' => $job->display_status])@include('horizon-lens::history-indicator')</td><td><span class="queue-name">{{ $job->queue }}</span></td></tr>@empty<tr><td colspan="3"><div class="empty-state compact"><p>No observations captured yet.</p></div></td></tr>@endforelse</tbody></table></div></section>
+    <section class="panel"><div class="panel-heading"><h2>Recorded queues</h2><a class="text-link" href="{{ route('current.monitoring') }}">Monitoring @include('current::icon', ['iconName' => 'arrow-right'])</a></div><div class="table-scroll"><table><thead><tr><th>QUEUE</th><th>RETAINED JOBS</th><th></th></tr></thead><tbody>@forelse($queueSummary as $queue)<tr><td><span class="queue-name">{{ $queue->queue }}</span></td><td class="mono">{{ $queue->jobs }}</td><td><a class="text-link" href="{{ route('current.monitoring', ['queue' => $queue->queue]) }}">Inspect @include('current::icon', ['iconName' => 'arrow-right'])</a></td></tr>@empty<tr><td colspan="3"><div class="empty-state compact"><p>No queues captured yet.</p></div></td></tr>@endforelse</tbody></table></div></section>
+    <section class="panel"><div class="panel-heading"><h2>Recent observations</h2><a class="text-link" href="{{ route('current.recent') }}">Recent jobs @include('current::icon', ['iconName' => 'arrow-right'])</a></div><div class="table-scroll"><table><thead><tr><th>JOB</th><th>STATUS</th><th>QUEUE</th></tr></thead><tbody>@forelse($jobs->take(5) as $job)<tr><td><a class="job-name" href="{{ route('current.show', ['id' => $job->id, 'return' => $detailContext]) }}">{{ class_basename($job->job_class) }}</a><div class="job-uuid">{{ gmdate('M j, H:i:s', (int) $job->observed_at) }} UTC</div></td><td>@include('current::status', ['status' => $job->display_status])@include('current::history-indicator')</td><td><span class="queue-name">{{ $job->queue }}</span></td></tr>@empty<tr><td colspan="3"><div class="empty-state compact"><p>No observations captured yet.</p></div></td></tr>@endforelse</tbody></table></div></section>
 </div>
-@include('horizon-lens::coverage')
+@include('current::coverage')
 </div>
 @endsection

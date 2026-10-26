@@ -21,4 +21,4 @@
         <li><span class="lifecycle-dot {{ $attempt->status }}"></span><div><strong>{{ $attempt->finished_at ? ucfirst(str_replace('_', ' ', $attempt->status)).' observed' : 'Finish not observed' }}</strong>@if($attempt->finished_at)<small>{{ gmdate('M j, H:i:s', (int) $attempt->finished_at) }} UTC · {{ number_format(($attempt->finished_at - $attempt->started_at) * 1000, 1) }} ms</small>@else<small>This attempt may still be running.</small>@endif</div></li>@endif
     </ol>@if($queueToStart !== null)<div class="lifecycle-footnote">Enqueue → first start: {{ number_format($queueToStart * 1000, 1) }} ms <span class="subtle">· includes delay</span></div>@endif</section>
 </div>
-@include('horizon-lens::retry-context')
+@include('current::retry-context')

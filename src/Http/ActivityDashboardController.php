@@ -1,9 +1,9 @@
 <?php
 
-namespace HorizonLens\Http;
+namespace Current\Http;
 
-use HorizonLens\Broadcasts\BroadcastIntegration;
-use HorizonLens\Dashboards\ActivityDashboard;
+use Current\Broadcasts\BroadcastIntegration;
+use Current\Dashboards\ActivityDashboard;
 use Illuminate\Http\Request;
 
 final class ActivityDashboardController
@@ -42,6 +42,6 @@ final class ActivityDashboardController
             }
         }
 
-        return view('horizon-lens::activity-dashboard', compact('area', 'range', 'window', 'streams', 'patterns'));
+        return view('current::activity-dashboard', compact('area', 'range', 'window', 'streams', 'patterns'));
     }
 }

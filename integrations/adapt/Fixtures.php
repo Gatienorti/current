@@ -1,6 +1,6 @@
 <?php
 
-namespace HorizonLens\AdaptLab;
+namespace Current\AdaptLab;
 
 use App\Models\User;
 use Illuminate\Support\Facades\DB;

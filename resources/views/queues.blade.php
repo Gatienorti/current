@@ -1,4 +1,4 @@
-@extends('horizon-lens::layout')
+@extends('current::layout')
 @section('title', 'Queues')
 @section('content')
 <div class="page-heading"><h1>Queues</h1><span class="soft-badge">{{ $environment }}</span></div>
@@ -16,7 +16,7 @@
         <div class="queue-class-list">@forelse($queue['classes'] as $job)
         <span class="queue-declared-class" title="{{ $job['class'] }} · {{ $job['source'] }}"><span>{{ class_basename($job['class']) }}</span>@if($job['default'])<span class="subtle">Default route</span>@endif</span>
         @empty<span class="subtle">No static assignment found</span>@endforelse</div>
-    </td><td><a class="text-link" href="{{ route('horizon-lens.monitoring', ['connection' => $queue['connection'], 'queue' => $queue['queue']]) }}">Inspect jobs →</a></td></tr>
+    </td><td><a class="text-link" href="{{ route('current.monitoring', ['connection' => $queue['connection'], 'queue' => $queue['queue']]) }}">Inspect jobs →</a></td></tr>
     @endforeach
     </tbody></table></div>
 </section>

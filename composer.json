@@ -1,5 +1,5 @@
 {
-    "name": "horizon-lens/horizon-lens",
+    "name": "gatienorti/current",
     "description": "Current: job investigation and execution history for Laravel Horizon.",
     "type": "library",
     "license": "MIT",
@@ -18,20 +18,19 @@
     },
     "autoload": {
         "psr-4": {
-            "HorizonLens\\": "src/",
-            "Current\\": "src/Current/"
+            "Current\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "HorizonLens\\Tests\\": "tests/",
-            "HorizonLens\\Prototype\\": "prototype/"
+            "Current\\Tests\\": "tests/",
+            "Current\\Prototype\\": "prototype/"
         }
     },
     "extra": {
         "laravel": {
             "providers": [
-                "HorizonLens\\LensServiceProvider"
+                "Current\\CurrentServiceProvider"
             ]
         }
     },

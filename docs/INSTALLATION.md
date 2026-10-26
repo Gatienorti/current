@@ -4,11 +4,11 @@ Current runs alongside an existing Horizon installation. Laravel 11.44+, 12 and 
 
 ## 1. Install the development beta
 
-The source is public at [Gatienorti/current](https://github.com/Gatienorti/current), but the package is not on Packagist yet. Its Composer identifier remains `horizon-lens/horizon-lens`; the GitHub repository name and Composer package name are independent. Install the development branch in a **disposable application** first:
+The source is public at [Gatienorti/current](https://github.com/Gatienorti/current), but the package is not on Packagist yet. Its Composer identifier is `gatienorti/current`. Install the development branch in a **disposable application** first:
 
 ```sh
 composer config repositories.current vcs https://github.com/Gatienorti/current
-composer require horizon-lens/horizon-lens:dev-main
+composer require gatienorti/current:dev-main
 php artisan current:install
 ```
 
@@ -18,17 +18,17 @@ Alternatively, contributors can use a local checkout as a Composer path reposito
 {
     "repositories": [{
         "type": "path",
-        "url": "../horizon-lens",
+        "url": "../current",
         "options": {
             "symlink": true,
-            "versions": {"horizon-lens/horizon-lens": "dev-main"}
+            "versions": {"gatienorti/current": "dev-main"}
         }
     }]
 }
 ```
 
 ```sh
-composer require horizon-lens/horizon-lens:dev-main
+composer require gatienorti/current:dev-main
 php artisan current:install
 ```
 
@@ -151,7 +151,7 @@ Content hashes invalidate edited files even if size/timestamps are unchanged. So
 
 ## Legacy installations and alternate storage
 
-`HorizonLens\Lens::step`, `lensArguments`, `lensMetadata`, `lens:prune`, `horizon-lens.php`, table names and internal route names remain compatible. New installs use `current.php`, `/current`, `Current\Current` and `current:*` commands. If both config files exist, explicit Current keys take precedence. The existing labs intentionally retain `/horizon-lens` and their isolated databases.
+`Current\Current::step`, `lensArguments`, `lensMetadata`, `lens:prune`, `current.php`, table names and internal route names remain compatible. New installs use `current.php`, `/current`, `Current\Current` and `current:*` commands. If both config files exist, explicit Current keys take precedence. The existing labs intentionally retain `/current` and their isolated databases.
 
 To use MySQL or MariaDB, define a dedicated Laravel database connection with an empty table prefix, point `CURRENT_CONNECTION` to its name, and run `current:install` again for that database. Configure appropriate connection/lock timeouts; recorder isolation does not imply a universal driver timeout guarantee. Installation does not copy history between databases. MySQL 8.4 strict-mode installation, success/retry recording, dashboard/details and pruning have been verified in a disposable container; MariaDB 11.4.13 passes the same smoke checks using both Laravel's `mariadb` and `mysql` drivers. Broader database version/concurrency/load testing remains separate.
 
@@ -177,7 +177,7 @@ On failure details, select **Debug with AI**. The modal shows the selected attem
 
 ## Updating the beta checkout
 
-After updating the package, run `php artisan current:install` to apply any new package migrations (use `--force` in production), review newly documented settings, rebuild deployment caches and restart long-lived processes. The installer preserves existing configuration; it does not merge new settings into a published file. Existing captured history remains subject to its original retention. The unpublished Composer identifier is still `horizon-lens/horizon-lens`; the public vendor namespace is awaiting selection, so no public install command or release tag is claimed yet.
+After updating the package, run `php artisan current:install` to apply any new package migrations (use `--force` in production), review newly documented settings, rebuild deployment caches and restart long-lived processes. The installer preserves existing configuration; it does not merge new settings into a published file. Existing captured history remains subject to its original retention. The development package is `gatienorti/current`; no Packagist release or beta tag has been published.
 
 ## Incoming webhook proof of concept
 
@@ -251,7 +251,7 @@ Http::withOptions(['current_webhook' => [
 Outgoing response data requires an optional `webhooks.response_context` callable taking a PSR response and destination label. For example, in a service provider:
 
 ```php
-config()->set('horizon-lens.webhooks.response_context',
+config()->set('current.webhooks.response_context',
     fn ($response, $destination) => ['status' => $response->getStatusCode()]
 );
 ```
@@ -327,10 +327,10 @@ Run `php artisan current:install` for migration 9. Submission details now includ
 
 Queue timing is shown only for a retained observed enqueue/worker attempt. The enqueue→attempt interval includes configured delay and any earlier attempts, so it is not pure queue latency. Immediate or expired/unlinked submissions show queue timing unavailable. Clock-order inconsistencies are labeled rather than converted into positive durations.
 
-For optional snapshots, configure runtime callbacks in an application service provider (under the effective `horizon-lens` settings):
+For optional snapshots, configure runtime callbacks in an application service provider (under the effective `current` settings):
 
 ```php
-config()->set('horizon-lens.broadcasts.context', function ($event, $approvedChannels, $payload) {
+config()->set('current.broadcasts.context', function ($event, $approvedChannels, $payload) {
     return [
         'payload' => array_intersect_key($payload, array_flip(['order_id', 'status'])),
         'metadata' => ['source' => 'orders'],
@@ -398,3 +398,12 @@ Webhook totals count HTTP receipts and outgoing attempts, including repeats. Fai
 Broadcast totals separate submission failures from HTTP authorization failures. Average duration is the observed broadcaster call, not client latency. Event/route rankings use retained history across the period. Channel-pattern rankings deliberately sample the latest 1,000 submissions in the period, count each pattern once per submission, and label that sample; one submission can match several patterns. At most ten ranked labels and five recent failures/groups are displayed per section.
 
 Capture status and coverage appear at the bottom. Disabled capture can still have retained history; zero observations do not establish inactivity or health. Storage failures display Unavailable instead of zero. Client receipt, subscriber counts and Reverb server health are not inferred. High-volume database performance and non-SQLite aggregate behavior have not been established by these checks.
+
+
+## Renaming an earlier prototype installation
+
+The package now uses `gatienorti/current`, the `Current\` PHP namespace, `Current\CurrentServiceProvider`, `current.*` route/view/config names, and `CURRENT_*` environment settings. The existing `Current\Current::step` API stays unchanged.
+
+For an installation using the previous Composer package name, remove that requirement with `composer remove horizon-lens/horizon-lens --no-update`, add the GitHub VCS repository above, and require `gatienorti/current:dev-main`. Update explicit provider imports and capture calls to the Current namespace. Move any published `config/horizon-lens.php` settings into `config/current.php` and rename `HORIZON_LENS_*` environment settings to `CURRENT_*`. Review your configured history connection before restarting workers.
+
+Rebuild Composer autoloading and Laravel config/route/view caches through your deployment process. Restart long-lived workers so queued application code uses the new package. The original database migration filename and `lens_*` SQL tables are intentionally preserved as storage identifiers; no history rewrite is required. A small old-provider entry point lets existing Composer discovery boot during this transition. Old names stored in historical observations and Git history are not rewritten.

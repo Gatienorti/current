@@ -1,6 +1,6 @@
 <?php
 
-namespace HorizonLens;
+namespace Current;
 
 use Cron\CronExpression;
 use Illuminate\Console\Scheduling\CallbackEvent;

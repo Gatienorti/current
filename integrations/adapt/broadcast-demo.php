@@ -4,7 +4,7 @@ require __DIR__.'/bootstrap.php';
 
 use App\Events\ChatMessageSent;
 use App\Events\WorkoutAnalysisCompleted;
-use HorizonLens\Broadcasts\BroadcastIntegration;
+use Current\Broadcasts\BroadcastIntegration;
 use Illuminate\Broadcasting\BroadcastEvent;
 use Illuminate\Broadcasting\BroadcastException;
 use Illuminate\Broadcasting\BroadcastManager;
@@ -36,14 +36,14 @@ try {
     if (! $ready) {
         throw new RuntimeException('Isolated Reverb did not start.');
     }
-    config()->set('horizon-lens.broadcasts', ['enabled' => true, 'visible' => null,
+    config()->set('current.broadcasts', ['enabled' => true, 'visible' => null,
         'events' => ['ChatMessageSent', 'workout.analysis.completed'], 'channels' => ['private-chat.*', 'private-user.*']]);
-    config()->set('horizon-lens.broadcasts.capture_channels', true);
-    config()->set('horizon-lens.broadcasts.context', fn ($event, $channels, $payload) => [
+    config()->set('current.broadcasts.capture_channels', true);
+    config()->set('current.broadcasts.context', fn ($event, $channels, $payload) => [
         'payload' => array_intersect_key($payload, array_flip(['has_new_analysis', 'match_percentage'])),
         'metadata' => ['demo' => true, 'event' => $event, 'token' => 'redacted-synthetic-token'],
     ]);
-    config()->set('horizon-lens.broadcasts.message_sanitizer', fn ($message) => 'Synthetic Reverb rejected the demo signing secret.');
+    config()->set('current.broadcasts.message_sanitizer', fn ($message) => 'Synthetic Reverb rejected the demo signing secret.');
     config()->set('broadcasting.default', 'reverb');
     config()->set('broadcasting.connections.reverb', [
         'driver' => 'reverb', 'key' => 'current-lab-key', 'secret' => 'current-lab-secret', 'app_id' => 'current-lab',
@@ -63,7 +63,7 @@ try {
         event(new ChatMessageSent([], null, 123));
     } catch (BroadcastException) {
     }
-    config()->set('horizon-lens.broadcasts.authorization', ['enabled' => true, 'routes' => ['current.demo.broadcast-auth']]);
+    config()->set('current.broadcasts.authorization', ['enabled' => true, 'routes' => ['current.demo.broadcast-auth']]);
     Route::post('/__current-demo-broadcast-auth', function (Request $request) {
         abort((int) $request->input('demo_status', 403));
     })->name('current.demo.broadcast-auth');

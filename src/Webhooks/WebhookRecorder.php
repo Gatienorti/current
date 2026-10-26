@@ -1,8 +1,8 @@
 <?php
 
-namespace HorizonLens\Webhooks;
+namespace Current\Webhooks;
 
-use HorizonLens\Store;
+use Current\Store;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Http\Request;
 use Illuminate\Queue\Events\JobQueued;
@@ -28,13 +28,13 @@ final class WebhookRecorder
 
     public function start(Request $request, string $provider, float $start): void
     {
-        if (! config('horizon-lens.enabled', true) || ! config('horizon-lens.webhooks.enabled', false)
+        if (! config('current.enabled', true) || ! config('current.webhooks.enabled', false)
             || ! preg_match('/^[a-zA-Z0-9_-]{1,80}$/D', $provider)) {
             return;
         }
         $this->guard(function () use ($request, $provider, $start) {
             $id = (string) Str::ulid();
-            $days = max(1, min(30, (int) config('horizon-lens.retention_days', 7), (int) config('horizon-lens.max_retention_days', 30)));
+            $days = max(1, min(30, (int) config('current.retention_days', 7), (int) config('current.max_retention_days', 30)));
             $this->store->table('webhook_receipts')->insert([
                 'id' => $id, 'provider' => $provider, 'route' => mb_substr($request->route()?->uri() ?? 'Unresolved route', 0, 240),
                 'method' => mb_substr($request->method(), 0, 12), 'received_at' => $start, 'expires_at' => $start + $days * 86400,

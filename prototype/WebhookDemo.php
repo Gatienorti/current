@@ -1,9 +1,9 @@
 <?php
 
-namespace HorizonLens\Prototype;
+namespace Current\Prototype;
 
-use HorizonLens\Prototype\Jobs\OutgoingWebhookJob;
-use HorizonLens\Prototype\Jobs\PaymentJob;
+use Current\Prototype\Jobs\OutgoingWebhookJob;
+use Current\Prototype\Jobs\PaymentJob;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Http\Request;
 use Illuminate\Queue\WorkerOptions;
@@ -46,7 +46,7 @@ final class WebhookDemo
             return response()->json(['accepted' => true], 202);
         })->middleware('current.webhook:flow-demo');
         Artisan::command('lens:webhook-flow-demo', function () {
-            config()->set('horizon-lens.webhooks.capture_context', true);
+            config()->set('current.webhooks.capture_context', true);
             $request = Request::create('/__lens/webhook-flow', 'POST');
             $kernel = app(Kernel::class);
             $response = $kernel->handle($request);
@@ -56,7 +56,7 @@ final class WebhookDemo
         });
 
         Artisan::command('lens:webhook-demo', function () {
-            config()->set('horizon-lens.webhooks.capture_context', true);
+            config()->set('current.webhooks.capture_context', true);
             foreach (['success', 'job-failure', 'invalid-signature', 'handler-error', 'ignored', 'success'] as $scenario) {
                 $body = '{"event":"synthetic.order","token":"never-store-demo-token"}';
                 $request = Request::create('/__lens/webhooks/'.$scenario.'?secret=never-store-query', 'POST', [], [], [], [

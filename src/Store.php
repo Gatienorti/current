@@ -1,6 +1,6 @@
 <?php
 
-namespace HorizonLens;
+namespace Current;
 
 use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\DB;
@@ -10,7 +10,7 @@ final class Store
 {
     public function connection(): Connection
     {
-        return DB::connection(config('horizon-lens.connection'));
+        return DB::connection(config('current.connection'));
     }
 
     public function table(string $table)
@@ -70,7 +70,7 @@ final class Store
     {
         $id = (string) Str::ulid();
         $now = microtime(true);
-        $retention = max(1, min((int) config('horizon-lens.retention_days', 7), (int) config('horizon-lens.max_retention_days', 30)));
+        $retention = max(1, min((int) config('current.retention_days', 7), (int) config('current.max_retention_days', 30)));
         $this->table('jobs')->insert([
             'id' => $id, 'external_id' => mb_substr($externalId, 0, 100),
             'connection' => mb_substr($connection, 0, 100), 'queue' => mb_substr($queue, 0, 100),

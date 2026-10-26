@@ -1,11 +1,11 @@
 <?php
 
-namespace HorizonLens\Tests;
+namespace Current\Tests;
 
 use Current\Current;
-use HorizonLens\Prototype\Jobs\PaymentJob;
-use HorizonLens\Support\JobContext;
-use HorizonLens\Support\PayloadData;
+use Current\Prototype\Jobs\PaymentJob;
+use Current\Support\JobContext;
+use Current\Support\PayloadData;
 use Illuminate\Contracts\Database\ModelIdentifier;
 
 final class AutomaticContextTest extends TestCase
@@ -18,7 +18,7 @@ final class AutomaticContextTest extends TestCase
         $this->assertSame('automatic-order', json_decode($record->arguments_json, true)['order']);
         $this->assertSame($record->external_id, json_decode($record->metadata_json, true)['uuid']);
         $this->work();
-        $this->get('/horizon-lens/jobs/'.$record->id)->assertOk()->assertSee('automatic-order');
+        $this->get('/current/jobs/'.$record->id)->assertOk()->assertSee('automatic-order');
     }
 
     public function test_decoder_never_constructs_objects_and_preserves_model_identifiers_as_data(): void

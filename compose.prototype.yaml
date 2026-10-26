@@ -1,4 +1,4 @@
-name: horizon-lens-lab
+name: current-lab
 services:
   lens-web:
     image: sail-8.4/app:latest

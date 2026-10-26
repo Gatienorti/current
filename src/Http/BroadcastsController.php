@@ -1,12 +1,12 @@
 <?php
 
-namespace HorizonLens\Http;
+namespace Current\Http;
 
-use HorizonLens\Broadcasts\BroadcastDebugPrompt;
-use HorizonLens\Broadcasts\BroadcastIntegration;
-use HorizonLens\Broadcasts\SubmissionComparison;
-use HorizonLens\Store;
-use HorizonLens\Webhooks\WebhookRelations;
+use Current\Broadcasts\BroadcastDebugPrompt;
+use Current\Broadcasts\BroadcastIntegration;
+use Current\Broadcasts\SubmissionComparison;
+use Current\Store;
+use Current\Webhooks\WebhookRelations;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
@@ -33,7 +33,7 @@ final class BroadcastsController
         }
         $issue = $filters['issue'] ?? null;
         if ($issue === 'slow') {
-            $query->where('duration_ms', '>=', max(1, (int) config('horizon-lens.broadcasts.slow_ms', 1000)));
+            $query->where('duration_ms', '>=', max(1, (int) config('current.broadcasts.slow_ms', 1000)));
         } elseif ($issue === 'failed') {
             $query->where('outcome', 'failed');
         } elseif ($issue === 'unfinished') {
@@ -45,7 +45,7 @@ final class BroadcastsController
             }
         }
 
-        return view('horizon-lens::broadcasts', ['filters' => $filters, 'broadcasts' => $query->orderByDesc('started_at')->orderByDesc('id')->simplePaginate(25)->withQueryString()]);
+        return view('current::broadcasts', ['filters' => $filters, 'broadcasts' => $query->orderByDesc('started_at')->orderByDesc('id')->simplePaginate(25)->withQueryString()]);
     }
 
     public function compare(string $id, Request $request, Store $store)
@@ -64,7 +64,7 @@ final class BroadcastsController
         $candidates = $store->table('broadcasts')->where('expires_at', '>', microtime(true))->where('id', '!=', $id)
             ->orderByDesc('started_at')->orderByDesc('id')->limit(100)->get();
 
-        return view('horizon-lens::broadcast-compare', compact('left', 'right', 'comparison', 'candidates'));
+        return view('current::broadcast-compare', compact('left', 'right', 'comparison', 'candidates'));
     }
 
     public function show(string $id, Store $store)
@@ -82,6 +82,6 @@ final class BroadcastsController
 
         $debugPrompt = app(BroadcastDebugPrompt::class)->make($broadcast, $job, $attempt);
 
-        return view('horizon-lens::broadcast-show', compact('debugPrompt', 'broadcast', 'job', 'attempt', 'relatedBroadcasts', 'webhookReceipts', 'webhookDeliveries'));
+        return view('current::broadcast-show', compact('debugPrompt', 'broadcast', 'job', 'attempt', 'relatedBroadcasts', 'webhookReceipts', 'webhookDeliveries'));
     }
 }

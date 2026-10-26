@@ -1,6 +1,6 @@
 <?php
 
-namespace HorizonLens\Broadcasts;
+namespace Current\Broadcasts;
 
 use Illuminate\Broadcasting\BroadcastManager;
 use Laravel\Reverb\ReverbServiceProvider;
@@ -9,7 +9,7 @@ final class BroadcastIntegration
 {
     public static function visible(): bool
     {
-        $override = config('horizon-lens.broadcasts.visible');
+        $override = config('current.broadcasts.visible');
         if (is_bool($override)) {
             return $override;
         }
@@ -22,7 +22,7 @@ final class BroadcastIntegration
 
     public static function configure(): void
     {
-        if (! config('horizon-lens.enabled', true) || ! config('horizon-lens.broadcasts.enabled', false)) {
+        if (! config('current.enabled', true) || ! config('current.broadcasts.enabled', false)) {
             return;
         }
         foreach ((array) config('broadcasting.connections', []) as $name => $connection) {

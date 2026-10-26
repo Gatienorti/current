@@ -1,6 +1,6 @@
 <?php
 
-namespace HorizonLens\Support;
+namespace Current\Support;
 
 use Throwable;
 
@@ -12,7 +12,7 @@ final class Sanitizer
             if (! is_string($tag) || strlen($tag) > 100) {
                 return false;
             }
-            foreach (config('horizon-lens.tag_prefixes', []) as $prefix) {
+            foreach (config('current.tag_prefixes', []) as $prefix) {
                 if (str_starts_with($tag, $prefix)) {
                     return true;
                 }
@@ -25,7 +25,7 @@ final class Sanitizer
     public function location(string $file): ?string
     {
         $path = realpath($file);
-        foreach (config('horizon-lens.source_roots', []) as $root) {
+        foreach (config('current.source_roots', []) as $root) {
             $root = realpath($root);
             if ($path && $root && str_starts_with($path, $root.DIRECTORY_SEPARATOR)) {
                 return basename($root).'/'.str_replace(DIRECTORY_SEPARATOR, '/', substr($path, strlen($root) + 1));
@@ -38,12 +38,12 @@ final class Sanitizer
     public function exception(Throwable $error, ?callable $messageSanitizer = null, bool $useDefault = true): array
     {
         $message = null;
-        if ($sanitizer = ($useDefault ? config('horizon-lens.message_sanitizer') : $messageSanitizer)) {
+        if ($sanitizer = ($useDefault ? config('current.message_sanitizer') : $messageSanitizer)) {
             $message = mb_substr((string) $sanitizer($error->getMessage()), 0, 1000);
         }
         $frames = [];
         // No arguments, object instances, exception context, or serialized command.
-        foreach (array_slice($error->getTrace(), 0, config('horizon-lens.max_frames', 20)) as $frame) {
+        foreach (array_slice($error->getTrace(), 0, config('current.max_frames', 20)) as $frame) {
             $frames[] = [
                 'file' => isset($frame['file']) ? $this->location($frame['file']) : null,
                 'line' => $frame['line'] ?? null,

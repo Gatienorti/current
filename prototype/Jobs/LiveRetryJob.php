@@ -1,6 +1,6 @@
 <?php
 
-namespace HorizonLens\Prototype\Jobs;
+namespace Current\Prototype\Jobs;
 
 use Current\Current;
 use Illuminate\Contracts\Queue\ShouldQueue;

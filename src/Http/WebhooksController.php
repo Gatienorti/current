@@ -1,10 +1,10 @@
 <?php
 
-namespace HorizonLens\Http;
+namespace Current\Http;
 
-use HorizonLens\Store;
-use HorizonLens\Webhooks\ReceiptGroups;
-use HorizonLens\Webhooks\WebhookRelations;
+use Current\Store;
+use Current\Webhooks\ReceiptGroups;
+use Current\Webhooks\WebhookRelations;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
@@ -49,7 +49,7 @@ final class WebhooksController
 
         $query = app(ReceiptGroups::class)->listing($query);
 
-        return view('horizon-lens::webhooks', ['filters' => $filters, 'receipts' => $query->orderByDesc('received_at')->orderByDesc('id')->simplePaginate(25)->withQueryString()]);
+        return view('current::webhooks', ['filters' => $filters, 'receipts' => $query->orderByDesc('received_at')->orderByDesc('id')->simplePaginate(25)->withQueryString()]);
     }
 
     public function show(string $id, Store $store)
@@ -67,6 +67,6 @@ final class WebhooksController
 
         $webhookDeliveries = app(WebhookRelations::class)->deliveries($jobIds);
 
-        return view('horizon-lens::webhook-show', compact('receipt', 'jobs', 'webhookDeliveries', 'groupReceipts', 'receiptCount', 'groupJobLinks'));
+        return view('current::webhook-show', compact('receipt', 'jobs', 'webhookDeliveries', 'groupReceipts', 'receiptCount', 'groupJobLinks'));
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-namespace HorizonLens\Support;
+namespace Current\Support;
 
 use Throwable;
 
@@ -10,7 +10,7 @@ final class JobContext
     {
         $result = ['arguments_json' => null, 'metadata_json' => null, 'arguments_state' => 'not_captured', 'metadata_state' => 'not_captured'];
         $provided = [];
-        if ($resolver = config('horizon-lens.job_context')) {
+        if ($resolver = config('current.job_context')) {
             try {
                 $provided = $resolver($job);
                 if (! is_array($provided)) {
@@ -26,7 +26,7 @@ final class JobContext
                 $method = $legacyMethod;
             }
             if (! array_key_exists($field, $provided) && ! is_callable([$job, $method])) {
-                if (! config('horizon-lens.capture_payload', true) || $payload === []) {
+                if (! config('current.capture_payload', true) || $payload === []) {
                     continue;
                 }
                 try {
@@ -66,11 +66,11 @@ final class JobContext
 
     public function encode(mixed $value): array
     {
-        $remaining = max(1, min(1000, (int) config('horizon-lens.context_max_items', 100)));
+        $remaining = max(1, min(1000, (int) config('current.context_max_items', 100)));
         $limited = false;
         $clean = $this->clean($value, 0, $remaining, $limited);
         $json = json_encode($clean, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        $bytes = max(256, min(65536, (int) config('horizon-lens.context_max_bytes', 16384)));
+        $bytes = max(256, min(65536, (int) config('current.context_max_bytes', 16384)));
         if (strlen($json) > $bytes) {
             return [null, 'size_limit'];
         }
@@ -80,7 +80,7 @@ final class JobContext
 
     private function clean(mixed $value, int $depth, int &$remaining, bool &$limited): mixed
     {
-        if ($depth > max(1, min(10, (int) config('horizon-lens.context_max_depth', 5)))) {
+        if ($depth > max(1, min(10, (int) config('current.context_max_depth', 5)))) {
             $limited = true;
 
             return '[DEPTH LIMIT]';
@@ -105,7 +105,7 @@ final class JobContext
             return $clean;
         }
         if (is_string($value)) {
-            $length = max(32, min(8192, (int) config('horizon-lens.context_max_string', 2048)));
+            $length = max(32, min(8192, (int) config('current.context_max_string', 2048)));
             $limited = $limited || mb_strlen($value) > $length;
             // Redact before truncating so an assignment cannot retain a partial credential.
             $value = preg_replace('/\b(password|passwd|token|secret|api[_-]?key|authorization)\s*[:=]\s*(?:Bearer\s+)?[^\s,;]+/i', '$1=[REDACTED]', $value);

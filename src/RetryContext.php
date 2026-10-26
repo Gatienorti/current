@@ -1,6 +1,6 @@
 <?php
 
-namespace HorizonLens;
+namespace Current;
 
 final class RetryContext
 {

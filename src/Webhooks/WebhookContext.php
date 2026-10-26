@@ -1,8 +1,8 @@
 <?php
 
-namespace HorizonLens\Webhooks;
+namespace Current\Webhooks;
 
-use HorizonLens\Support\JobContext;
+use Current\Support\JobContext;
 use Throwable;
 
 final class WebhookContext
@@ -14,7 +14,7 @@ final class WebhookContext
             $result[$field.'_json'] = null;
             $result[$field.'_state'] = 'not_captured';
         }
-        if (! config('horizon-lens.webhooks.capture_context', false)) {
+        if (! config('current.webhooks.capture_context', false)) {
             return $result;
         }
         try {

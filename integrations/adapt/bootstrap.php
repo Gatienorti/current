@@ -1,7 +1,7 @@
 <?php
 
-use HorizonLens\AdaptLab\SandboxServiceProvider;
-use HorizonLens\LensServiceProvider;
+use Current\AdaptLab\SandboxServiceProvider;
+use Current\CurrentServiceProvider;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Bootstrap\LoadConfiguration;
 use Illuminate\Foundation\Bootstrap\RegisterProviders;
@@ -10,7 +10,7 @@ function bootAdaptLab(?string $state = null): Application
 {
     $discovery = (bool) getenv('CURRENT_ADAPT_DISCOVERY');
     $source = getenv('ADAPT_PATH') ?: '/opt/adapt';
-    $state ??= getenv('LENS_ADAPT_STATE') ?: sys_get_temp_dir().'/horizon-lens-adapt';
+    $state ??= getenv('LENS_ADAPT_STATE') ?: sys_get_temp_dir().'/current-adapt';
     putenv('LENS_ADAPT_STATE='.$state);
     $_ENV['LENS_ADAPT_STATE'] = $_SERVER['LENS_ADAPT_STATE'] = $state;
     if (! is_file($source.'/bootstrap/app.php')) {
@@ -48,9 +48,9 @@ function bootAdaptLab(?string $state = null): Application
     $loader = require $source.'/vendor/autoload.php';
     require_once __DIR__.'/SandboxServiceProvider.php';
     if (! $discovery) {
-        $loader->addPsr4('HorizonLens\\', dirname(__DIR__, 2).'/src/');
+        $loader->addPsr4('Current\\', dirname(__DIR__, 2).'/src/');
     }
-    $loader->addPsr4('HorizonLens\\AdaptTests\\', __DIR__.'/tests/');
+    $loader->addPsr4('Current\\AdaptTests\\', __DIR__.'/tests/');
     $app = require $source.'/bootstrap/app.php';
     $app->setBasePath($state);
     $app->useAppPath($source.'/app');
@@ -93,16 +93,14 @@ function bootAdaptLab(?string $state = null): Application
             'filesystems.default' => 'local', 'filesystems.disks' => ['local' => ['driver' => 'local', 'root' => $state.'/storage/app/private'], 'public' => ['driver' => 'local', 'root' => $state.'/storage/app/public']],
             'view.compiled' => $state.'/storage/framework/views', 'horizon.prefix' => $prefix.'horizon:',
             'horizon.environments.testing' => $supervisors,
-            'horizon-lens.path' => getenv('CURRENT_ADAPT_ROUTE') ?: 'current', 'horizon-lens.connection' => 'lens', 'horizon-lens.queue_connections' => ['redis'],
-            'horizon-lens.source_roots' => [$source.'/app'], 'horizon-lens.tag_prefixes' => [],
-            'horizon-lens.diagnostic_path' => $state.'/storage/logs/lens-health.json',
+            'current.path' => getenv('CURRENT_ADAPT_ROUTE') ?: 'current', 'current.connection' => 'lens', 'current.queue_connections' => ['redis'],
+            'current.source_roots' => [$source.'/app'], 'current.tag_prefixes' => [],
+            'current.diagnostic_path' => $state.'/storage/logs/lens-health.json',
         ]);
-        // Host Current config must never override the lab's isolated storage/routes.
-        $app['config']->set('current', array_replace($app['config']->get('current', []), $app['config']->get('horizon-lens', [])));
     });
     $app->afterBootstrapping(RegisterProviders::class, function ($app) use ($discovery) {
         if (! $discovery) {
-            $app->register(LensServiceProvider::class);
+            $app->register(CurrentServiceProvider::class);
         }
         $app->register(SandboxServiceProvider::class);
     });

@@ -1,7 +1,7 @@
 (() => {
-    const storageKey = 'horizon-lens-theme';
+    const storageKey = 'current-theme';
     const choices = ['system', 'light', 'dark'];
-    const accentStorageKey = 'horizon-lens-accent';
+    const accentStorageKey = 'current-accent';
     const accents = ['violet', 'emerald', 'blue', 'rose', 'orange'];
     // Keep the palettes and picker ready for later; Current currently uses Violet.
     const accentSelectionEnabled = false;
@@ -10,6 +10,13 @@
     let accent = 'violet';
 
     try {
+        // Migrate existing appearance preferences without resetting the user's theme.
+        for (const [previous, next] of [['horizon-lens-theme', storageKey], ['horizon-lens-accent', accentStorageKey]]) {
+            if (window.localStorage.getItem(next) === null) {
+                const value = window.localStorage.getItem(previous);
+                if (value !== null) window.localStorage.setItem(next, value);
+            }
+        }
         const saved = window.localStorage.getItem(storageKey);
         if (choices.includes(saved)) preference = saved;
         const savedAccent = window.localStorage.getItem(accentStorageKey);

@@ -1,11 +1,11 @@
 <?php
 
-namespace HorizonLens\AdaptLab;
+namespace Current\AdaptLab;
 
 use App\Jobs\SendPushNotificationJob;
 use App\Services\GarminService;
 use App\Services\PushNotificationService;
-use HorizonLens\Lens;
+use Current\Current;
 use Illuminate\Http\Request;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Auth;
@@ -20,7 +20,7 @@ final class SandboxServiceProvider extends ServiceProvider
     public function register(): void
     {
         // Explicit lab-only exports; private job state and serialized commands stay untouched.
-        config()->set('horizon-lens.job_context', static function (object $job): array {
+        config()->set('current.job_context', static function (object $job): array {
             $context = ['metadata' => ['integration' => 'ADAPT isolated lab', 'job_class' => $job::class]];
             if ($job instanceof SendPushNotificationJob) {
                 $context['arguments'] = ['notification_id' => $job->notificationId];
@@ -31,10 +31,10 @@ final class SandboxServiceProvider extends ServiceProvider
         Http::preventStrayRequests();
         $push = Mockery::mock(PushNotificationService::class);
         $push->shouldReceive('sendForNotification')->andReturnUsing(function ($notification) {
-            return Lens::step('Mock push transport', function () use ($notification) {
-                Lens::step('Build synthetic notification', fn () => true);
+            return Current::step('Mock push transport', function () use ($notification) {
+                Current::step('Build synthetic notification', fn () => true);
                 $scenario = $notification->data['lens_scenario'] ?? 'success';
-                if ($scenario === 'failure' || ($scenario === 'retry' && app('horizon-lens.active-job')->attempts() === 1)) {
+                if ($scenario === 'failure' || ($scenario === 'retry' && app('current.active-job')->attempts() === 1)) {
                     throw new RuntimeException('Synthetic push failure; token=never-persist-this');
                 }
 
@@ -46,7 +46,7 @@ final class SandboxServiceProvider extends ServiceProvider
         $garmin->shouldReceive('getActivityDetail')->andReturnNull();
         $this->app->instance(GarminService::class, $garmin);
         $this->app['events']->listen(JobProcessing::class, function ($event) {
-            $this->app->instance('horizon-lens.active-job', $event->job);
+            $this->app->instance('current.active-job', $event->job);
         });
     }
 
@@ -58,7 +58,7 @@ final class SandboxServiceProvider extends ServiceProvider
                 abort_unless(Auth::attempt($request->only('email', 'password')), 403);
                 $request->session()->regenerate();
 
-                return redirect()->route('horizon-lens.index');
+                return redirect()->route('current.index');
             });
         });
     }

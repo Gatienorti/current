@@ -1,6 +1,6 @@
 <?php
 
-namespace HorizonLens\Broadcasts;
+namespace Current\Broadcasts;
 
 use Illuminate\Broadcasting\Broadcasters\PusherBroadcaster;
 use Throwable;

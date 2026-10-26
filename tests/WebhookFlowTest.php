@@ -1,8 +1,8 @@
 <?php
 
-namespace HorizonLens\Tests;
+namespace Current\Tests;
 
-use HorizonLens\Tests\Concerns\ChecksWebhookFlow;
+use Current\Tests\Concerns\ChecksWebhookFlow;
 
 final class WebhookFlowTest extends TestCase
 {

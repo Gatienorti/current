@@ -1,6 +1,6 @@
 <?php
 
-namespace HorizonLens;
+namespace Current;
 
 use Illuminate\Bus\BatchRepository;
 use Laravel\Horizon\Contracts\JobRepository;

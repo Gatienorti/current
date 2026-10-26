@@ -1,10 +1,10 @@
 <?php
 
-namespace HorizonLens\Webhooks;
+namespace Current\Webhooks;
 
 use GuzzleHttp\Promise\Create;
-use HorizonLens\Recorder;
-use HorizonLens\Store;
+use Current\Recorder;
+use Current\Store;
 use Illuminate\Support\Str;
 use Psr\Http\Message\RequestInterface;
 use Throwable;
@@ -62,11 +62,11 @@ final class OutgoingRecorder
 
     public function start(RequestInterface $request, array $options = []): ?array
     {
-        if (! config('horizon-lens.enabled', true) || ! config('horizon-lens.webhooks.outgoing.enabled', false)) {
+        if (! config('current.enabled', true) || ! config('current.webhooks.outgoing.enabled', false)) {
             return null;
         }
         $endpoint = $this->endpoint((string) $request->getUri());
-        foreach ((array) config('horizon-lens.webhooks.outgoing.destinations', []) as $label => $url) {
+        foreach ((array) config('current.webhooks.outgoing.destinations', []) as $label => $url) {
             if (! is_string($url) || ! is_string($label) || ! preg_match('/^[a-zA-Z0-9_-]{1,80}$/D', $label)
                 || ! $endpoint || $endpoint !== $this->endpoint($url)) {
                 continue;
@@ -74,7 +74,7 @@ final class OutgoingRecorder
             $now = microtime(true);
             $id = (string) Str::ulid();
             $execution = app(Recorder::class)->currentExecution();
-            $days = max(1, min(30, (int) config('horizon-lens.retention_days', 7), (int) config('horizon-lens.max_retention_days', 30)));
+            $days = max(1, min(30, (int) config('current.retention_days', 7), (int) config('current.max_retention_days', 30)));
             $this->store->table('webhook_deliveries')->insert([
                 'id' => $id,
                 'delivery_key' => isset($options['current_delivery_id']) && is_string($options['current_delivery_id']) && strlen($options['current_delivery_id']) > 0 && strlen($options['current_delivery_id']) <= 160
@@ -100,7 +100,7 @@ final class OutgoingRecorder
         }
         try {
             $snapshot = [];
-            if ($response && ($resolver = config('horizon-lens.webhooks.response_context'))) {
+            if ($response && ($resolver = config('current.webhooks.response_context'))) {
                 $snapshot = array_intersect_key(WebhookContext::capture(fn () => ['response' => $resolver($response, $context['destination'])]), array_flip(['response_json', 'response_state']));
             }
             app(Store::class)->table('webhook_deliveries')->where('id', $context['id'])->update([

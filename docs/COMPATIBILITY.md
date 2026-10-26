@@ -1,6 +1,6 @@
 # Compatibility
 
-Lens is an application-independent Horizon companion. Vehify and ADAPT supply integration examples, not package version pins. No host application upgrade is required solely to match Vehify's patch release.
+Current is an application-independent Horizon companion. Vehify and ADAPT supply integration examples, not package version pins. No host application upgrade is required solely to match Vehify's patch release.
 
 ## Declared range
 
@@ -34,13 +34,13 @@ Subsequent actual ADAPT application tests boot its normal providers and run thre
 
 The recorder uses `JobAttempted::successful()` after checking failure/release flags. Laravel 13 replaces the earlier `exceptionOccurred` property with an exception object; directly reading the old property left successful jobs stuck in processing. The shared public method preserves lifecycle capture across the tested versions.
 
-The matrix in [tests/compatibility/matrix.json](../tests/compatibility/matrix.json) includes lower-bound Laravel 11/12 combinations, current Laravel 11/13 resolution, and the Laravel/Horizon versions used by ADAPT and Vehify. Each row creates a fresh temporary consumer, resolves Lens through a Composer path repository, and executes the portable lifecycle, filtering, navigation, authorization, retention, timeout, worker-loss, and concurrency tests against Redis and SQLite. It does not load either host application's providers, environment, database, or normal jobs.
+The matrix in [tests/compatibility/matrix.json](../tests/compatibility/matrix.json) includes lower-bound Laravel 11/12 combinations, current Laravel 11/13 resolution, and the Laravel/Horizon versions used by ADAPT and Vehify. Each row creates a fresh temporary consumer, resolves Current through a Composer path repository, and executes the portable lifecycle, filtering, navigation, authorization, retention, timeout, worker-loss, and concurrency tests against Redis and SQLite. It does not load either host application's providers, environment, database, or normal jobs.
 
 The optional `vehify` test group runs separately against its existing read-only vendor tree. It is excluded from portable runs because a standalone package must not require that application's job class. The test harness isolates both normal Redis keys and Horizon's copied connection prefix; setting only `horizon.prefix` after provider boot was insufficient to isolate metrics.
 
-The matrix exposed a real storage difference: Laravel 11's SQLite connection ignores the newer `transaction_mode` option. A deferred read followed by a write could lose an observation under concurrency even with a busy timeout. Lens now acquires a SQLite write lock with a no-op metadata UPDATE before reading in recorder/prune transactions, while retaining Laravel transaction handling. The simultaneous-worker fixtures exercise this path. Timeout bounds still depend on host connection configuration; no production throughput or latency claim follows from these tests.
+The matrix exposed a real storage difference: Laravel 11's SQLite connection ignores the newer `transaction_mode` option. A deferred read followed by a write could lose an observation under concurrency even with a busy timeout. Current now acquires a SQLite write lock with a no-op metadata UPDATE before reading in recorder/prune transactions, while retaining Laravel transaction handling. The simultaneous-worker fixtures exercise this path. Timeout bounds still depend on host connection configuration; no production throughput or latency claim follows from these tests.
 
-Historical Laravel 11.44 / 12.0 fixtures pin Symfony Console to 7.3. Their Artisan command registration fails with Console 7.4 despite the old manifests allowing that combination. This is an upstream compatibility constraint, not a Lens adapter. Existing installations must retain a mutually compatible Laravel/Symfony set; the current-release matrix also tests normal dependency resolution.
+Historical Laravel 11.44 / 12.0 fixtures pin Symfony Console to 7.3. Their Artisan command registration fails with Console 7.4 despite the old manifests allowing that combination. This is an upstream compatibility constraint, not a Current adapter. Existing installations must retain a mutually compatible Laravel/Symfony set; the current-release matrix also tests normal dependency resolution.
 
 Historical fixture resolution explicitly permits packages flagged by Composer advisories only inside the disposable test consumers, with audit reporting retained. The package manifest and host security policies are not relaxed. Passing compatibility tests does not recommend deploying historical vulnerable releases.
 

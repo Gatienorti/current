@@ -1,9 +1,9 @@
 <?php
 
-namespace HorizonLens\Tests;
+namespace Current\Tests;
 
-use HorizonLens\Http\Authorize;
-use HorizonLens\Store;
+use Current\Http\Authorize;
+use Current\Store;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Foundation\Testing\TestCase as LaravelTestCase;
@@ -40,8 +40,8 @@ abstract class TestCase extends LaravelTestCase
         config()->set('database.redis.horizon.options.prefix', config('horizon.prefix'));
         app('redis')->purge('default');
         app('redis')->purge('horizon');
-        config()->set('horizon-lens.diagnostic_path', storage_path('data/test-health-'.Str::ulid().'.json'));
-        $this->databaseFiles[] = config('horizon-lens.diagnostic_path');
+        config()->set('current.diagnostic_path', storage_path('data/test-health-'.Str::ulid().'.json'));
+        $this->databaseFiles[] = config('current.diagnostic_path');
         (require dirname(__DIR__).'/database/migrations/2026_10_25_000001_create_horizon_lens_tables.php')->up();
         (require dirname(__DIR__).'/database/migrations/2026_10_25_000002_add_silenced_classification.php')->up();
         (require dirname(__DIR__).'/database/migrations/2026_10_25_000003_add_job_details.php')->up();

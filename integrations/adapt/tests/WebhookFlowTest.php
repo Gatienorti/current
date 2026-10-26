@@ -1,10 +1,10 @@
 <?php
 
-namespace HorizonLens\AdaptTests;
+namespace Current\AdaptTests;
 
-use HorizonLens\AdaptLab\Fixtures;
-use HorizonLens\Store;
-use HorizonLens\Tests\Concerns\ChecksWebhookFlow;
+use Current\AdaptLab\Fixtures;
+use Current\Store;
+use Current\Tests\Concerns\ChecksWebhookFlow;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Foundation\Testing\TestCase;
 use Illuminate\Support\Facades\Artisan;

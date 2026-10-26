@@ -1,6 +1,6 @@
 <?php
 
-namespace HorizonLens\Http;
+namespace Current\Http;
 
 use Closure;
 use Illuminate\Http\Request;

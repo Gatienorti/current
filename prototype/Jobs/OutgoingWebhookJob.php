@@ -1,8 +1,8 @@
 <?php
 
-namespace HorizonLens\Prototype\Jobs;
+namespace Current\Prototype\Jobs;
 
-use HorizonLens\Lens;
+use Current\Current;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Http\Client\Factory;
@@ -21,7 +21,7 @@ final class OutgoingWebhookJob implements ShouldQueue
 
     public function handle(): void
     {
-        Lens::step('Prepare event', fn () => null);
+        Current::step('Prepare event', fn () => null);
         // Fixtures only: this job can never issue a real HTTP request.
         app()->forgetInstance(Factory::class);
         Http::clearResolvedInstance(Factory::class);
@@ -29,7 +29,7 @@ final class OutgoingWebhookJob implements ShouldQueue
         Http::fake(['https://receiver.example.test/*' => $this->scenario === 'connection'
             ? Http::failedConnection('synthetic private failure')
             : ($this->scenario === 'retry' ? Http::sequence()->push([], 503)->push([], 200) : Http::response([], 202))]);
-        Lens::step('Deliver webhook', fn () => Http::currentWebhook($this->deliveryId)->retry(2, 0)->withToken('synthetic-private-token')
+        Current::step('Deliver webhook', fn () => Http::currentWebhook($this->deliveryId)->retry(2, 0)->withToken('synthetic-private-token')
             ->withOptions(['current_webhook' => [
                 'event_id' => 'evt-outgoing-'.$this->scenario, 'event_type' => 'order.updated',
                 'payload' => ['order_id' => 'demo-1042', 'token' => 'synthetic-private-token'],

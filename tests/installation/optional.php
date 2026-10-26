@@ -2,8 +2,8 @@
 
 // Synthetic integration acceptance check for a fresh disposable Composer consumer.
 use Current\Current;
-use HorizonLens\Broadcasts\BroadcastIntegration;
-use HorizonLens\Store;
+use Current\Broadcasts\BroadcastIntegration;
+use Current\Store;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Broadcasting\BroadcastException;
 use Illuminate\Broadcasting\BroadcastManager;
@@ -56,7 +56,7 @@ config()->set([
 $http = $app->make(Illuminate\Contracts\Http\Kernel::class);
 $store = app(Store::class);
 verify(BroadcastIntegration::visible(), 'Reverb installed later makes Broadcasts visible without reinstalling Current');
-verify(! config('horizon-lens.broadcasts.enabled'), 'installing Reverb does not opt into payload/submission capture');
+verify(! config('current.broadcasts.enabled'), 'installing Reverb does not opt into payload/submission capture');
 verify($http->handle(Request::create('/current/broadcasts/dashboard'))->getStatusCode() === 403, 'optional dashboard still denies anonymous access');
 $app['auth']->guard()->setUser(new GenericUser(['id' => 1]));
 Gate::define('viewHorizon', fn ($user) => true);
@@ -69,7 +69,7 @@ Route::post('/__current-install-hook', function (Request $request) {
     $request->attributes->set('current.webhook.signature', 'valid'); // Trusted synthetic fixture only.
     $request->attributes->set('current.webhook.group', ['event_id' => 'install-event', 'scope' => 'synthetic-account']);
     $request->attributes->set('current.webhook.context', ['event_id' => 'install-event', 'payload' => ['order' => 42, 'token' => 'never-retain-install-secret']]);
-    if (config('horizon-lens.webhooks.enabled')) {
+    if (config('current.webhooks.enabled')) {
         Queue::pushOn('current-optional', new CurrentOptionalJob);
     }
 
@@ -96,16 +96,16 @@ try {
     }
     verify($ready, 'isolated loopback Reverb server ready');
     config()->set([
-        'horizon-lens.webhooks.enabled' => true,
-        'horizon-lens.webhooks.capture_context' => true,
-        'horizon-lens.webhooks.outgoing.enabled' => true,
-        'horizon-lens.webhooks.outgoing.destinations' => ['install-receiver' => 'https://receiver.example.test/webhook'],
-        'horizon-lens.broadcasts.enabled' => true,
-        'horizon-lens.broadcasts.events' => ['InstallUpdated'],
-        'horizon-lens.broadcasts.channels' => ['private-install.*'],
-        'horizon-lens.broadcasts.capture_channels' => true,
-        'horizon-lens.broadcasts.context' => fn ($event, $channels, $payload) => ['payload' => $payload, 'metadata' => ['source' => 'fresh-install']],
-        'horizon-lens.broadcasts.authorization' => ['enabled' => true, 'paths' => ['__current-install-auth']],
+        'current.webhooks.enabled' => true,
+        'current.webhooks.capture_context' => true,
+        'current.webhooks.outgoing.enabled' => true,
+        'current.webhooks.outgoing.destinations' => ['install-receiver' => 'https://receiver.example.test/webhook'],
+        'current.broadcasts.enabled' => true,
+        'current.broadcasts.events' => ['InstallUpdated'],
+        'current.broadcasts.channels' => ['private-install.*'],
+        'current.broadcasts.capture_channels' => true,
+        'current.broadcasts.context' => fn ($event, $channels, $payload) => ['payload' => $payload, 'metadata' => ['source' => 'fresh-install']],
+        'current.broadcasts.authorization' => ['enabled' => true, 'paths' => ['__current-install-auth']],
         'broadcasting.default' => 'reverb',
         'broadcasting.connections.reverb' => [
             'driver' => 'reverb', 'key' => 'current-install-key', 'secret' => 'current-install-secret', 'app_id' => 'current-install',

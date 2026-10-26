@@ -1,6 +1,6 @@
 <?php
 
-namespace HorizonLens\Prototype;
+namespace Current\Prototype;
 
 use Closure;
 use Illuminate\Auth\GenericUser;

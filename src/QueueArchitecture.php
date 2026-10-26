@@ -1,6 +1,6 @@
 <?php
 
-namespace HorizonLens;
+namespace Current;
 
 use PhpParser\Node;
 use PhpParser\NodeFinder;
@@ -20,7 +20,7 @@ final class QueueArchitecture
         $files = [];
         $parser = (new ParserFactory)->createForNewestSupportedVersion();
         $finder = new NodeFinder;
-        foreach ((array) config('horizon-lens.source_roots', [app_path()]) as $root) {
+        foreach ((array) config('current.source_roots', [app_path()]) as $root) {
             $root = realpath($root);
             if (! $root || ! is_dir($root)) {
                 $partial = true;

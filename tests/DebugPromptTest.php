@@ -1,10 +1,10 @@
 <?php
 
-namespace HorizonLens\Tests;
+namespace Current\Tests;
 
-use HorizonLens\DebugPrompt;
-use HorizonLens\HorizonRetry;
-use HorizonLens\Prototype\Jobs\PaymentJob;
+use Current\DebugPrompt;
+use Current\HorizonRetry;
+use Current\Prototype\Jobs\PaymentJob;
 
 final class DebugPromptTest extends TestCase
 {
@@ -19,7 +19,7 @@ final class DebugPromptTest extends TestCase
         $this->store()->table('attempts')->where('id', $attempt->id)->update([
             'exception_message' => '</textarea><script>bad()</script>',
         ]);
-        $response = $this->get('/horizon-lens/jobs/'.$record->id);
+        $response = $this->get('/current/jobs/'.$record->id);
         $response->assertOk()->assertSee('Debug with AI')->assertSee('Copy debugging prompt')
             ->assertSee('untrusted diagnostic data')->assertSee($attempt->id)
             ->assertSee('Charge payment')->assertSee('Sanitized stack frames')
@@ -28,7 +28,7 @@ final class DebugPromptTest extends TestCase
         $uuid = app(HorizonRetry::class)->retry($record->external_id);
         $retry = $this->store()->findCycle($uuid, $record->connection);
         $this->work();
-        $this->get('/horizon-lens/jobs/'.$retry->id)->assertOk()
+        $this->get('/current/jobs/'.$retry->id)->assertOk()
             ->assertSee('Earlier enqueue; not a fresh capture of this retry')
             ->assertSee($record->external_id);
     }
@@ -38,7 +38,7 @@ final class DebugPromptTest extends TestCase
         dispatch(new PaymentJob('success'));
         $this->work();
         $record = $this->store()->jobsWithObservationState()->first();
-        $this->get('/horizon-lens/jobs/'.$record->id)->assertOk()->assertDontSee('data-debug-open', false);
+        $this->get('/current/jobs/'.$record->id)->assertOk()->assertDontSee('data-debug-open', false);
         $record->arguments_json = json_encode(['large' => str_repeat('x', 50000)]);
         $record->arguments_state = 'captured';
         $text = app(DebugPrompt::class)->make($record, null, [], [], $record, $record);

@@ -1,8 +1,8 @@
 <?php
 
-namespace HorizonLens\Tests\Fixtures;
+namespace Current\Tests\Fixtures;
 
-use HorizonLens\Lens;
+use Current\Current;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
@@ -23,6 +23,6 @@ final class BlockingJob implements ShouldQueue
 
     public function handle(): void
     {
-        Lens::step('Wait at checkpoint', fn () => sleep($this->sleepSeconds));
+        Current::step('Wait at checkpoint', fn () => sleep($this->sleepSeconds));
     }
 }

@@ -1,8 +1,8 @@
 <?php
 
-namespace HorizonLens\Tests;
+namespace Current\Tests;
 
-use HorizonLens\Tests\Fixtures\BlockingJob;
+use Current\Tests\Fixtures\BlockingJob;
 use Illuminate\Queue\TimeoutExceededException;
 use Illuminate\Support\Facades\Queue;
 use Symfony\Component\Process\Exception\ProcessSignaledException;
@@ -13,7 +13,7 @@ final class ProcessTest extends TestCase
     private function worker(): Process
     {
         $settings = [];
-        foreach (['database.connections.app.database', 'database.connections.lens.database', 'database.redis.options.prefix', 'database.redis.horizon.options.prefix', 'horizon.prefix', 'horizon-lens.diagnostic_path'] as $key) {
+        foreach (['database.connections.app.database', 'database.connections.lens.database', 'database.redis.options.prefix', 'database.redis.horizon.options.prefix', 'horizon.prefix', 'current.diagnostic_path'] as $key) {
             $settings[$key] = config($key);
         }
 
@@ -33,7 +33,7 @@ final class ProcessTest extends TestCase
             'running' => $worker->isRunning(), 'exit' => $worker->getExitCode(),
             'output' => $worker->getOutput(), 'error' => $worker->getErrorOutput(),
         ], $workers);
-        $health = config('horizon-lens.diagnostic_path');
+        $health = config('current.diagnostic_path');
         $this->fail('Worker did not capture its start and checkpoint within five seconds. '.json_encode([
             'workers' => $details,
             'attempts' => $this->store()->table('attempts')->count(),
@@ -55,8 +55,8 @@ final class ProcessTest extends TestCase
             $this->assertSame('processing', $attempt->status);
             $this->assertNull($attempt->finished_at);
             $this->assertNull($this->store()->table('steps')->first()->finished_at);
-            config()->set('horizon-lens.stale_after_seconds', 0);
-            $response = $this->get('/horizon-lens/monitoring?status=processing&history=unfinished')->assertOk()->assertSee('BlockingJob')->assertSee('Finish not observed');
+            config()->set('current.stale_after_seconds', 0);
+            $response = $this->get('/current/monitoring?status=processing&history=unfinished')->assertOk()->assertSee('BlockingJob')->assertSee('Finish not observed');
             $this->assertSame('processing', $response->viewData('jobs')->first()->display_status);
         } finally {
             if ($process->isRunning()) {

@@ -1,18 +1,18 @@
 <?php
 
-namespace HorizonLens\Http;
+namespace Current\Http;
 
-use HorizonLens\HorizonAdapter;
+use Current\HorizonAdapter;
 
 final class SectionsController
 {
     public function horizon(string $section, HorizonAdapter $adapter, string $metricKind = 'jobs')
     {
-        return view('horizon-lens::horizon-section', $adapter->page($section, $metricKind));
+        return view('current::horizon-section', $adapter->page($section, $metricKind));
     }
 
     public function planned(string $area)
     {
-        return view('horizon-lens::planned', ['area' => $area]);
+        return view('current::planned', ['area' => $area]);
     }
 }

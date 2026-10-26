@@ -1,4 +1,4 @@
-# Horizon Lens development
+# Current development
 
 Read README.md and the installation and compatibility guides before project work. Read internal planning and research notes only when present locally; they are intentionally not committed. This is a separate Laravel project; AiGo plans and its development skill do not apply.
 

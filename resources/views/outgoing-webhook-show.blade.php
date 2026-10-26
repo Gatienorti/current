@@ -1,9 +1,9 @@
-@extends('horizon-lens::layout')
+@extends('current::layout')
 @section('title', $delivery->destination.' delivery')
 @section('content')
 <div data-live-region="outgoing-webhook-detail">
 <div class="page-heading"><div><h1>{{ $delivery->destination }} delivery</h1><p class="mono">{{ $delivery->id }}</p></div><span class="soft-badge">OUTGOING ATTEMPT</span></div>
-@include('horizon-lens::delivery-attempts')
+@include('current::delivery-attempts')
 <div class="job-summary-grid">
 <section class="panel"><div class="panel-heading"><h2>Selected attempt details</h2></div><div class="context-body"><dl class="context-list">
 <dt>Destination</dt><dd class="mono">{{ $delivery->method }} {{ $delivery->endpoint }}</dd>
@@ -18,14 +18,14 @@
 </div>
 <section class="panel"><div class="panel-heading"><h2>Related job</h2></div><div class="context-body">
 @if($job)
-<a class="text-link" href="{{ route('horizon-lens.show', ['id' => $job->id]) }}">{{ class_basename($job->job_class) }} ↗</a>
+<a class="text-link" href="{{ route('current.show', ['id' => $job->id]) }}">{{ class_basename($job->job_class) }} ↗</a>
 <p class="mono subtle">{{ $job->external_id }}</p>
-@include('horizon-lens::status', ['status' => $job->display_status])
+@include('current::status', ['status' => $job->display_status])
 <p class="small-note">Sending attempt <span class="mono">{{ $delivery->attempt_id }}</span> · job status reflects its latest observation.</p>
 @else<p>No retained job is linked to this attempt.</p>@endif
 </div></section>
-@include('horizon-lens::webhook-relations', ['showReceipts' => true, 'showDeliveries' => false])
-@include('horizon-lens::webhook-context', ['record' => $delivery])
+@include('current::webhook-relations', ['showReceipts' => true, 'showDeliveries' => false])
+@include('current::webhook-context', ['record' => $delivery])
 <section class="panel"><div class="panel-heading"><h2>Capture coverage</h2></div><div class="context-body"><p>Only configured Laravel HTTP client destinations are observed. Optional context is explicitly exported, redacted and bounded; raw headers and bodies are not automatically captured. Current does not deliver or replay webhooks.</p></div></section>
 </div>
 @endsection

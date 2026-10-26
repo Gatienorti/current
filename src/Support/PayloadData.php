@@ -1,6 +1,6 @@
 <?php
 
-namespace HorizonLens\Support;
+namespace Current\Support;
 
 /** Reads PHP's data format only. Never instantiates classes or resolves references. */
 final class PayloadData

@@ -1,8 +1,8 @@
 <?php
 
-namespace HorizonLens\Broadcasts;
+namespace Current\Broadcasts;
 
-use HorizonLens\Support\JobContext;
+use Current\Support\JobContext;
 use Throwable;
 
 final class BroadcastContext
@@ -15,14 +15,14 @@ final class BroadcastContext
             $result[$field.'_state'] = 'not_captured';
         }
         $encoder = new JobContext;
-        if (config('horizon-lens.broadcasts.capture_channels', false)) {
+        if (config('current.broadcasts.capture_channels', false)) {
             try {
                 [$result['exact_channels_json'], $result['exact_channels_state']] = $encoder->encode($channels);
             } catch (Throwable) {
                 $result['exact_channels_state'] = 'failed';
             }
         }
-        if ($resolver = config('horizon-lens.broadcasts.context')) {
+        if ($resolver = config('current.broadcasts.context')) {
             try {
                 $provided = $resolver($event, $channels, $payload);
                 if (! is_array($provided)) {

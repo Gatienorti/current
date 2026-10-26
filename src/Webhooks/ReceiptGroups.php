@@ -1,8 +1,8 @@
 <?php
 
-namespace HorizonLens\Webhooks;
+namespace Current\Webhooks;
 
-use HorizonLens\Store;
+use Current\Store;
 
 final class ReceiptGroups
 {

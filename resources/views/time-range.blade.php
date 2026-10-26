@@ -1,7 +1,7 @@
 <div class="time-range" data-time-range>
     <span class="field-label" id="observed-time-label">Observed time <span class="subtle">· UTC</span></span>
     <details class="range-picker">
-        <summary aria-labelledby="observed-time-label range-value">@include('horizon-lens::icon', ['iconName' => 'calendar'])<span id="range-value" data-range-label>{{ empty($filters['from']) && empty($filters['to']) ? 'Any time' : str_replace('T', ' ', $filters['from'] ?? 'Any start').' → '.str_replace('T', ' ', $filters['to'] ?? 'Now') }}</span>@include('horizon-lens::icon', ['iconName' => 'chevron-down', 'iconClass' => 'range-chevron'])</summary>
+        <summary aria-labelledby="observed-time-label range-value">@include('current::icon', ['iconName' => 'calendar'])<span id="range-value" data-range-label>{{ empty($filters['from']) && empty($filters['to']) ? 'Any time' : str_replace('T', ' ', $filters['from'] ?? 'Any start').' → '.str_replace('T', ' ', $filters['to'] ?? 'Now') }}</span>@include('current::icon', ['iconName' => 'chevron-down', 'iconClass' => 'range-chevron'])</summary>
         <div class="range-popover">
             <div class="range-presets" aria-label="Quick time ranges">
                 <span class="range-section-label">QUICK RANGES</span>
@@ -13,7 +13,7 @@
             <div class="range-custom">
                 <span class="range-section-label">CUSTOM RANGE · UTC</span>
                 <div data-calendar hidden>
-                    <div class="calendar-toolbar"><button type="button" data-month-back aria-label="Previous month">@include('horizon-lens::icon', ['iconName' => 'chevron-left'])</button><span data-month-label aria-live="polite"></span><button type="button" data-month-next aria-label="Next month">@include('horizon-lens::icon', ['iconName' => 'chevron-right'])</button></div>
+                    <div class="calendar-toolbar"><button type="button" data-month-back aria-label="Previous month">@include('current::icon', ['iconName' => 'chevron-left'])</button><span data-month-label aria-live="polite"></span><button type="button" data-month-next aria-label="Next month">@include('current::icon', ['iconName' => 'chevron-right'])</button></div>
                     <div class="calendar-weekdays" aria-hidden="true">@foreach(['M','T','W','T','F','S','S'] as $day)<span>{{ $day }}</span>@endforeach</div>
                     <div class="calendar-days" data-calendar-days aria-label="Choose date range"></div>
                     <p class="calendar-hint" data-calendar-hint aria-live="polite">Choose a start date, then an end date.</p>

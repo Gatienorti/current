@@ -1,4 +1,4 @@
-name: horizon-lens-adapt-lab
+name: current-adapt-lab
 services:
   adapt-web:
     &adapt-application
@@ -8,8 +8,8 @@ services:
     working_dir: /workspace
     volumes:
       - .:/workspace
-      # Resolve the host Composer path dependency ../../horizon-lens from /opt/adapt.
-      - .:/horizon-lens:ro
+      # Resolve the host Composer path dependency ../../current from /opt/adapt.
+      - .:/current:ro
       - ${ADAPT_PATH:-../ADAPT/adapt-run-web}:/opt/adapt:ro
     environment:
       APP_ENV: testing

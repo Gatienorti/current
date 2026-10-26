@@ -28,7 +28,7 @@ function runCommand(array $command, string $directory, array $environment): void
 
 foreach ($names as $name) {
     $row = $matrix[$name];
-    $directory = sys_get_temp_dir().'/horizon-lens-'.$name.'-'.bin2hex(random_bytes(4));
+    $directory = sys_get_temp_dir().'/current-'.$name.'-'.bin2hex(random_bytes(4));
     mkdir($directory, 0700, true);
     foreach (['bootstrap.php', 'phpunit.xml', 'tests', 'prototype', 'database'] as $entry) {
         $source = $root.'/'.$entry;
@@ -51,10 +51,10 @@ foreach ($names as $name) {
         mkdir($directory.'/prototype/'.$path, 0700, true);
     }
     $manifest = [
-        'name' => 'horizon-lens/compatibility-fixture',
-        'repositories' => [['type' => 'path', 'url' => $root, 'options' => ['symlink' => true, 'versions' => ['horizon-lens/horizon-lens' => 'dev-main']]]],
+        'name' => 'current/compatibility-fixture',
+        'repositories' => [['type' => 'path', 'url' => $root, 'options' => ['symlink' => true, 'versions' => ['gatienorti/current' => 'dev-main']]]],
         'require' => array_merge([
-            'horizon-lens/horizon-lens' => 'dev-main',
+            'gatienorti/current' => 'dev-main',
             'laravel/framework' => $row['framework'], 'laravel/horizon' => $row['horizon'],
             'mockery/mockery' => '^1.6', 'phpunit/phpunit' => '^10.5 || ^11.5',
         ], $row['dependencies'] ?? []),

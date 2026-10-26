@@ -1,9 +1,9 @@
 <?php
 
-namespace HorizonLens\Http;
+namespace Current\Http;
 
-use HorizonLens\HorizonAdapter;
-use HorizonLens\QueueArchitecture;
+use Current\HorizonAdapter;
+use Current\QueueArchitecture;
 use Illuminate\Support\Str;
 use Laravel\Horizon\ProvisioningPlan;
 use Throwable;
@@ -52,7 +52,7 @@ final class QueuesController
             $available = false;
         }
 
-        return view('horizon-lens::queues', ['section' => 'queues', 'supervisorTables' => $tables,
+        return view('current::queues', ['section' => 'queues', 'supervisorTables' => $tables,
             'environment' => $environment, 'available' => $available, 'partial' => $source['partial'],
             'unmapped' => array_diff_key($source['jobs'], $matched)]);
     }

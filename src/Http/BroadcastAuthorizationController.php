@@ -1,9 +1,9 @@
 <?php
 
-namespace HorizonLens\Http;
+namespace Current\Http;
 
-use HorizonLens\Broadcasts\BroadcastIntegration;
-use HorizonLens\Store;
+use Current\Broadcasts\BroadcastIntegration;
+use Current\Store;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
@@ -34,6 +34,6 @@ final class BroadcastAuthorizationController
             }
         }
 
-        return view('horizon-lens::broadcast-authorization', ['filters' => $filters, 'failures' => $query->orderByDesc('observed_at')->orderByDesc('id')->simplePaginate(25)->withQueryString()]);
+        return view('current::broadcast-authorization', ['filters' => $filters, 'failures' => $query->orderByDesc('observed_at')->orderByDesc('id')->simplePaginate(25)->withQueryString()]);
     }
 }

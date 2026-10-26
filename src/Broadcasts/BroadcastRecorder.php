@@ -1,10 +1,10 @@
 <?php
 
-namespace HorizonLens\Broadcasts;
+namespace Current\Broadcasts;
 
-use HorizonLens\Recorder;
-use HorizonLens\Store;
-use HorizonLens\Support\Sanitizer;
+use Current\Recorder;
+use Current\Store;
+use Current\Support\Sanitizer;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -14,10 +14,10 @@ final class BroadcastRecorder
 
     public function start(string $connection, array $channels, mixed $event, array $payload = []): ?array
     {
-        if (! config('horizon-lens.enabled', true) || ! config('horizon-lens.broadcasts.enabled', false) || ! is_string($event)) {
+        if (! config('current.enabled', true) || ! config('current.broadcasts.enabled', false) || ! is_string($event)) {
             return null;
         }
-        $events = (array) config('horizon-lens.broadcasts.events', []);
+        $events = (array) config('current.broadcasts.events', []);
         if (! in_array($event, $events, true) || strlen($event) > 160) {
             return null;
         }
@@ -25,7 +25,7 @@ final class BroadcastRecorder
         $approved = [];
         $channelTypes = [];
         $channelsLimited = false;
-        foreach (array_slice((array) config('horizon-lens.broadcasts.channels', []), 0, 50) as $pattern) {
+        foreach (array_slice((array) config('current.broadcasts.channels', []), 0, 50) as $pattern) {
             if (is_string($pattern) && strlen($pattern) <= 160) {
                 foreach ($channels as $channel) {
                     if (Str::is($pattern, (string) $channel)) {
@@ -47,7 +47,7 @@ final class BroadcastRecorder
         $now = microtime(true);
         $id = (string) Str::ulid();
         $job = app(Recorder::class)->currentExecution();
-        $days = max(1, min(30, (int) config('horizon-lens.retention_days', 7), (int) config('horizon-lens.max_retention_days', 30)));
+        $days = max(1, min(30, (int) config('current.retention_days', 7), (int) config('current.max_retention_days', 30)));
         $snapshot = BroadcastContext::capture($event, array_values($approved), $payload);
         if ($channelsLimited && $snapshot['exact_channels_state'] === 'captured') {
             $snapshot['exact_channels_state'] = 'limited';
@@ -72,7 +72,7 @@ final class BroadcastRecorder
         $details = [];
         if ($error) {
             try {
-                $details = app(Sanitizer::class)->exception($error, config('horizon-lens.broadcasts.message_sanitizer'), false);
+                $details = app(Sanitizer::class)->exception($error, config('current.broadcasts.message_sanitizer'), false);
                 $details['error_state'] = 'captured';
             } catch (Throwable) {
                 $details = ['error_state' => 'failed'];

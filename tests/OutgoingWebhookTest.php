@@ -1,12 +1,12 @@
 <?php
 
-namespace HorizonLens\Tests;
+namespace Current\Tests;
 
 use GuzzleHttp\Promise\Promise;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
-use HorizonLens\Prototype\Jobs\OutgoingWebhookJob;
-use HorizonLens\Webhooks\OutgoingRecorder;
+use Current\Prototype\Jobs\OutgoingWebhookJob;
+use Current\Webhooks\OutgoingRecorder;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory;
@@ -27,9 +27,9 @@ final class OutgoingWebhookTest extends TestCase
         $this->assertSame($rows[0]->attempt_id, $rows[1]->attempt_id);
         $this->assertGreaterThanOrEqual(0, $rows[0]->duration_ms);
         $this->assertStringNotContainsString('synthetic-', json_encode($rows));
-        $this->get('/horizon-lens/webhooks/outgoing/'.$rows[0]->id)->assertOk()->assertSee('OutgoingWebhookJob')->assertSee('503');
-        $this->get('/horizon-lens/webhooks/outgoing?status=200&destination=demo-receiver')->assertOk()->assertSee($rows[1]->id)->assertDontSee($rows[0]->id);
-        $this->get('/horizon-lens/webhooks/outgoing?from=2030-01-01T00:00:00')->assertOk()->assertSee('No outgoing attempts observed');
+        $this->get('/current/webhooks/outgoing/'.$rows[0]->id)->assertOk()->assertSee('OutgoingWebhookJob')->assertSee('503');
+        $this->get('/current/webhooks/outgoing?status=200&destination=demo-receiver')->assertOk()->assertSee($rows[1]->id)->assertDontSee($rows[0]->id);
+        $this->get('/current/webhooks/outgoing?from=2030-01-01T00:00:00')->assertOk()->assertSee('No outgoing attempts observed');
         app()->forgetInstance(Factory::class);
         Http::clearResolvedInstance(Factory::class);
         Http::fake(['*' => Http::response([], 200)]);
@@ -47,7 +47,7 @@ final class OutgoingWebhookTest extends TestCase
         foreach (['http://receiver.example.test/webhook', 'https://other.example.test/webhook', 'https://receiver.example.test/other'] as $url) {
             Http::post($url);
         }
-        config()->set('horizon-lens.webhooks.outgoing.enabled', false);
+        config()->set('current.webhooks.outgoing.enabled', false);
         Http::post('https://receiver.example.test/webhook');
         $this->assertSame(1, $this->store()->table('webhook_deliveries')->count());
     }
@@ -109,11 +109,11 @@ final class OutgoingWebhookTest extends TestCase
         $this->assertSame(503, $rows['POST']->http_status);
         $this->assertSame(204, $rows['PUT']->http_status);
         $this->actingAs(new GenericUser(['id' => 2, 'is_admin' => false]));
-        $this->get('/horizon-lens/webhooks/outgoing')->assertForbidden();
-        $this->get('/horizon-lens/webhooks/outgoing/'.$rows['POST']->id)->assertForbidden();
+        $this->get('/current/webhooks/outgoing')->assertForbidden();
+        $this->get('/current/webhooks/outgoing/'.$rows['POST']->id)->assertForbidden();
         $this->actingAs(new GenericUser(['id' => 1, 'is_admin' => true]));
         $this->store()->table('webhook_deliveries')->update(['expires_at' => time() - 1]);
-        $this->get('/horizon-lens/webhooks/outgoing/'.$rows['POST']->id)->assertNotFound();
+        $this->get('/current/webhooks/outgoing/'.$rows['POST']->id)->assertNotFound();
         $this->assertSame(2, app(OutgoingRecorder::class)->prune());
     }
 }

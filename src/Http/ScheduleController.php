@@ -1,8 +1,8 @@
 <?php
 
-namespace HorizonLens\Http;
+namespace Current\Http;
 
-use HorizonLens\ScheduleReader;
+use Current\ScheduleReader;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Throwable;
@@ -23,6 +23,6 @@ final class ScheduleController
         }
         $tasks = new LengthAwarePaginator($rows, count($events), 25, $page, ['path' => $request->url()]);
 
-        return view('horizon-lens::schedule', ['section' => 'schedule', 'tasks' => $tasks, 'available' => $available]);
+        return view('current::schedule', ['section' => 'schedule', 'tasks' => $tasks, 'available' => $available]);
     }
 }

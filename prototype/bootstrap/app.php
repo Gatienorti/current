@@ -1,6 +1,6 @@
 <?php
 
-use HorizonLens\Prototype\Jobs\GatewayDeclined;
+use Current\Prototype\Jobs\GatewayDeclined;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;

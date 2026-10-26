@@ -1,6 +1,6 @@
 <?php
 
-namespace HorizonLens\Webhooks;
+namespace Current\Webhooks;
 
 use Closure;
 use Illuminate\Http\Request;

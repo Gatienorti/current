@@ -1,6 +1,6 @@
 <?php
 
-namespace HorizonLens;
+namespace Current;
 
 use Illuminate\Contracts\Bus\Dispatcher;
 use Laravel\Horizon\Contracts\JobRepository;

@@ -1,8 +1,8 @@
 <?php
 
-namespace HorizonLens;
+namespace Current;
 
-final class Lens
+final class Current
 {
     /** Labels must be fixed developer-defined strings, never payload or customer data. */
     public static function step(string $label, callable $callback): mixed

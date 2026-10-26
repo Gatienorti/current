@@ -1,10 +1,10 @@
 <?php
 
-namespace HorizonLens\Tests;
+namespace Current\Tests;
 
-use HorizonLens\Prototype\Jobs\OrderInvestigationJob;
-use HorizonLens\Prototype\Jobs\PaymentJob;
-use HorizonLens\Support\JobContext;
+use Current\Prototype\Jobs\OrderInvestigationJob;
+use Current\Prototype\Jobs\PaymentJob;
+use Current\Support\JobContext;
 use Illuminate\Support\Facades\Queue;
 
 final class JobDetailsTest extends TestCase
@@ -28,7 +28,7 @@ final class JobDetailsTest extends TestCase
         $this->work(3);
         $this->assertSame(36, $this->store()->table('steps')->count());
         $this->assertSame('failed', $this->store()->table('jobs')->first()->status);
-        $response = $this->get('/horizon-lens/jobs/'.$record->id)->assertOk()->assertSee('Args')->assertSee('Metadata')
+        $response = $this->get('/current/jobs/'.$record->id)->assertOk()->assertSee('Args')->assertSee('Metadata')
             ->assertSee('Lifecycle')->assertSee('Attempt history')->assertSee('order-details-test')
             ->assertSee('[REDACTED]')->assertDontSee('demo-token-never-store')->assertDontSee('never-store-this');
         $this->assertLessThan(strpos($response->getContent(), 'id="job-details"'), strpos($response->getContent(), '<h2>Execution map'));
@@ -37,7 +37,7 @@ final class JobDetailsTest extends TestCase
 
     public function test_unopted_job_arguments_are_not_unserialized_or_persisted_and_delays_are_observed(): void
     {
-        config()->set('horizon-lens.capture_payload', false);
+        config()->set('current.capture_payload', false);
         Queue::later(7, new PaymentJob('success', 'not-approved-business-data'));
         $record = $this->store()->table('jobs')->first();
         $this->assertSame('not_captured', $record->arguments_state);
@@ -49,7 +49,7 @@ final class JobDetailsTest extends TestCase
 
     public function test_bad_context_callback_does_not_stop_dispatch_or_lifecycle_capture(): void
     {
-        config()->set('horizon-lens.job_context', fn () => throw new \RuntimeException('secret=callback-private'));
+        config()->set('current.job_context', fn () => throw new \RuntimeException('secret=callback-private'));
         dispatch(new PaymentJob('success'));
         $this->work();
         $record = $this->store()->table('jobs')->first();
@@ -63,7 +63,7 @@ final class JobDetailsTest extends TestCase
 
     public function test_callback_can_explicitly_export_existing_jobs_and_preserve_empty_json(): void
     {
-        config()->set('horizon-lens.job_context', fn (object $job) => ['arguments' => ['order_id' => $job->order], 'metadata' => []]);
+        config()->set('current.job_context', fn (object $job) => ['arguments' => ['order_id' => $job->order], 'metadata' => []]);
         dispatch(new PaymentJob('success', 'callback-export'));
         $record = $this->store()->table('jobs')->first();
         $this->assertSame(['order_id' => 'callback-export'], json_decode($record->arguments_json, true));
@@ -80,19 +80,19 @@ final class JobDetailsTest extends TestCase
                 throw new \LogicException('Must not execute a data serializer');
             }
         };
-        config()->set('horizon-lens.context_max_depth', 2);
-        config()->set('horizon-lens.context_max_items', 8);
-        config()->set('horizon-lens.context_max_string', 32);
-        config()->set('horizon-lens.job_context', fn () => ['arguments' => ['password' => 'private-value', 'description' => 'token=unlabeled-secret', 'object' => $dangerous, 'deep' => ['a' => ['b' => ['c' => 'hidden']]], 'text' => str_repeat('x', 100)]]);
+        config()->set('current.context_max_depth', 2);
+        config()->set('current.context_max_items', 8);
+        config()->set('current.context_max_string', 32);
+        config()->set('current.job_context', fn () => ['arguments' => ['password' => 'private-value', 'description' => 'token=unlabeled-secret', 'object' => $dangerous, 'deep' => ['a' => ['b' => ['c' => 'hidden']]], 'text' => str_repeat('x', 100)]]);
         $context = app(JobContext::class)->capture(new \stdClass);
         $this->assertSame('limited', $context['arguments_state']);
         $this->assertStringNotContainsString('private-value', $context['arguments_json']);
         $this->assertStringNotContainsString('unlabeled-secret', $context['arguments_json']);
         $this->assertStringContainsString('UNSUPPORTED VALUE OMITTED', $context['arguments_json']);
         $this->assertStringContainsString('DEPTH LIMIT', $context['arguments_json']);
-        config()->set('horizon-lens.context_max_bytes', 256);
-        config()->set('horizon-lens.context_max_string', 2048);
-        config()->set('horizon-lens.job_context', fn () => ['metadata' => ['large' => str_repeat('y', 500)]]);
+        config()->set('current.context_max_bytes', 256);
+        config()->set('current.context_max_string', 2048);
+        config()->set('current.job_context', fn () => ['metadata' => ['large' => str_repeat('y', 500)]]);
         $context = app(JobContext::class)->capture(new \stdClass);
         $this->assertSame('size_limit', $context['metadata_state']);
         $this->assertNull($context['metadata_json']);
@@ -114,16 +114,16 @@ final class JobDetailsTest extends TestCase
     public function test_json_values_are_escaped_and_missing_snapshots_are_not_invented_empty_objects(): void
     {
         $value = '<img src=x onerror=alert(1)>';
-        config()->set('horizon-lens.job_context', fn () => ['arguments' => ['html' => $value], 'metadata' => []]);
+        config()->set('current.job_context', fn () => ['arguments' => ['html' => $value], 'metadata' => []]);
         dispatch(new PaymentJob('success'));
         $record = $this->store()->table('jobs')->first();
-        $response = $this->get('/horizon-lens/jobs/'.$record->id)->assertOk()->assertSee($value)->assertDontSee($value, false);
+        $response = $this->get('/current/jobs/'.$record->id)->assertOk()->assertSee($value)->assertDontSee($value, false);
         $this->assertSame('captured', $response->viewData('metadataSnapshot')['state']);
-        config()->set('horizon-lens.job_context', null);
-        config()->set('horizon-lens.capture_payload', false);
+        config()->set('current.job_context', null);
+        config()->set('current.capture_payload', false);
         dispatch(new PaymentJob('success'));
         $older = $this->store()->table('jobs')->where('id', '!=', $record->id)->first();
-        $response = $this->get('/horizon-lens/jobs/'.$older->id)->assertOk()->assertSee('Not captured');
+        $response = $this->get('/current/jobs/'.$older->id)->assertOk()->assertSee('Not captured');
         $this->assertNull($response->viewData('argumentsSnapshot')['json']);
     }
 }

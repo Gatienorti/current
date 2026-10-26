@@ -1,9 +1,9 @@
 <?php
 
-namespace HorizonLens\Tests;
+namespace Current\Tests;
 
-use HorizonLens\HorizonAdapter;
-use HorizonLens\Prototype\Jobs\PaymentJob;
+use Current\HorizonAdapter;
+use Current\Prototype\Jobs\PaymentJob;
 
 final class CompatibilityTest extends TestCase
 {

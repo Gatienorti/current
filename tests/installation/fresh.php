@@ -38,8 +38,8 @@ echo "Fresh consumer: {$directory}\n";
 if ($resume === null) {
     runInstallCommand(['composer', 'create-project', 'laravel/laravel', $directory, '^13.0', '--no-install', '--no-scripts', '--no-interaction', '--prefer-dist'], sys_get_temp_dir(), $environment);
     touch($environment['DB_DATABASE']);
-    runInstallCommand(['composer', 'config', 'repositories.current', json_encode(['type' => 'path', 'url' => $package, 'options' => ['symlink' => true, 'versions' => ['horizon-lens/horizon-lens' => 'dev-main']]])], $directory, $environment);
-    runInstallCommand(['composer', 'require', 'horizon-lens/horizon-lens:dev-main', '--no-interaction', '--prefer-dist', '--no-progress'], $directory, $environment);
+    runInstallCommand(['composer', 'config', 'repositories.current', json_encode(['type' => 'path', 'url' => $package, 'options' => ['symlink' => true, 'versions' => ['gatienorti/current' => 'dev-main']]])], $directory, $environment);
+    runInstallCommand(['composer', 'require', 'gatienorti/current:dev-main', '--no-interaction', '--prefer-dist', '--no-progress'], $directory, $environment);
     runInstallCommand([PHP_BINARY, $package.'/tests/installation/smoke.php', $directory], $directory, $environment);
     runInstallCommand([PHP_BINARY, 'artisan', 'config:cache'], $directory, $environment);
     runInstallCommand([PHP_BINARY, 'artisan', 'route:cache'], $directory, $environment);

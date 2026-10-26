@@ -1,6 +1,6 @@
 <?php
 
-namespace HorizonLens\Tests;
+namespace Current\Tests;
 
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Artisan;
@@ -8,13 +8,21 @@ use Illuminate\Support\Facades\Schema;
 
 final class InstallTest extends TestCase
 {
+    public function test_existing_config_class_names_resolve_after_the_current_namespace_is_loaded(): void
+    {
+        $this->assertTrue(class_exists(\Current\Http\Authorize::class));
+        $this->assertTrue(class_exists('HorizonLens\\Http\\Authorize'));
+        $this->assertSame(\Current\Http\Authorize::class, (new \ReflectionClass('HorizonLens\\Http\\Authorize'))->getName());
+        $this->assertSame('preserved', \HorizonLens\Lens::step('Upgrade check', fn () => 'preserved'));
+    }
+
     public function test_installer_is_repeatable_and_only_migrates_its_own_connection(): void
     {
         $directory = sys_get_temp_dir().'/current-install-'.bin2hex(random_bytes(6));
         mkdir($directory, 0700);
         $oldPath = config_path();
         $this->app->useConfigPath($directory);
-        config()->set('horizon-lens.connection', 'current');
+        config()->set('current.connection', 'current');
         config()->set('database.connections.current.database', $directory.'/history.sqlite');
         app('db')->purge('current');
         try {

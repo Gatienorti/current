@@ -1,10 +1,10 @@
 <?php
 
-namespace HorizonLens\Http;
+namespace Current\Http;
 
-use HorizonLens\Store;
-use HorizonLens\Webhooks\DeliveryGroups;
-use HorizonLens\Webhooks\WebhookRelations;
+use Current\Store;
+use Current\Webhooks\DeliveryGroups;
+use Current\Webhooks\WebhookRelations;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
@@ -46,7 +46,7 @@ final class OutgoingWebhooksController
 
         $query = app(DeliveryGroups::class)->listing($query);
 
-        return view('horizon-lens::outgoing-webhooks', ['filters' => $filters, 'deliveries' => $query->orderByDesc('started_at')->orderByDesc('id')->simplePaginate(25)->withQueryString()]);
+        return view('current::outgoing-webhooks', ['filters' => $filters, 'deliveries' => $query->orderByDesc('started_at')->orderByDesc('id')->simplePaginate(25)->withQueryString()]);
     }
 
     public function show(string $id, Store $store)
@@ -61,6 +61,6 @@ final class OutgoingWebhooksController
 
         $webhookReceipts = $job ? app(WebhookRelations::class)->receipts($job->id) : collect();
 
-        return view('horizon-lens::outgoing-webhook-show', compact('delivery', 'job', 'webhookReceipts', 'deliveryAttempts', 'groupSummary', 'retainedJobIds'));
+        return view('current::outgoing-webhook-show', compact('delivery', 'job', 'webhookReceipts', 'deliveryAttempts', 'groupSummary', 'retainedJobIds'));
     }
 }

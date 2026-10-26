@@ -1,6 +1,6 @@
 <?php
 
-namespace HorizonLens\Tests;
+namespace Current\Tests;
 
 use Illuminate\Support\Facades\Schema;
 use Laravel\Horizon\Contracts\SupervisorRepository;
@@ -37,7 +37,7 @@ DefaultJob::dispatch()->onQueue('route-imports');
 class RuntimeConnectionJob implements ShouldQueue {}
 RuntimeConnectionJob::dispatch()->onQueue('classifications')->onConnection($runtimeConnection);
 CODE);
-        config()->set('horizon-lens.source_roots', [$this->source]);
+        config()->set('current.source_roots', [$this->source]);
         config()->set('queue.default', 'redis');
         config()->set('queue.connections.redis.queue', 'default');
         config()->set('horizon.env', 'testing');
@@ -61,7 +61,7 @@ CODE);
     public function test_architecture_uses_declarations_and_worker_ranges_without_job_history_or_running_workers(): void
     {
         Schema::connection('lens')->drop('lens_jobs');
-        $response = $this->get('/horizon-lens/queues')->assertOk()->assertSee('ClassifyJob')->assertSee('ImportJob')
+        $response = $this->get('/current/queues')->assertOk()->assertSee('ClassifyJob')->assertSee('ImportJob')
             ->assertSee('EnrichJob')->assertSee('DefaultJob')->assertSee('1–70 workers')->assertSee('5 workers')
             ->assertSee('Min 2 / queue · Max 10 total')->assertSee('Dynamic / inherited')->assertSee('other · classifications')
             ->assertDontSee('None observed')->assertDontSee('Retained')->assertDontSee('Unrelated');
@@ -78,8 +78,8 @@ CODE);
     {
         config()->set('horizon.env', 'production-east');
         config()->set('horizon.environments', ['production-*' => []]);
-        config()->set('horizon-lens.source_roots', [$this->source.'/missing']);
-        $this->get('/horizon-lens/queues')->assertOk()->assertSee('production-east')
+        config()->set('current.source_roots', [$this->source.'/missing']);
+        $this->get('/current/queues')->assertOk()->assertSee('production-east')
             ->assertSee('classify')->assertSee('Some source files could not be inspected');
     }
 }

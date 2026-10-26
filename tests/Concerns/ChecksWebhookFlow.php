@@ -1,17 +1,17 @@
 <?php
 
-namespace HorizonLens\Tests\Concerns;
+namespace Current\Tests\Concerns;
 
-use HorizonLens\Prototype\Jobs\OutgoingWebhookJob;
-use HorizonLens\Webhooks\WebhookRelations;
+use Current\Prototype\Jobs\OutgoingWebhookJob;
+use Current\Webhooks\WebhookRelations;
 use Illuminate\Support\Facades\Route;
 
 trait ChecksWebhookFlow
 {
     public function test_receipt_job_and_delivery_links_use_observed_ids_and_respect_retention(): void
     {
-        config()->set('horizon-lens.webhooks.enabled', true);
-        config()->set('horizon-lens.webhooks.outgoing', ['enabled' => true, 'destinations' => ['demo-receiver' => 'https://receiver.example.test/webhook']]);
+        config()->set('current.webhooks.enabled', true);
+        config()->set('current.webhooks.outgoing', ['enabled' => true, 'destinations' => ['demo-receiver' => 'https://receiver.example.test/webhook']]);
         Route::post('/__current-flow', function () {
             dispatch(new OutgoingWebhookJob('retry'));
 
@@ -25,19 +25,19 @@ trait ChecksWebhookFlow
         $deliveries = $this->store()->table('webhook_deliveries')->where('job_id', $jobId)->orderBy('id')->get();
         $this->assertCount(2, $deliveries);
         $this->assertSame([503, 200], $deliveries->pluck('http_status')->all());
-        $receiptPage = $this->get('/'.config('horizon-lens.path').'/webhooks/'.$receipt->id)->assertOk()->assertSee('Related webhooks')->assertSee('Outgoing');
+        $receiptPage = $this->get('/'.config('current.path').'/webhooks/'.$receipt->id)->assertOk()->assertSee('Related webhooks')->assertSee('Outgoing');
         foreach ($deliveries as $delivery) {
-            $receiptPage->assertSee(route('horizon-lens.webhooks.outgoing.show', ['id' => $delivery->id]), false);
-            $this->get('/'.config('horizon-lens.path').'/webhooks/outgoing/'.$delivery->id)->assertOk()->assertSee(route('horizon-lens.webhooks.show', ['id' => $receipt->id]), false);
+            $receiptPage->assertSee(route('current.webhooks.outgoing.show', ['id' => $delivery->id]), false);
+            $this->get('/'.config('current.path').'/webhooks/outgoing/'.$delivery->id)->assertOk()->assertSee(route('current.webhooks.show', ['id' => $receipt->id]), false);
         }
-        $this->get('/'.config('horizon-lens.path').'/jobs/'.$jobId)->assertOk()->assertSee('Incoming receipts')->assertSee('Outgoing delivery attempts')
-            ->assertSee(route('horizon-lens.webhooks.show', ['id' => $receipt->id]), false)
+        $this->get('/'.config('current.path').'/jobs/'.$jobId)->assertOk()->assertSee('Incoming receipts')->assertSee('Outgoing delivery attempts')
+            ->assertSee(route('current.webhooks.show', ['id' => $receipt->id]), false)
             ->assertSee($deliveries[0]->attempt_id);
 
         // A second independent receipt/job must not acquire the first job's deliveries.
         $this->post('/__current-flow')->assertStatus(202);
         $second = $this->store()->table('webhook_receipts')->where('id', '!=', $receipt->id)->first();
-        $this->get('/'.config('horizon-lens.path').'/webhooks/'.$second->id)->assertOk()->assertDontSee($deliveries[0]->id)->assertDontSee('id="related-webhooks"', false);
+        $this->get('/'.config('current.path').'/webhooks/'.$second->id)->assertOk()->assertDontSee($deliveries[0]->id)->assertDontSee('id="related-webhooks"', false);
         $relations = app(WebhookRelations::class);
         $this->assertCount(1, $relations->receipts($jobId));
         $this->assertCount(2, $relations->deliveries([$jobId]));
@@ -47,6 +47,6 @@ trait ChecksWebhookFlow
         $this->assertCount(0, $relations->receipts($jobId));
         $this->store()->table('jobs')->where('id', $jobId)->update(['expires_at' => time() - 1]);
         $this->assertCount(0, $relations->deliveries([$jobId]));
-        $this->get('/'.config('horizon-lens.path').'/webhooks/outgoing/'.$deliveries[1]->id)->assertOk()->assertDontSee('flow-provider');
+        $this->get('/'.config('current.path').'/webhooks/outgoing/'.$deliveries[1]->id)->assertOk()->assertDontSee('flow-provider');
     }
 }

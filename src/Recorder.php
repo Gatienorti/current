@@ -1,8 +1,8 @@
 <?php
 
-namespace HorizonLens;
+namespace Current;
 
-use HorizonLens\Support\Sanitizer;
+use Current\Support\Sanitizer;
 use Illuminate\Contracts\Queue\Job;
 use Illuminate\Queue\Events\JobAttempted;
 use Illuminate\Queue\Events\JobExceptionOccurred;
@@ -169,7 +169,7 @@ final class Recorder
     public function step(string $label, callable $callback): mixed
     {
         $step = null;
-        if ($this->current && ++$this->sequence <= config('horizon-lens.max_steps', 100)) {
+        if ($this->current && ++$this->sequence <= config('current.max_steps', 100)) {
             $step = $this->guard(function () use ($label) {
                 $id = (string) Str::ulid();
                 $this->store->table('steps')->insert([
@@ -209,7 +209,7 @@ final class Recorder
 
     private function enabled(string $connection): bool
     {
-        return config('horizon-lens.enabled') && in_array($connection, config('horizon-lens.queue_connections', []), true);
+        return config('current.enabled') && in_array($connection, config('current.queue_connections', []), true);
     }
 
     private function guard(callable $callback): mixed
@@ -226,7 +226,7 @@ final class Recorder
             $this->disabledUntil = microtime(true) + 30;
             // One bounded diagnostic per open circuit; no payload or exception message.
             try {
-                $path = config('horizon-lens.diagnostic_path');
+                $path = config('current.diagnostic_path');
                 if ($path) {
                     @file_put_contents($path, json_encode(['last_failure_at' => microtime(true), 'error_class' => $error::class]));
                 }

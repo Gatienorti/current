@@ -1,4 +1,4 @@
-@extends('horizon-lens::layout')
+@extends('current::layout')
 @section('title', 'Schedule')
 @section('content')
 <div class="page-heading"><div><h1>Schedule</h1></div></div>
@@ -7,7 +7,7 @@
     @if(!$available)
         <div class="empty-state"><h3>Schedule unavailable</h3><p>The application's schedule could not be loaded.</p></div>
     @elseif($tasks->isEmpty())
-        <div class="empty-state"><div class="empty-symbol">@include('horizon-lens::icon', ['iconName' => 'calendar'])</div><h3>No scheduled tasks</h3></div>
+        <div class="empty-state"><div class="empty-symbol">@include('current::icon', ['iconName' => 'calendar'])</div><h3>No scheduled tasks</h3></div>
     @else
         <div class="table-scroll"><table>
             <thead><tr><th>Task</th><th>Frequency</th><th>Timezone</th><th title="Based on the expression; runtime conditions may skip a task.">Next scheduled</th><th>Options</th></tr></thead>

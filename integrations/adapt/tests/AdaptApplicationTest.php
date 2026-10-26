@@ -1,13 +1,13 @@
 <?php
 
-namespace HorizonLens\AdaptTests;
+namespace Current\AdaptTests;
 
 use App\Jobs\FetchGarminActivityDetail;
 use App\Jobs\SendPushNotificationJob;
 use App\Jobs\TrainingPlan\CreateTrainingPhasesJob;
-use HorizonLens\AdaptLab\Fixtures;
-use HorizonLens\HorizonAdapter;
-use HorizonLens\Store;
+use Current\AdaptLab\Fixtures;
+use Current\HorizonAdapter;
+use Current\Store;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Foundation\Testing\TestCase;
 use Illuminate\Support\Carbon;

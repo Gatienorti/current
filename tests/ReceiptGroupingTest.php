@@ -1,9 +1,9 @@
 <?php
 
-namespace HorizonLens\Tests;
+namespace Current\Tests;
 
-use HorizonLens\Prototype\Jobs\PaymentJob;
-use HorizonLens\Webhooks\ReceiptGroups;
+use Current\Prototype\Jobs\PaymentJob;
+use Current\Webhooks\ReceiptGroups;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
@@ -35,15 +35,15 @@ final class ReceiptGroupingTest extends TestCase
         $this->assertStringNotContainsString('private-event', json_encode($rows));
         $this->assertStringNotContainsString('private-account', json_encode($rows));
         $job = $this->store()->table('jobs')->first();
-        $this->get('/horizon-lens/webhooks')->assertOk()->assertSee('2 receipts')->assertDontSee($rows[0]->id)->assertSee($rows[1]->id);
-        $this->get('/horizon-lens/webhooks?status=503&provider=test')->assertOk()->assertSee($rows[1]->id)->assertSee('1 HTTP errors');
-        $this->get('/horizon-lens/webhooks?status=503&provider=other')->assertOk()->assertSee('No receipts observed');
-        $this->get('/horizon-lens/webhooks/'.$rows[1]->id)->assertOk()->assertSee($rows[0]->id)->assertSee($job->id)->assertSee('503')->assertSee('Selected')->assertSee('No retained job dispatches');
-        $this->get('/horizon-lens/webhooks/'.$rows[0]->id)->assertOk()->assertSee($job->external_id);
+        $this->get('/current/webhooks')->assertOk()->assertSee('2 receipts')->assertDontSee($rows[0]->id)->assertSee($rows[1]->id);
+        $this->get('/current/webhooks?status=503&provider=test')->assertOk()->assertSee($rows[1]->id)->assertSee('1 HTTP errors');
+        $this->get('/current/webhooks?status=503&provider=other')->assertOk()->assertSee('No receipts observed');
+        $this->get('/current/webhooks/'.$rows[1]->id)->assertOk()->assertSee($rows[0]->id)->assertSee($job->id)->assertSee('503')->assertSee('Selected')->assertSee('No retained job dispatches');
+        $this->get('/current/webhooks/'.$rows[0]->id)->assertOk()->assertSee($job->external_id);
         $this->store()->table('webhook_receipts')->where('id', $rows[0]->id)->update(['expires_at' => time() - 1]);
-        $this->get('/horizon-lens/webhooks?status=503')->assertOk()->assertSee('No receipts observed');
-        $this->get('/horizon-lens/webhooks/'.$rows[1]->id)->assertOk()->assertDontSee($rows[0]->id)->assertDontSee($job->id);
-        $this->get('/horizon-lens/webhooks/'.$rows[0]->id)->assertNotFound();
+        $this->get('/current/webhooks?status=503')->assertOk()->assertSee('No receipts observed');
+        $this->get('/current/webhooks/'.$rows[1]->id)->assertOk()->assertDontSee($rows[0]->id)->assertDontSee($job->id);
+        $this->get('/current/webhooks/'.$rows[0]->id)->assertNotFound();
     }
 
     public function test_identity_is_scoped_and_missing_invalid_or_untrusted_identities_stay_independent(): void
@@ -72,7 +72,7 @@ final class ReceiptGroupingTest extends TestCase
             $row['id'] = (string) Str::ulid();
             $this->store()->table('webhook_receipts')->insert($row);
         }
-        $this->get('/horizon-lens/webhooks?outcome=unfinished')->assertOk()->assertSee($row['id'])->assertSee('Completion not observed for 1');
-        $this->get('/horizon-lens/webhooks/'.$row['id'])->assertOk()->assertSee('Latest 100 of 102 retained receipts')->assertDontSee($firstId);
+        $this->get('/current/webhooks?outcome=unfinished')->assertOk()->assertSee($row['id'])->assertSee('Completion not observed for 1');
+        $this->get('/current/webhooks/'.$row['id'])->assertOk()->assertSee('Latest 100 of 102 retained receipts')->assertDontSee($firstId);
     }
 }

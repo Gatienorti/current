@@ -1,13 +1,13 @@
 <?php
 
-namespace HorizonLens\Http;
+namespace Current\Http;
 
-use HorizonLens\Broadcasts\BroadcastIntegration;
-use HorizonLens\DebugPrompt;
-use HorizonLens\HorizonAdapter;
-use HorizonLens\RetryContext;
-use HorizonLens\Store;
-use HorizonLens\Webhooks\WebhookRelations;
+use Current\Broadcasts\BroadcastIntegration;
+use Current\DebugPrompt;
+use Current\HorizonAdapter;
+use Current\RetryContext;
+use Current\Store;
+use Current\Webhooks\WebhookRelations;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -45,7 +45,7 @@ final class JobsController
             $parameters['history'] = $filters['status'] === 'incomplete' ? 'unfinished' : 'overlapping';
             unset($parameters['status']);
 
-            return redirect()->route('horizon-lens.'.$section, $parameters);
+            return redirect()->route('current.'.$section, $parameters);
         }
         $requestedFilters = array_filter($filters, fn ($value) => $value !== null && $value !== '');
         if ($scopeStatus) {
@@ -58,7 +58,7 @@ final class JobsController
                 $parameters['cursor'] = $cursor;
             }
 
-            return redirect()->route('horizon-lens.monitoring', $parameters);
+            return redirect()->route('current.monitoring', $parameters);
         }
         $now = microtime(true);
         $base = $this->store->table('jobs')->where('expires_at', '>', $now);
@@ -106,12 +106,12 @@ final class JobsController
             ->select('display_status')->selectRaw('COUNT(*) AS aggregate')->groupBy('display_status')->pluck('aggregate', 'display_status');
 
         return view(match ($section) {
-            'dashboard' => 'horizon-lens::dashboard',
-            'monitoring' => 'horizon-lens::monitoring',
-            default => 'horizon-lens::index',
+            'dashboard' => 'current::dashboard',
+            'monitoring' => 'current::monitoring',
+            default => 'current::index',
         }, [
             'section' => $section, 'pageTitle' => $pages[$section][0], 'pageDescription' => $pages[$section][1],
-            'scopeStatus' => $scopeStatus, 'compactFilters' => true, 'pageRoute' => 'horizon-lens.'.$section,
+            'scopeStatus' => $scopeStatus, 'compactFilters' => true, 'pageRoute' => 'current.'.$section,
             'queueSummary' => (clone $base)->select('queue')->selectRaw('COUNT(*) AS jobs')->groupBy('queue')->orderBy('queue')->get(),
             'jobs' => $jobs, 'total' => $total, 'filters' => $filters, 'tags' => $tags, 'counts' => $counts,
             'detailContext' => $request->getRequestUri(),
@@ -161,7 +161,7 @@ final class JobsController
         $debugPrompt = ($attempt?->exception_class || $attempt?->status === 'failed' || $job->display_status === 'failed')
             ? app(DebugPrompt::class)->make($job, $attempt, $steps, $frames, $argumentsSource, $metadataSource) : null;
 
-        return view('horizon-lens::show', [
+        return view('current::show', [
             'debugPrompt' => $debugPrompt,
             'relatedBroadcasts' => BroadcastIntegration::visible() ? $this->store->table('broadcasts')->where('job_id', $id)->where('expires_at', '>', microtime(true))->orderByDesc('started_at')->orderByDesc('id')->limit(100)->get() : collect(),
             'webhookReceipts' => app(WebhookRelations::class)->receipts($id),
@@ -187,13 +187,13 @@ final class JobsController
         $parts = $return && ! preg_match('/[\\\\\x00-\x20]/', $return) ? parse_url($return) : false;
         if ($parts && ! array_intersect(['scheme', 'host', 'user', 'pass', 'port', 'fragment'], array_keys($parts))) {
             foreach ($pages as $section => $label) {
-                if (($parts['path'] ?? '') === route('horizon-lens.'.$section, [], false)) {
+                if (($parts['path'] ?? '') === route('current.'.$section, [], false)) {
                     return ['url' => $return, 'label' => $label, 'section' => $section === 'index' ? 'dashboard' : $section, 'return' => $return];
                 }
             }
         }
 
-        return ['url' => route('horizon-lens.monitoring'), 'label' => 'Monitoring', 'section' => 'monitoring', 'return' => null];
+        return ['url' => route('current.monitoring'), 'label' => 'Monitoring', 'section' => 'monitoring', 'return' => null];
     }
 
     private function snapshot(?string $json, ?string $state): array
@@ -212,7 +212,7 @@ final class JobsController
 
     private function health(): ?array
     {
-        $path = config('horizon-lens.diagnostic_path');
+        $path = config('current.diagnostic_path');
 
         return $path && is_file($path) ? json_decode(file_get_contents($path), true) : null;
     }

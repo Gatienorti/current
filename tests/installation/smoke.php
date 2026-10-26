@@ -2,7 +2,7 @@
 
 // Run against a disposable Laravel app installed through Composer, not a host checkout.
 use Current\Current;
-use HorizonLens\Store;
+use Current\Store;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -43,7 +43,7 @@ if (in_array($driver, ['mysql', 'mariadb'], true)) {
         'username' => 'root', 'password' => '', 'charset' => 'utf8mb4', 'collation' => 'utf8mb4_unicode_ci',
         'prefix' => '', 'strict' => true,
     ]);
-    config()->set('horizon-lens.connection', 'current_mysql');
+    config()->set('current.connection', 'current_mysql');
 }
 config()->set([
     'app.key' => 'base64:'.base64_encode(str_repeat('x', 32)), 'session.driver' => 'array', 'cache.default' => 'array',
@@ -57,10 +57,10 @@ config()->set([
 check(Artisan::call('current:install') === 0, 'installer through discovered provider');
 check(Artisan::call('current:install') === 0, 'repeat installation');
 check(app(Store::class)->connection()->table('migrations')->count() === 11, 'all eleven package migrations');
-check(! config('horizon-lens.webhooks.enabled') && ! config('horizon-lens.webhooks.outgoing.enabled') && ! config('horizon-lens.broadcasts.enabled'), 'optional collectors default off');
+check(! config('current.webhooks.enabled') && ! config('current.webhooks.outgoing.enabled') && ! config('current.broadcasts.enabled'), 'optional collectors default off');
 check(! class_exists(ReverbServiceProvider::class), 'jobs-only install needs no Reverb');
-check(config('horizon-lens.path') === 'current', 'canonical Current path');
-check(str_ends_with(route('horizon-lens.index'), '/current'), 'registered Current route');
+check(config('current.path') === 'current', 'canonical Current path');
+check(str_ends_with(route('current.index'), '/current'), 'registered Current route');
 $http = $app->make(Illuminate\Contracts\Http\Kernel::class);
 $response = $http->handle(Request::create('/current'));
 check($response->getStatusCode() === 403, 'anonymous dashboard denied');

@@ -1,5 +1,5 @@
 <?php
 
-namespace HorizonLens\Prototype\Jobs;
+namespace Current\Prototype\Jobs;
 
 final class GatewayDeclined extends \RuntimeException {}

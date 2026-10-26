@@ -1,6 +1,6 @@
 <?php
 
-namespace HorizonLens\Tests;
+namespace Current\Tests;
 
 use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\Schema;
@@ -27,7 +27,7 @@ final class ActivityDashboardTest extends TestCase
         foreach ([503, 200] as $status) {
             $this->store()->table('webhook_deliveries')->insert(['id' => (string) Str::ulid(), 'destination' => 'demo-destination', 'endpoint' => 'https://example.test/hook', 'method' => 'POST', 'started_at' => time() - 60, 'finished_at' => time() - 59, 'http_status' => $status, 'duration_ms' => 50, 'delivery_key' => str_repeat('b', 64), 'expires_at' => time() + 3600]);
         }
-        $page = $this->get('/horizon-lens/webhooks/dashboard')->assertOk()->assertSee('Webhook dashboard')->assertSee('demo-provider')->assertSee('demo-destination')->assertSee($one)->assertSee($two)->assertDontSee($expired)->assertDontSee($old)->assertDontSee('FutureSecret');
+        $page = $this->get('/current/webhooks/dashboard')->assertOk()->assertSee('Webhook dashboard')->assertSee('demo-provider')->assertSee('demo-destination')->assertSee($one)->assertSee($two)->assertDontSee($expired)->assertDontSee($old)->assertDontSee('FutureSecret');
         $streams = $page->viewData('streams');
         $this->assertSame(3, $streams['incoming']['stats']->total);
         $this->assertSame(1, $streams['incoming']['stats']->failures);
@@ -38,18 +38,18 @@ final class ActivityDashboardTest extends TestCase
         $this->assertSame(2, $streams['outgoing']['stats']->total);
         $this->assertSame(1, $streams['outgoing']['stats']->failures);
         $this->assertSame(2, $streams['outgoing']['repeated'][0]->total);
-        $this->assertSame(4, $this->get('/horizon-lens/webhooks/dashboard?range=7d')->viewData('streams')['incoming']['stats']->total);
-        $this->assertCount(12, $this->get('/horizon-lens/webhooks/dashboard?range=1h')->viewData('streams')['incoming']['series']);
+        $this->assertSame(4, $this->get('/current/webhooks/dashboard?range=7d')->viewData('streams')['incoming']['stats']->total);
+        $this->assertCount(12, $this->get('/current/webhooks/dashboard?range=1h')->viewData('streams')['incoming']['series']);
     }
 
     public function test_broadcast_dashboard_counts_submission_and_authorization_failures_separately(): void
     {
-        config()->set('horizon-lens.broadcasts.visible', true);
+        config()->set('current.broadcasts.visible', true);
         foreach (['accepted', 'failed', 'unknown'] as $outcome) {
             $this->store()->table('broadcasts')->insert(['id' => (string) Str::ulid(), 'connection' => 'reverb', 'event' => 'SafeEvent', 'channels_json' => '["private-orders.*","private-orders.*"]', 'outcome' => $outcome, 'started_at' => time() - 90, 'finished_at' => $outcome === 'unknown' ? null : time() - 89, 'duration_ms' => $outcome === 'unknown' ? null : 80, 'expires_at' => time() + 3600]);
         }
         $this->store()->table('broadcast_auth_failures')->insert(['id' => (string) Str::ulid(), 'route_name' => 'broadcasting/auth', 'method' => 'POST', 'http_status' => 403, 'channel_type' => 'Private', 'channels_json' => '[]', 'observed_at' => time() - 90, 'expires_at' => time() + 3600]);
-        $page = $this->get('/horizon-lens/broadcasts/dashboard')->assertOk()->assertSee('SafeEvent')->assertSee('broadcasting/auth')->assertSee('Inspect unfinished')->assertSee('capture: disabled');
+        $page = $this->get('/current/broadcasts/dashboard')->assertOk()->assertSee('SafeEvent')->assertSee('broadcasting/auth')->assertSee('Inspect unfinished')->assertSee('capture: disabled');
         $streams = $page->viewData('streams');
         $this->assertSame(3, $streams['submissions']['stats']->total);
         $this->assertSame(1, $streams['submissions']['stats']->failures);
@@ -62,25 +62,25 @@ final class ActivityDashboardTest extends TestCase
 
     public function test_missing_storage_is_unavailable_and_empty_history_is_not_claimed_healthy(): void
     {
-        $this->get('/horizon-lens/webhooks/dashboard')->assertOk()->assertSee('No retained observations')->assertSee('Missing telemetry is unknown');
+        $this->get('/current/webhooks/dashboard')->assertOk()->assertSee('No retained observations')->assertSee('Missing telemetry is unknown');
         Schema::connection('lens')->drop('lens_webhook_receipts');
-        $page = $this->get('/horizon-lens/webhooks/dashboard')->assertOk()->assertSee('History unavailable');
+        $page = $this->get('/current/webhooks/dashboard')->assertOk()->assertSee('History unavailable');
         $this->assertFalse($page->viewData('streams')['incoming']['available']);
         $this->assertTrue($page->viewData('streams')['outgoing']['available']);
     }
 
     public function test_dashboard_navigation_preserves_lists_and_access_controls(): void
     {
-        config()->set('horizon-lens.broadcasts.visible', true);
-        $this->get('/horizon-lens')->assertOk()->assertSee('href="'.route('horizon-lens.webhooks.dashboard').'"', false)->assertSee('href="'.route('horizon-lens.broadcasts.dashboard').'"', false);
-        $this->get('/horizon-lens/webhooks')->assertOk()->assertSee('Incoming webhooks');
-        $this->get('/horizon-lens/broadcasts')->assertOk()->assertSee('Submissions');
-        $this->getJson('/horizon-lens/webhooks/dashboard?range=bad')->assertUnprocessable();
+        config()->set('current.broadcasts.visible', true);
+        $this->get('/current')->assertOk()->assertSee('href="'.route('current.webhooks.dashboard').'"', false)->assertSee('href="'.route('current.broadcasts.dashboard').'"', false);
+        $this->get('/current/webhooks')->assertOk()->assertSee('Incoming webhooks');
+        $this->get('/current/broadcasts')->assertOk()->assertSee('Submissions');
+        $this->getJson('/current/webhooks/dashboard?range=bad')->assertUnprocessable();
         $this->actingAs(new GenericUser(['id' => 2, 'is_admin' => false]));
-        $this->get('/horizon-lens/webhooks/dashboard')->assertForbidden();
-        $this->get('/horizon-lens/broadcasts/dashboard')->assertForbidden();
+        $this->get('/current/webhooks/dashboard')->assertForbidden();
+        $this->get('/current/broadcasts/dashboard')->assertForbidden();
         $this->actingAs(new GenericUser(['id' => 1, 'is_admin' => true]));
-        config()->set('horizon-lens.broadcasts.visible', false);
-        $this->get('/horizon-lens/broadcasts/dashboard')->assertNotFound();
+        config()->set('current.broadcasts.visible', false);
+        $this->get('/current/broadcasts/dashboard')->assertNotFound();
     }
 }

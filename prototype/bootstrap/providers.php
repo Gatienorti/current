@@ -1,7 +1,7 @@
 <?php
 
-use HorizonLens\LensServiceProvider;
-use HorizonLens\Prototype\PrototypeServiceProvider;
+use Current\CurrentServiceProvider;
+use Current\Prototype\PrototypeServiceProvider;
 use Laravel\Horizon\HorizonServiceProvider;
 
-return [HorizonServiceProvider::class, LensServiceProvider::class, PrototypeServiceProvider::class];
+return [HorizonServiceProvider::class, CurrentServiceProvider::class, PrototypeServiceProvider::class];

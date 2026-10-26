@@ -1,8 +1,8 @@
 <?php
 
-namespace HorizonLens;
+namespace Current;
 
-use HorizonLens\Support\Sanitizer;
+use Current\Support\Sanitizer;
 use PhpParser\Node;
 use PhpParser\NodeFinder;
 use PhpParser\ParserFactory;
@@ -29,15 +29,15 @@ final class SourceOutline
             if (! $relative) {
                 return [];
             }
-            $maxBytes = max(1, min(1048576, (int) config('horizon-lens.max_source_bytes', 262144)));
+            $maxBytes = max(1, min(1048576, (int) config('current.max_source_bytes', 262144)));
             // Read a bounded snapshot rather than trusting cached file size/mtime.
             $source = @file_get_contents($file, false, null, 0, $maxBytes + 1);
             if ($source === false || strlen($source) > $maxBytes) {
                 return [];
             }
             $hash = hash('sha256', $source);
-            $limit = max(0, min(1000, (int) config('horizon-lens.max_source_operations', 100)));
-            $capacity = max(0, min(512, (int) config('horizon-lens.source_cache_entries', 128)));
+            $limit = max(0, min(1000, (int) config('current.max_source_operations', 100)));
+            $capacity = max(0, min(512, (int) config('current.source_cache_entries', 128)));
             $this->trim($capacity);
             $key = hash('sha256', $file."\0".$method->getDeclaringClass()->getName()."\0".$method->getStartLine()."\0".$limit."\0".$hash);
             if (isset($this->cache[$key])) {
@@ -85,7 +85,7 @@ final class SourceOutline
         return [
             'source_file' => $file,
             'source_hash' => $hash,
-            'source_revision' => config('horizon-lens.source_revision'),
+            'source_revision' => config('current.source_revision'),
             'source_operations' => $operations,
         ];
     }

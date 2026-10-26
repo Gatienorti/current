@@ -1,9 +1,9 @@
 <?php
 
-use HorizonLens\Http\Authorize;
+use Current\Http\Authorize;
 
 return [
-    'enabled' => env('CURRENT_ENABLED', env('HORIZON_LENS_ENABLED', true)),
+    'enabled' => env('CURRENT_ENABLED', true),
     'broadcasts' => [
         'visible' => null, // null: detect Reverb or the selected Pusher driver; true/false: explicit navigation override.
         'enabled' => env('CURRENT_BROADCASTS_ENABLED', false),
@@ -35,7 +35,7 @@ return [
     'path' => env('CURRENT_PATH', 'current'),
     'middleware' => ['web', Authorize::class],
     // Use a dedicated connection, with driver-level timeouts set by the host.
-    'connection' => env('CURRENT_CONNECTION', env('HORIZON_LENS_CONNECTION', 'current')),
+    'connection' => env('CURRENT_CONNECTION', 'current'),
     'queue_connections' => ['redis'],
     'retention_days' => 7,
     'max_retention_days' => 30,
@@ -51,7 +51,7 @@ return [
     'context_max_items' => 100,
     'context_max_string' => 2048,
     'source_roots' => [app_path()],
-    'source_revision' => env('HORIZON_LENS_REVISION'),
+    'source_revision' => env('CURRENT_REVISION'),
     'max_source_bytes' => 262144,
     'max_source_operations' => 100,
     // Per-worker LRU cache; 0 disables it. Also bounded to 2 MiB of outline JSON.

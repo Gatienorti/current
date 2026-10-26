@@ -1,12 +1,12 @@
 <?php
 
-namespace HorizonLens\AdaptTests;
+namespace Current\AdaptTests;
 
 use App\Events\ChatMessageSent;
 use App\Events\WorkoutAnalysisCompleted;
-use HorizonLens\AdaptLab\Fixtures;
-use HorizonLens\Broadcasts\BroadcastIntegration;
-use HorizonLens\Store;
+use Current\AdaptLab\Fixtures;
+use Current\Broadcasts\BroadcastIntegration;
+use Current\Store;
 use Illuminate\Broadcasting\BroadcastException;
 use Illuminate\Broadcasting\BroadcastManager;
 use Illuminate\Contracts\Console\Kernel;
@@ -53,7 +53,7 @@ final class BroadcastIntegrationTest extends TestCase
             usleep(50000);
         }
         $this->assertTrue($ready, $this->server->getErrorOutput());
-        config()->set('horizon-lens.broadcasts', ['enabled' => true, 'visible' => null,
+        config()->set('current.broadcasts', ['enabled' => true, 'visible' => null,
             'events' => ['ChatMessageSent', 'workout.analysis.completed'],
             'channels' => ['private-chat.*', 'private-user.*']]);
         config()->set('broadcasting.default', 'reverb');
@@ -100,7 +100,7 @@ final class BroadcastIntegrationTest extends TestCase
         $this->get('/current/broadcasts?event=workout.analysis.completed')->assertOk()->assertSee($rows[1]->id)->assertDontSee($rows[0]->id);
         $this->get('/current/broadcasts/'.$rows[1]->id)->assertOk()->assertSee($rows[1]->job_id)->assertSee('Worker attempt started')->assertSee('Job enqueue observed');
         $this->get('/current/jobs/'.$rows[1]->job_id)->assertOk()->assertSee($rows[1]->id)->assertSee('Related broadcast submissions');
-        config()->set('horizon-lens.webhooks.enabled', true);
+        config()->set('current.webhooks.enabled', true);
         Route::post('/__broadcast-flow', function () {
             event(new WorkoutAnalysisCompleted(987654, []));
 
@@ -112,7 +112,7 @@ final class BroadcastIntegrationTest extends TestCase
         $this->get('/current/broadcasts/'.$linked->id)->assertOk()->assertSee('synthetic-origin');
 
         // Use Laravel's actual Reverb/Pusher channel authorization callback without a client socket.
-        config()->set('horizon-lens.broadcasts.authorization', ['enabled' => true, 'routes' => ['current.test.broadcast-auth']]);
+        config()->set('current.broadcasts.authorization', ['enabled' => true, 'routes' => ['current.test.broadcast-auth']]);
         $broadcaster = app(BroadcastManager::class)->connection('reverb');
         $broadcaster->channel('current-test.{id}', fn ($user, $id) => false);
         Route::post('/__current-broadcast-auth', fn (Request $request) => $broadcaster->auth($request))->name('current.test.broadcast-auth');

@@ -1,12 +1,12 @@
 <?php
 
-namespace HorizonLens\Prototype;
+namespace Current\Prototype;
 
 use App\Jobs\WarmVehicleBasicCache;
 use App\Services\VinLookupService;
-use HorizonLens\Http\Authorize;
-use HorizonLens\Prototype\Jobs\OrderInvestigationJob;
-use HorizonLens\Prototype\Jobs\PaymentJob;
+use Current\Http\Authorize;
+use Current\Prototype\Jobs\OrderInvestigationJob;
+use Current\Prototype\Jobs\PaymentJob;
 use Illuminate\Queue\WorkerOptions;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Gate;
@@ -25,11 +25,11 @@ final class PrototypeServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        config()->set('horizon-lens.connection', 'lens');
-        config()->set('horizon-lens.tag_prefixes', ['order:', 'scenario:']);
-        config()->set('horizon-lens.source_roots', [__DIR__, base_path('../tests'), '/opt/vehify/app']);
-        config()->set('horizon-lens.message_sanitizer', static fn (string $message) => preg_replace('/(token|password|secret|api_key)\s*[=:]\s*\S+/i', '$1=[REDACTED]', $message));
-        config()->set('horizon-lens.middleware', [DemoAccess::class]);
+        config()->set('current.connection', 'lens');
+        config()->set('current.tag_prefixes', ['order:', 'scenario:']);
+        config()->set('current.source_roots', [__DIR__, base_path('../tests'), '/opt/vehify/app']);
+        config()->set('current.message_sanitizer', static fn (string $message) => preg_replace('/(token|password|secret|api_key)\s*[=:]\s*\S+/i', '$1=[REDACTED]', $message));
+        config()->set('current.middleware', [DemoAccess::class]);
         // Package routes have already registered, so aliasing is not sufficient.
         // Bind only this isolated lab's request authorization; package default stays strict.
         $this->app->bind(Authorize::class, DemoAccess::class);
@@ -37,22 +37,22 @@ final class PrototypeServiceProvider extends ServiceProvider
         Horizon::auth(fn ($request) => (bool) $request->user()?->is_admin);
         Gate::define('viewHorizon', fn ($user) => (bool) $user?->is_admin);
         Http::preventStrayRequests();
-        config()->set('horizon-lens.webhooks.enabled', true);
+        config()->set('current.webhooks.enabled', true);
         WebhookDemo::register();
-        config()->set('horizon-lens.webhooks.outgoing', [
+        config()->set('current.webhooks.outgoing', [
             'enabled' => true,
             'destinations' => ['demo-receiver' => 'https://receiver.example.test/webhook'],
         ]);
         Artisan::command('lens:outgoing-demo', function () {
-            config()->set('horizon-lens.webhooks.capture_context', true);
-            config()->set('horizon-lens.webhooks.response_context', fn ($response) => ['http_status' => $response->getStatusCode()]);
+            config()->set('current.webhooks.capture_context', true);
+            config()->set('current.webhooks.response_context', fn ($response) => ['http_status' => $response->getStatusCode()]);
             foreach (['success', 'retry', 'connection'] as $scenario) {
                 dispatch(new Jobs\OutgoingWebhookJob($scenario));
                 app('queue.worker')->runNextJob('redis', 'lens-outgoing-demo', new WorkerOptions(sleep: 0, maxTries: 1));
             }
             $this->info('Synthetic outgoing attempts recorded using HTTP fakes; no external requests sent.');
         });
-        Route::get('/', fn () => redirect()->route('horizon-lens.index'));
+        Route::get('/', fn () => redirect()->route('current.index'));
         Artisan::command('lens:vehify-demo', function () {
             $lookup = \Mockery::mock(VinLookupService::class);
             $lookup->shouldReceive('basic')->once()->with('SYNTHETIC-LENS')->andReturnNull();

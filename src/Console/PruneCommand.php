@@ -1,12 +1,12 @@
 <?php
 
-namespace HorizonLens\Console;
+namespace Current\Console;
 
-use HorizonLens\Broadcasts\AuthorizationRecorder;
-use HorizonLens\Broadcasts\BroadcastRecorder;
-use HorizonLens\Store;
-use HorizonLens\Webhooks\OutgoingRecorder;
-use HorizonLens\Webhooks\WebhookRecorder;
+use Current\Broadcasts\AuthorizationRecorder;
+use Current\Broadcasts\BroadcastRecorder;
+use Current\Store;
+use Current\Webhooks\OutgoingRecorder;
+use Current\Webhooks\WebhookRecorder;
 use Illuminate\Console\Command;
 
 final class PruneCommand extends Command

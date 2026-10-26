@@ -1,10 +1,10 @@
 <?php
 
-namespace HorizonLens\Tests;
+namespace Current\Tests;
 
-use HorizonLens\Prototype\Jobs\PaymentJob;
-use HorizonLens\Prototype\WebhookDemo;
-use HorizonLens\Webhooks\WebhookRecorder;
+use Current\Prototype\Jobs\PaymentJob;
+use Current\Prototype\WebhookDemo;
+use Current\Webhooks\WebhookRecorder;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
@@ -33,19 +33,19 @@ final class WebhookTest extends TestCase
         $this->assertStringNotContainsString('private-', json_encode($receipt));
         $this->assertSame(1, $this->store()->table('webhook_jobs')->count());
         $this->artisan('queue:work', ['connection' => 'redis', '--queue' => 'lens-webhook-demo', '--once' => true, '--sleep' => 0, '--tries' => 1])->assertExitCode(0);
-        $this->get('/horizon-lens/webhooks/'.$receipt->id)->assertOk()->assertSee('202')->assertSee('Failed')->assertSee('PaymentJob');
-        $this->get('/horizon-lens/webhooks?provider=vehify-demo&status=202')->assertOk()->assertSee('vehify-demo');
-        $this->get('/horizon-lens/webhooks?outcome=job_failed')->assertOk()->assertSee($receipt->id);
-        $this->get('/horizon-lens/webhooks?outcome=invalid_signature')->assertOk()->assertSee('No receipts observed');
-        $this->get('/horizon-lens/webhooks?status=500')->assertOk()->assertSee('No receipts observed');
+        $this->get('/current/webhooks/'.$receipt->id)->assertOk()->assertSee('202')->assertSee('Failed')->assertSee('PaymentJob');
+        $this->get('/current/webhooks?provider=vehify-demo&status=202')->assertOk()->assertSee('vehify-demo');
+        $this->get('/current/webhooks?outcome=job_failed')->assertOk()->assertSee($receipt->id);
+        $this->get('/current/webhooks?outcome=invalid_signature')->assertOk()->assertSee('No receipts observed');
+        $this->get('/current/webhooks?status=500')->assertOk()->assertSee('No receipts observed');
     }
 
     public function test_invalid_signature_handler_failure_duplicates_and_disabled_collection(): void
     {
         $this->receipt('success', false)->assertStatus(401);
         $this->assertSame('invalid', $this->store()->table('webhook_receipts')->first()->signature);
-        $this->get('/horizon-lens/webhooks?outcome=invalid_signature&status=401')->assertOk()->assertSee('invalid');
-        $this->get('/horizon-lens/webhooks?outcome=http_error')->assertOk()->assertSee('401');
+        $this->get('/current/webhooks?outcome=invalid_signature&status=401')->assertOk()->assertSee('invalid');
+        $this->get('/current/webhooks?outcome=http_error')->assertOk()->assertSee('401');
         $this->assertSame(0, $this->store()->table('webhook_jobs')->count());
         $this->receipt('handler-error')->assertStatus(500);
         $failure = $this->store()->table('webhook_receipts')->where('http_status', 500)->first();
@@ -53,7 +53,7 @@ final class WebhookTest extends TestCase
         $this->receipt('ignored')->assertOk();
         $this->receipt('ignored')->assertOk();
         $this->assertSame(4, $this->store()->table('webhook_receipts')->count());
-        config()->set('horizon-lens.webhooks.enabled', false);
+        config()->set('current.webhooks.enabled', false);
         $this->receipt('ignored')->assertOk();
         $this->assertSame(4, $this->store()->table('webhook_receipts')->count());
     }
@@ -79,8 +79,8 @@ final class WebhookTest extends TestCase
         })->middleware('current.webhook:transaction-demo');
         $this->post('/__lens/rollback')->assertStatus(202);
         $this->assertSame(2, $this->store()->table('webhook_jobs')->count());
-        $this->get('/horizon-lens/webhooks?provider=transaction-demo&status=202')->assertOk()->assertSee('transaction-demo')->assertDontSee('vehify-demo');
-        $this->get('/horizon-lens/webhooks?from=2030-01-01T00:00:00')->assertOk()->assertSee('No receipts observed');
+        $this->get('/current/webhooks?provider=transaction-demo&status=202')->assertOk()->assertSee('transaction-demo')->assertDontSee('vehify-demo');
+        $this->get('/current/webhooks?from=2030-01-01T00:00:00')->assertOk()->assertSee('No receipts observed');
     }
 
     public function test_observer_storage_failure_cannot_break_response_and_auth_and_retention_apply(): void
@@ -88,11 +88,11 @@ final class WebhookTest extends TestCase
         $this->receipt('ignored')->assertOk();
         $receipt = $this->store()->table('webhook_receipts')->first();
         $this->actingAs(new GenericUser(['id' => 2, 'is_admin' => false]));
-        $this->get('/horizon-lens/webhooks')->assertForbidden();
-        $this->get('/horizon-lens/webhooks/'.$receipt->id)->assertForbidden();
+        $this->get('/current/webhooks')->assertForbidden();
+        $this->get('/current/webhooks/'.$receipt->id)->assertForbidden();
         $this->actingAs(new GenericUser(['id' => 1, 'is_admin' => true]));
         $this->store()->table('webhook_receipts')->where('id', $receipt->id)->update(['expires_at' => time() - 1]);
-        $this->get('/horizon-lens/webhooks/'.$receipt->id)->assertNotFound();
+        $this->get('/current/webhooks/'.$receipt->id)->assertNotFound();
         $this->assertSame(1, app(WebhookRecorder::class)->prune());
         Schema::connection('lens')->drop('lens_webhook_receipts');
         $this->receipt('ignored')->assertOk()->assertJson(['accepted' => false]);

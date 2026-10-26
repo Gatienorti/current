@@ -1,13 +1,13 @@
 <?php
 
-namespace HorizonLens\Tests;
+namespace Current\Tests;
 
 use GuzzleHttp\Promise\Promise;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
-use HorizonLens\Prototype\Jobs\OutgoingWebhookJob;
-use HorizonLens\Webhooks\DeliveryGroups;
-use HorizonLens\Webhooks\OutgoingRecorder;
+use Current\Prototype\Jobs\OutgoingWebhookJob;
+use Current\Webhooks\DeliveryGroups;
+use Current\Webhooks\OutgoingRecorder;
 use Illuminate\Support\Facades\Http;
 
 final class DeliveryGroupingTest extends TestCase
@@ -21,17 +21,17 @@ final class DeliveryGroupingTest extends TestCase
         $this->assertCount(3, $rows);
         $this->assertSame($rows[0]->delivery_key, $rows[1]->delivery_key);
         $this->assertNotSame($rows[1]->delivery_key, $rows[2]->delivery_key);
-        $page = $this->get('/horizon-lens/webhooks/outgoing')->assertOk();
+        $page = $this->get('/current/webhooks/outgoing')->assertOk();
         $page->assertDontSee($rows[0]->id)->assertSee($rows[1]->id)->assertSee($rows[2]->id)->assertSee('2 attempts');
-        $this->get('/horizon-lens/webhooks/outgoing?status=503')->assertOk()->assertSee($rows[1]->id)->assertDontSee($rows[2]->id);
-        $this->get('/horizon-lens/webhooks/outgoing/'.$rows[0]->id)->assertOk()->assertSee($rows[1]->id)->assertSee('503')->assertSee('200');
+        $this->get('/current/webhooks/outgoing?status=503')->assertOk()->assertSee($rows[1]->id)->assertDontSee($rows[2]->id);
+        $this->get('/current/webhooks/outgoing/'.$rows[0]->id)->assertOk()->assertSee($rows[1]->id)->assertSee('503')->assertSee('200');
         $this->store()->table('webhook_deliveries')->where('id', $rows[0]->id)->update(['expires_at' => time() - 1]);
-        $this->get('/horizon-lens/webhooks/outgoing?status=503')->assertOk()->assertSee('No outgoing attempts observed');
+        $this->get('/current/webhooks/outgoing?status=503')->assertOk()->assertSee('No outgoing attempts observed');
     }
 
     public function test_explicit_identity_crosses_calls_but_not_destination_endpoint_or_method(): void
     {
-        config()->set('horizon-lens.webhooks.outgoing.destinations', [
+        config()->set('current.webhooks.outgoing.destinations', [
             'demo-receiver' => 'https://receiver.example.test/webhook',
             'other' => 'https://other.example.test/webhook',
         ]);
@@ -40,7 +40,7 @@ final class DeliveryGroupingTest extends TestCase
         Http::currentWebhook('stable-private-delivery')->post('https://receiver.example.test/webhook');
         Http::currentWebhook('stable-private-delivery')->post('https://other.example.test/webhook');
         Http::currentWebhook('stable-private-delivery')->put('https://receiver.example.test/webhook');
-        config()->set('horizon-lens.webhooks.outgoing.destinations.demo-receiver', 'https://receiver.example.test/changed');
+        config()->set('current.webhooks.outgoing.destinations.demo-receiver', 'https://receiver.example.test/changed');
         Http::currentWebhook('stable-private-delivery')->post('https://receiver.example.test/changed');
         $rows = $this->store()->table('webhook_deliveries')->orderBy('id')->get();
         $this->assertSame($rows[0]->delivery_key, $rows[1]->delivery_key);
@@ -58,7 +58,7 @@ final class DeliveryGroupingTest extends TestCase
         $this->assertCount(2, $rows);
         $this->assertNotSame($rows[0]->job_id, $rows[1]->job_id);
         $this->assertSame($rows[0]->delivery_key, $rows[1]->delivery_key);
-        $this->get('/horizon-lens/webhooks/outgoing/'.$rows[1]->id)->assertOk()->assertSee($rows[0]->job_id)->assertSee($rows[1]->job_id);
+        $this->get('/current/webhooks/outgoing/'.$rows[1]->id)->assertOk()->assertSee($rows[0]->job_id)->assertSee($rows[1]->job_id);
     }
 
     public function test_overlapping_attempts_and_missing_completions_do_not_imply_final_success(): void
@@ -77,10 +77,10 @@ final class DeliveryGroupingTest extends TestCase
         $group = app(DeliveryGroups::class)->listing($this->store()->table('webhook_deliveries')->where('expires_at', '>', microtime(true)))->first();
         $this->assertSame(2, $group->attempt_count);
         $this->assertSame(1, $group->unfinished_count);
-        $this->get('/horizon-lens/webhooks/outgoing?outcome=unfinished')->assertOk()->assertSee($rows[1]->id)->assertSee('Completion not observed for 1');
+        $this->get('/current/webhooks/outgoing?outcome=unfinished')->assertOk()->assertSee($rows[1]->id)->assertSee('Completion not observed for 1');
         $first->resolve(new Response(503));
         $a->wait();
-        $this->get('/horizon-lens/webhooks/outgoing/'.$rows[1]->id)->assertOk()->assertSee('Overlapping');
+        $this->get('/current/webhooks/outgoing/'.$rows[1]->id)->assertOk()->assertSee('Overlapping');
     }
 
     public function test_ungrouped_legacy_calls_remain_independent_and_invalid_identity_does_not_break_requests(): void

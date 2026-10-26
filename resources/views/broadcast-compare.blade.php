@@ -1,8 +1,8 @@
-@extends('horizon-lens::layout')
+@extends('current::layout')
 @section('title', 'Compare broadcasts')
 @section('content')
 <div class="page-heading"><div><h1>Compare broadcasts</h1></div></div>
-<section class="panel"><div class="context-body"><p>Baseline: <a class="text-link" href="{{ route('horizon-lens.broadcasts.show', ['id' => $left->id]) }}">{{ $left->event }} · {{ substr($left->id, -8) }}</a></p>
+<section class="panel"><div class="context-body"><p>Baseline: <a class="text-link" href="{{ route('current.broadcasts.show', ['id' => $left->id]) }}">{{ $left->event }} · {{ substr($left->id, -8) }}</a></p>
 <form method="get" class="filters" data-job-filters><div class="filter-field"><label for="comparison-recent">Recent submissions</label><select id="comparison-recent" name="with" data-filter-dropdown><option value="">Choose a submission</option>
 @if($right && !$candidates->contains('id', $right->id))<option value="{{ $right->id }}" selected>{{ $right->event }} · {{ $right->id }}</option>@endif
 @foreach($candidates as $candidate)<option value="{{ $candidate->id }}" @selected($right?->id === $candidate->id)>{{ $candidate->event }} · {{ $candidate->outcome }} · {{ gmdate('M j H:i:s', (int)$candidate->started_at) }} · {{ substr($candidate->id, -8) }}</option>@endforeach
@@ -12,7 +12,7 @@
 <p class="small-note">Latest 100 retained submissions are offered. Select any event, or enter an older retained observation ID. Left → right shows changes, not a causal sequence.</p></div></section>
 @if($right)
 <div class="job-summary-grid">
-@foreach(['Baseline' => $left, 'Comparison' => $right] as $label => $entry)<section class="panel"><div class="panel-heading"><h2>{{ $label }}</h2>@include('horizon-lens::broadcast-status', ['broadcast' => $entry])</div><div class="context-body"><a class="text-link" href="{{ route('horizon-lens.broadcasts.show', ['id' => $entry->id]) }}">{{ $entry->event }}</a><p class="mono subtle">{{ $entry->id }}</p><p>{{ gmdate('M j, H:i:s', (int)$entry->started_at) }} UTC · {{ $entry->duration_ms !== null ? number_format($entry->duration_ms, 1).' ms' : 'Duration unavailable' }}</p></div></section>@endforeach
+@foreach(['Baseline' => $left, 'Comparison' => $right] as $label => $entry)<section class="panel"><div class="panel-heading"><h2>{{ $label }}</h2>@include('current::broadcast-status', ['broadcast' => $entry])</div><div class="context-body"><a class="text-link" href="{{ route('current.broadcasts.show', ['id' => $entry->id]) }}">{{ $entry->event }}</a><p class="mono subtle">{{ $entry->id }}</p><p>{{ gmdate('M j, H:i:s', (int)$entry->started_at) }} UTC · {{ $entry->duration_ms !== null ? number_format($entry->duration_ms, 1).' ms' : 'Duration unavailable' }}</p></div></section>@endforeach
 </div>
 <section class="panel"><div class="panel-heading"><h2>Snapshot coverage</h2></div><div class="table-wrap"><table><thead><tr><th>Snapshot</th><th>Baseline</th><th>Comparison</th><th>Compared</th></tr></thead><tbody>@foreach($comparison['coverage'] as $field => $coverage)<tr><td>{{ ucfirst(str_replace('_', ' ', $field)) }}</td><td>{{ $coverage['left'] }}</td><td>{{ $coverage['right'] }}</td><td>{{ $coverage['compared'] ? 'Yes' : 'Unavailable — not compared' }}</td></tr>@endforeach</tbody></table></div></section>
 <section class="panel"><div class="panel-heading"><h2>Differences <span class="count-pill">{{ count($comparison['rows']) }}</span></h2></div><div class="table-wrap"><table class="broadcast-diff"><thead><tr><th>Field / change</th><th>Baseline</th><th>Comparison</th></tr></thead><tbody>

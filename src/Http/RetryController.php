@@ -1,9 +1,9 @@
 <?php
 
-namespace HorizonLens\Http;
+namespace Current\Http;
 
-use HorizonLens\HorizonRetry;
-use HorizonLens\Store;
+use Current\HorizonRetry;
+use Current\Store;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Throwable;
@@ -12,7 +12,7 @@ final class RetryController
 {
     public function __invoke(Request $request, string $id, Store $store, HorizonRetry $horizon)
     {
-        abort_unless(config('horizon-lens.allow_retries', true), 403);
+        abort_unless(config('current.allow_retries', true), 403);
         $job = $store->jobsWithObservationState()->where('id', $id)->where('expires_at', '>', microtime(true))->first();
         abort_unless($job, 404);
         abort_unless($job->display_status === 'failed', 409, 'Only failed jobs can be retried.');
@@ -33,7 +33,7 @@ final class RetryController
             $uuid = json_decode($state ?? '{}', true)['uuid'] ?? null;
             $retry = $uuid ? $store->findCycle($uuid, $job->connection) : null;
             if ($retry) {
-                return redirect()->route('horizon-lens.show', ['id' => $retry->id, 'watch' => 1])->withFragment('execution-map');
+                return redirect()->route('current.show', ['id' => $retry->id, 'watch' => 1])->withFragment('execution-map');
             }
         } catch (HttpExceptionInterface $error) {
             throw $error;
@@ -41,6 +41,6 @@ final class RetryController
             // A transport error can occur after enqueue. Never automatically resend.
         }
 
-        return redirect()->route('horizon-lens.show', ['id' => $id])->with('current_retry_notice', 'The retry outcome could not be confirmed. Check Horizon before taking another action.');
+        return redirect()->route('current.show', ['id' => $id])->with('current_retry_notice', 'The retry outcome could not be confirmed. Check Horizon before taking another action.');
     }
 }

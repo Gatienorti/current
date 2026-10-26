@@ -1,8 +1,8 @@
 <?php
 
-namespace HorizonLens\Dashboards;
+namespace Current\Dashboards;
 
-use HorizonLens\Store;
+use Current\Store;
 
 final class ActivityDashboard
 {

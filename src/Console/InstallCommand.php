@@ -1,6 +1,6 @@
 <?php
 
-namespace HorizonLens\Console;
+namespace Current\Console;
 
 use Illuminate\Console\Command;
 
@@ -17,7 +17,7 @@ final class InstallCommand extends Command
 
             return self::FAILURE;
         }
-        $connection = config('horizon-lens.connection');
+        $connection = config('current.connection');
         $database = config("database.connections.{$connection}");
         if (! is_array($database)) {
             $this->error('Configure CURRENT_CONNECTION as a valid dedicated database connection.');
@@ -43,7 +43,7 @@ final class InstallCommand extends Command
                 chmod($path, 0600);
             }
         }
-        if (! is_file(config_path('current.php')) && ! is_file(config_path('horizon-lens.php'))) {
+        if (! is_file(config_path('current.php'))) {
             copy(__DIR__.'/../../config/current.php', config_path('current.php'));
             $this->info('Published config/current.php.');
         }
@@ -55,7 +55,7 @@ final class InstallCommand extends Command
         if ($exit !== self::SUCCESS) {
             return $exit;
         }
-        $this->info('Current is ready at /'.trim(config('horizon-lens.path'), '/').'.');
+        $this->info('Current is ready at /'.trim(config('current.path'), '/').'.');
         $this->line('Access requires an authenticated user allowed by your Horizon gate.');
         $this->line('Run Laravel’s scheduler for hourly pruning; restart long-lived queue workers after installation.');
         $this->line('Job data is redacted before storage. Review config/current.php for capture and tag settings.');

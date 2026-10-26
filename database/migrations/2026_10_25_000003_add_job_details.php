@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function getConnection(): ?string
     {
-        return config('horizon-lens.connection');
+        return config('current.connection');
     }
 
     public function up(): void

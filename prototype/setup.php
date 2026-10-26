@@ -58,10 +58,10 @@ if (! Schema::connection('lens')->hasColumn('lens_broadcasts', 'payload_json')) 
     (require dirname(__DIR__).'/database/migrations/2026_10_25_000009_add_broadcast_context.php')->up();
 }
 
-if (! Schema::connection(config('horizon-lens.connection'))->hasColumn('lens_webhook_receipts', 'receipt_key')) {
+if (! Schema::connection(config('current.connection'))->hasColumn('lens_webhook_receipts', 'receipt_key')) {
     (require dirname(__DIR__).'/database/migrations/2026_10_25_000010_add_receipt_grouping.php')->up();
 }
 
-if (! Schema::connection(config('horizon-lens.connection'))->hasTable('lens_broadcast_auth_failures')) {
+if (! Schema::connection(config('current.connection'))->hasTable('lens_broadcast_auth_failures')) {
     (require dirname(__DIR__).'/database/migrations/2026_10_25_000011_add_broadcast_authorization_failures.php')->up();
 }

@@ -1,8 +1,8 @@
 <?php
 
-namespace HorizonLens\Prototype\Jobs;
+namespace Current\Prototype\Jobs;
 
-use HorizonLens\Lens;
+use Current\Current;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
@@ -48,9 +48,9 @@ final class OrderInvestigationJob implements ShouldQueue
     public function handle(): void
     {
         foreach (['Load order', 'Validate order', 'Load customer', 'Check inventory', 'Reserve inventory', 'Calculate subtotal', 'Apply discounts', 'Calculate tax', 'Build invoice', 'Validate billing', 'Prepare payment'] as $label) {
-            Lens::step($label, fn () => usleep(8000));
+            Current::step($label, fn () => usleep(8000));
         }
-        Lens::step('Charge payment', function () {
+        Current::step('Charge payment', function () {
             usleep(12000);
             throw new GatewayDeclined('Synthetic payment declined. token=never-store-this');
         });

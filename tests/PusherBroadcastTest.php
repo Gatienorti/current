@@ -1,13 +1,13 @@
 <?php
 
-namespace HorizonLens\Tests;
+namespace Current\Tests;
 
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Response;
-use HorizonLens\Broadcasts\BroadcastIntegration;
-use HorizonLens\Broadcasts\ObservedPusherBroadcaster;
+use Current\Broadcasts\BroadcastIntegration;
+use Current\Broadcasts\ObservedPusherBroadcaster;
 use Illuminate\Broadcasting\BroadcastException;
 use Illuminate\Broadcasting\BroadcastManager;
 use Illuminate\Broadcasting\PrivateChannel;
@@ -27,7 +27,7 @@ final class PusherBroadcastTest extends TestCase
             new Response(200, [], '{}'), new Response(403, [], 'Synthetic rejection'), new Response(200, [], '{}'),
         ]));
         $handler->push(Middleware::history($history));
-        config()->set('horizon-lens.broadcasts', ['enabled' => true, 'visible' => null,
+        config()->set('current.broadcasts', ['enabled' => true, 'visible' => null,
             'events' => ['OrderUpdated'], 'channels' => ['private-orders.*']]);
         config()->set('broadcasting.default', 'hosted');
         config()->set('broadcasting.connections.hosted', [
@@ -71,7 +71,7 @@ final class PusherBroadcastTest extends TestCase
         $this->assertSame(['private-orders.42'], $body['channels'] ?? [$body['channel'] ?? null], json_encode(array_keys($body)));
         $this->assertSame(['token' => 'private-payload'], json_decode($body['data'], true));
         $this->assertSame('api-eu.pusher.com', $history[0]['request']->getUri()->getHost());
-        $this->get('/horizon-lens/broadcasts/'.$row->id)->assertOk()->assertSee('hosted')->assertSee('OrderUpdated');
+        $this->get('/current/broadcasts/'.$row->id)->assertOk()->assertSee('hosted')->assertSee('OrderUpdated');
 
         $driver->channel('orders.{id}', fn ($user, $id) => $id === '42');
         $request = Request::create('/broadcasting/auth', 'POST', ['channel_name' => 'private-orders.42', 'socket_id' => '123.456']);
@@ -98,12 +98,12 @@ final class PusherBroadcastTest extends TestCase
         config()->set('broadcasting.connections', [
             'cloud' => ['driver' => 'pusher'], 'local' => ['driver' => 'reverb'], 'other' => ['driver' => 'log'],
         ]);
-        config()->set('horizon-lens.broadcasts.enabled', false);
+        config()->set('current.broadcasts.enabled', false);
         BroadcastIntegration::configure();
         $this->assertSame('pusher', config('broadcasting.connections.cloud.driver'));
         config()->set('broadcasting.default', 'cloud');
         $this->assertTrue(BroadcastIntegration::visible());
-        config()->set('horizon-lens.broadcasts.enabled', true);
+        config()->set('current.broadcasts.enabled', true);
         BroadcastIntegration::configure();
         $this->assertSame('current-pusher', config('broadcasting.connections.cloud.driver'));
         $this->assertSame('current-reverb', config('broadcasting.connections.local.driver'));
