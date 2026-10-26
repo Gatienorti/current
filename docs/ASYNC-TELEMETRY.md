@@ -23,15 +23,15 @@ Use one collector per Current database/namespace. The Go supervisor remains an i
    php artisan current:install
    ```
 
-2. Install a matching collector binary. The **Collector binaries** workflow produces static Linux `amd64` and `arm64` executables plus SHA-256 files, available as workflow artifacts. When a release containing this feature is published, the workflow also attaches them to that release. The existing `v0.1.0-beta.1` predates this feature; do not assume it has these assets.
+2. Install a matching collector binary. The [Collector binaries workflow](https://github.com/Gatienorti/current/actions/workflows/collector-binaries.yml) produces static Linux `amd64` and `arm64` executables plus SHA-256 files, available as workflow artifacts. When a release containing this feature is published, the workflow also attaches them to that release. The existing `v0.1.0-beta.1` predates this feature; do not assume it has these assets.
 
    Download the binary and its checksum file from the same trusted Current release/workflow run, then install it from your application:
 
    ```sh
-   php artisan current:collector-install ./current-collector-linux-amd64 --sha256=<checksum-from-SHA256SUMS-linux-amd64>
+   php artisan current:collector-install ./current-collector-linux-amd64 --sha256="$(cut -d ' ' -f 1 SHA256SUMS-linux-amd64)"
    ```
 
-   Use `arm64` on ARM servers. The command verifies the checksum, executable protocol and architecture before atomically installing at `current.telemetry.binary`. It refuses to replace an existing binary unless you stop the collector and pass `--force`. It does not enable async recording. A checksum downloaded from the same release detects corruption; it is not an independent signature or trust source.
+   Use `arm64` on ARM servers. Run the installation command as the application user that will run the collector. The command verifies the checksum, executable protocol and architecture before atomically installing at `current.telemetry.binary`. It refuses to replace an existing binary unless you stop the collector and pass `--force`. It does not enable async recording. A checksum downloaded from the same release detects corruption; it is not an independent signature or trust source.
 
    Alternatively, build the collector on the target Linux architecture. It requires Go 1.25+ and a C compiler (CGO). The default build embeds the SQLite library through the pinned Go driver; no Go runtime is needed to run the resulting executable. From the application root:
 
@@ -98,7 +98,7 @@ If Redis is unavailable and draining is impossible, explicitly accept the histor
 
 Package integration tests cover real Laravel retry history, bounded admission and publication outage, expiry/invalid events, database-lock recovery, competing collectors, manual Horizon raw-payload retries, retained/expired cycle identities, pruning and the existing UI. Go tests cover rollback, post-commit replay, out-of-order snapshots and invalid relationships. Server-database checks additionally cover Unicode, whole-batch rollback, named-lock ownership across namespaces, lost SQL sessions and non-InnoDB rejection. Local MySQL 8.4.10 and MariaDB 11.4.13 each passed 13 tests / 124 assertions; MariaDB also passed through Laravel's mysql driver. ADAPT tests exercise its actual notification job and normal provider stack, with external delivery mocked.
 
-The earlier ADAPT benchmark evaluated an experimental adapter, not this hardened release path. Its throughput/memory results are not a performance guarantee for this implementation, which adds ownership, validation, health and retention work. No new performance benchmark is implied by this change. CI is configured to build the collector and run the package compatibility matrix; hosted CI completion must be verified after publication. Synchronous mode remains the default.
+The earlier ADAPT benchmark evaluated an experimental adapter, not this hardened release path. Its throughput/memory results are not a performance guarantee for this implementation, which adds ownership, validation, health and retention work. No new performance benchmark is implied by this change. Hosted CI has passed all six PHP/Laravel profiles, three TLS database configurations and both Linux binary architectures. The checks include shorter repeated recovery runs; longer local-run evidence is recorded in PLAN.md. Static release builds run the Go projector tests on each target architecture before producing the executable. Synchronous mode remains the default.
 
 ## Reproducing server-database integration checks
 
@@ -137,3 +137,9 @@ stdout_logfile=/var/log/current-collector.log
 ```
 
 The 35-second startup window lets a restarted collector encounter an expired ownership lease before exhausting restart attempts. The service remains responsible for restarting an exited process. Configure log rotation and use `current:telemetry-status` for health checks; a running process alone is not proof that its backlog is caught up. Stop this service before replacing its binary. Never remove the ownership key to bypass a live collector.
+
+### Sustained verification
+
+Three corrected ten-minute local runs covered **7,157 jobs, 14,308 attempts and 144,879 accepted observations** across SQLite, MySQL and MariaDB. Each completed 13 collector restarts, including SIGKILL with actual ownership-lease expiry; retained counts matched and every accepted observation was processed. The first trial exposed a graceful shutdown acknowledgement race, which was fixed and regression-tested before these runs. [Machine-readable evidence](verification/async-telemetry-2026-10-26.json) includes scope and reproduction. Run `CURRENT_ASYNC_SOAK_SECONDS=600 vendor/bin/phpunit -c phpunit.xml --filter test_sustained_collection` only against isolated test services, adding the SQL/TLS environment settings for server databases.
+
+These finite runs do not establish behavior at arbitrary production load, during permanent Redis data loss, or across untested database topologies. The synchronous default remains the conservative installation path.
