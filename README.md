@@ -24,6 +24,7 @@ Retry failed jobs through Horizon. Copy a **Debug with AI** prompt from captured
 
 Light, dark, and system appearance are included. Live data refreshes every five seconds by default, with pause and interval controls.
 
+
 ## Get started
 
 Current is preparing its first public beta and is **not on Packagist yet**. Install the development branch from GitHub in a development application, following the [installation guide](docs/INSTALLATION.md):
@@ -62,8 +63,6 @@ New supported object dispatches capture bounded, redacted job properties and sta
 ## Follow activity across your application
 
 Webhook and broadcast collection are **opt-in**, with explicit route, destination, event, and channel allowlists. Payload exports require additional configuration. Current observes your existing integrations; it does not replace webhook signature validation, delivery engines, or broadcaster authorization.
-
-
 
 [Set up incoming and outgoing webhooks](docs/INSTALLATION.md#4-enable-optional-integrations) · [Set up Reverb or Pusher](docs/INSTALLATION.md#optional-reverb-broadcast-observation)
 
