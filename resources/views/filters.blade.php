@@ -7,6 +7,7 @@
 <section class="panel filters-panel {{ $compactFilters ? 'compact-filters' : '' }}">
     @unless($compactFilters)<div class="panel-heading"><h2><span class="filter-icon">@include('horizon-lens::icon', ['iconName' => 'filter'])</span> Deep filters</h2><span class="subtle">All filters combine</span></div>@endunless
     <form method="get" action="{{ route($pageRoute) }}" class="filters" data-job-filters>
+        @if(!empty($filters['connection']))<input type="hidden" name="connection" value="{{ $filters['connection'] }}">@endif
         @if($compactFilters)
             @include('horizon-lens::filter-field', ['field' => 'queue'])
             @include('horizon-lens::filter-field', ['field' => 'job_class'])

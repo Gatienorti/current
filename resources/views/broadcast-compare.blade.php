@@ -1,7 +1,7 @@
 @extends('horizon-lens::layout')
 @section('title', 'Compare broadcasts')
 @section('content')
-<div class="page-heading"><div><h1>Compare broadcasts<span class="heading-dot">.</span></h1></div></div>
+<div class="page-heading"><div><h1>Compare broadcasts</h1></div></div>
 <section class="panel"><div class="context-body"><p>Baseline: <a class="text-link" href="{{ route('horizon-lens.broadcasts.show', ['id' => $left->id]) }}">{{ $left->event }} · {{ substr($left->id, -8) }}</a></p>
 <form method="get" class="filters" data-job-filters><div class="filter-field"><label for="comparison-recent">Recent submissions</label><select id="comparison-recent" name="with" data-filter-dropdown><option value="">Choose a submission</option>
 @if($right && !$candidates->contains('id', $right->id))<option value="{{ $right->id }}" selected>{{ $right->event }} · {{ $right->id }}</option>@endif

@@ -89,7 +89,7 @@ final class NavigationTest extends TestCase
     public function test_all_new_pages_require_authorization(): void
     {
         $this->app['auth']->forgetGuards();
-        foreach (['dashboard', 'jobs/recent', 'jobs/pending', 'jobs/failed', 'monitoring', 'metrics', 'metrics/jobs', 'metrics/queues', 'batches', 'silenced', 'webhooks', 'broadcasts', 'assets/steps.js', 'assets/filters.js', 'assets/refresh.js', 'assets/map.js'] as $path) {
+        foreach (['dashboard', 'jobs/recent', 'jobs/pending', 'jobs/failed', 'monitoring', 'metrics', 'metrics/jobs', 'metrics/queues', 'batches', 'schedule', 'queues', 'silenced', 'webhooks', 'broadcasts', 'assets/steps.js', 'assets/filters.js', 'assets/refresh.js', 'assets/map.js'] as $path) {
             $this->get('/horizon-lens/'.$path)->assertForbidden();
         }
     }

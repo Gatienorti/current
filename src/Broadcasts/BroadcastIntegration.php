@@ -5,7 +5,7 @@ namespace HorizonLens\Broadcasts;
 use Illuminate\Broadcasting\BroadcastManager;
 use Laravel\Reverb\ReverbServiceProvider;
 
-final class ReverbIntegration
+final class BroadcastIntegration
 {
     public static function visible(): bool
     {
@@ -17,7 +17,7 @@ final class ReverbIntegration
         $driver = config("broadcasting.connections.{$default}.driver");
 
         return class_exists(ReverbServiceProvider::class)
-            || in_array($driver, ['reverb', 'current-reverb'], true);
+            || in_array($driver, ['reverb', 'pusher', 'current-reverb', 'current-pusher'], true);
     }
 
     public static function configure(): void
@@ -26,8 +26,8 @@ final class ReverbIntegration
             return;
         }
         foreach ((array) config('broadcasting.connections', []) as $name => $connection) {
-            if (($connection['driver'] ?? null) === 'reverb') {
-                config()->set("broadcasting.connections.{$name}.driver", 'current-reverb');
+            if (in_array($connection['driver'] ?? null, ['reverb', 'pusher'], true)) {
+                config()->set("broadcasting.connections.{$name}.driver", 'current-'.$connection['driver']);
                 config()->set("broadcasting.connections.{$name}.current_connection", $name);
             }
         }
@@ -35,12 +35,14 @@ final class ReverbIntegration
 
     public static function register(BroadcastManager $manager): void
     {
-        $manager->extend('current-reverb', function ($app, $config) use ($manager) {
-            // Uses Laravel's existing Pusher/Reverb construction and authentication behavior.
-            $driver = new ObservedReverbBroadcaster($manager->pusher($config), $config['jsonp'] ?? false);
-            $driver->connectionName = (string) ($config['current_connection'] ?? 'reverb');
+        foreach (['reverb', 'pusher'] as $source) {
+            $manager->extend('current-'.$source, function ($app, $config) use ($manager, $source) {
+                // Keep Laravel's SDK construction, options, and channel authorization behavior.
+                $driver = new ObservedPusherBroadcaster($manager->pusher($config), $config['jsonp'] ?? false);
+                $driver->connectionName = (string) ($config['current_connection'] ?? $source);
 
-            return $driver;
-        });
+                return $driver;
+            });
+        }
     }
 }

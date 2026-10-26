@@ -3,7 +3,7 @@
 namespace HorizonLens\Http;
 
 use HorizonLens\Broadcasts\BroadcastDebugPrompt;
-use HorizonLens\Broadcasts\ReverbIntegration;
+use HorizonLens\Broadcasts\BroadcastIntegration;
 use HorizonLens\Broadcasts\SubmissionComparison;
 use HorizonLens\Store;
 use HorizonLens\Webhooks\WebhookRelations;
@@ -14,7 +14,7 @@ final class BroadcastsController
 {
     public function index(Request $request, Store $store)
     {
-        abort_unless(ReverbIntegration::visible(), 404);
+        abort_unless(BroadcastIntegration::visible(), 404);
         $filters = $request->validate([
             'issue' => 'nullable|in:slow,failed,unfinished', 'channel' => 'nullable|string|max:160', 'event' => 'nullable|string|max:160', 'outcome' => 'nullable|in:accepted,failed,unknown',
             'from' => 'nullable|date_format:Y-m-d\TH:i:s', 'to' => 'nullable|date_format:Y-m-d\TH:i:s',
@@ -50,7 +50,7 @@ final class BroadcastsController
 
     public function compare(string $id, Request $request, Store $store)
     {
-        abort_unless(ReverbIntegration::visible(), 404);
+        abort_unless(BroadcastIntegration::visible(), 404);
         $input = $request->validate(['with' => ['nullable', 'regex:/^[A-Z0-9]{26}$/D']]);
         $left = $store->table('broadcasts')->where('id', $id)->where('expires_at', '>', microtime(true))->first();
         abort_unless($left, 404);
@@ -69,7 +69,7 @@ final class BroadcastsController
 
     public function show(string $id, Store $store)
     {
-        abort_unless(ReverbIntegration::visible(), 404);
+        abort_unless(BroadcastIntegration::visible(), 404);
         $broadcast = $store->table('broadcasts')->where('id', $id)->where('expires_at', '>', microtime(true))->first();
         abort_unless($broadcast, 404);
         $job = $broadcast->job_id ? $store->jobsWithObservationState()->where('id', $broadcast->job_id)->where('expires_at', '>', microtime(true))->first() : null;

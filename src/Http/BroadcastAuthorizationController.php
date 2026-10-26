@@ -2,7 +2,7 @@
 
 namespace HorizonLens\Http;
 
-use HorizonLens\Broadcasts\ReverbIntegration;
+use HorizonLens\Broadcasts\BroadcastIntegration;
 use HorizonLens\Store;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -11,7 +11,7 @@ final class BroadcastAuthorizationController
 {
     public function __invoke(Request $request, Store $store)
     {
-        abort_unless(ReverbIntegration::visible(), 404);
+        abort_unless(BroadcastIntegration::visible(), 404);
         $filters = $request->validate([
             'route' => 'nullable|string|max:160', 'status' => 'nullable|integer|min:400|max:599', 'channel' => 'nullable|string|max:160',
             'from' => 'nullable|date_format:Y-m-d\TH:i:s', 'to' => 'nullable|date_format:Y-m-d\TH:i:s',

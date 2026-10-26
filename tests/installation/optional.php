@@ -2,7 +2,7 @@
 
 // Synthetic integration acceptance check for a fresh disposable Composer consumer.
 use Current\Current;
-use HorizonLens\Broadcasts\ReverbIntegration;
+use HorizonLens\Broadcasts\BroadcastIntegration;
 use HorizonLens\Store;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Broadcasting\BroadcastException;
@@ -55,7 +55,7 @@ config()->set([
 ]);
 $http = $app->make(Illuminate\Contracts\Http\Kernel::class);
 $store = app(Store::class);
-verify(ReverbIntegration::visible(), 'Reverb installed later makes Broadcasts visible without reinstalling Current');
+verify(BroadcastIntegration::visible(), 'Reverb installed later makes Broadcasts visible without reinstalling Current');
 verify(! config('horizon-lens.broadcasts.enabled'), 'installing Reverb does not opt into payload/submission capture');
 verify($http->handle(Request::create('/current/broadcasts/dashboard'))->getStatusCode() === 403, 'optional dashboard still denies anonymous access');
 $app['auth']->guard()->setUser(new GenericUser(['id' => 1]));
@@ -113,7 +113,7 @@ try {
             'client_options' => ['timeout' => 2, 'connect_timeout' => 1],
         ],
     ]);
-    ReverbIntegration::configure();
+    BroadcastIntegration::configure();
     app(BroadcastManager::class)->purge('reverb');
     foreach ([1, 2] as $iteration) {
         verify($http->handle(Request::create('/__current-install-hook', 'POST'))->getStatusCode() === 202, 'opt-in incoming response preserved');

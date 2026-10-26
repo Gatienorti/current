@@ -41,15 +41,15 @@ final class LensServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        Broadcasts\ReverbIntegration::configure();
-        $this->callAfterResolving(BroadcastManager::class, fn ($manager) => Broadcasts\ReverbIntegration::register($manager));
+        Broadcasts\BroadcastIntegration::configure();
+        $this->callAfterResolving(BroadcastManager::class, fn ($manager) => Broadcasts\BroadcastIntegration::register($manager));
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         $this->loadViewsFrom(__DIR__.'/../resources/views', 'horizon-lens');
         $this->app['view']->composer('horizon-lens::layout', function ($view) {
             $view->with('currentVersion', \Composer\InstalledVersions::isInstalled('horizon-lens/horizon-lens')
                 ? (\Composer\InstalledVersions::getPrettyVersion('horizon-lens/horizon-lens') ?? 'Development')
                 : 'Development');
-            $view->with('broadcastsVisible', Broadcasts\ReverbIntegration::visible());
+            $view->with('broadcastsVisible', Broadcasts\BroadcastIntegration::visible());
             $view->with('currentMark', file_get_contents(__DIR__.'/../resources/brand/current-mark.svg'));
             $view->with('lensThemeVersion', filemtime(__DIR__.'/../resources/js/theme.js'));
             $view->with('lensFiltersVersion', filemtime(__DIR__.'/../resources/js/filters.js'));
@@ -67,6 +67,8 @@ final class LensServiceProvider extends ServiceProvider
                 Route::get($path, [Http\JobsController::class, 'index'])->defaults('section', $section)->name($section);
             }
             Route::get('/monitoring', [Http\JobsController::class, 'index'])->defaults('section', 'monitoring')->name('monitoring');
+            Route::get('/queues', Http\QueuesController::class)->name('queues');
+            Route::get('/schedule', Http\ScheduleController::class)->name('schedule');
             foreach (['metrics', 'batches'] as $section) {
                 Route::get('/'.$section, [Http\SectionsController::class, 'horizon'])->defaults('section', $section)->name($section);
             }

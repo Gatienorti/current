@@ -18,7 +18,7 @@
         ['Max Throughput', !$horizon['metrics']['available'] ? 'Unavailable' : ($horizon['metrics']['data']['max_throughput'] ?: '—'), 'Queue with highest reported throughput', 'queue-metric'],
     ];
 @endphp
-<div class="page-heading"><div><h1>Dashboard<span class="heading-dot">.</span></h1></div><a class="button secondary" href="{{ request()->fullUrl() }}">@include('horizon-lens::icon', ['iconName' => 'refresh']) Refresh</a></div>
+<div class="page-heading"><div><h1>Dashboard</h1></div><a class="button secondary" href="{{ request()->fullUrl() }}">@include('horizon-lens::icon', ['iconName' => 'refresh']) Refresh</a></div>
 <div data-live-region="dashboard">
 <div class="horizon-stats-grid">
     @foreach($cards as [$label, $value, $caption, $style])

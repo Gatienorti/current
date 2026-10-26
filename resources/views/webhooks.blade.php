@@ -1,7 +1,7 @@
 @extends('horizon-lens::layout')
 @section('title', 'Incoming webhooks')
 @section('content')
-<div class="page-heading"><div><h1>Incoming webhooks<span class="heading-dot">.</span></h1></div><span class="soft-badge">PROOF OF CONCEPT</span></div>
+<div class="page-heading"><div><h1>Incoming webhooks</h1></div><span class="soft-badge">PROOF OF CONCEPT</span></div>
 @if(!config('horizon-lens.webhooks.enabled'))<p class="observation-notice">Collection is disabled. Enable CURRENT_WEBHOOKS_ENABLED and opt in individual routes with current.webhook middleware.</p>@endif
 <section class="panel filters-panel compact-filters webhook-filters"><form class="filters" method="get" data-job-filters>
 <label>Provider<input name="provider" placeholder="Any provider" value="{{ $filters['provider'] ?? '' }}"></label>

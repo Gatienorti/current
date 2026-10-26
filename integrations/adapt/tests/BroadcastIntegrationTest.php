@@ -5,7 +5,7 @@ namespace HorizonLens\AdaptTests;
 use App\Events\ChatMessageSent;
 use App\Events\WorkoutAnalysisCompleted;
 use HorizonLens\AdaptLab\Fixtures;
-use HorizonLens\Broadcasts\ReverbIntegration;
+use HorizonLens\Broadcasts\BroadcastIntegration;
 use HorizonLens\Store;
 use Illuminate\Broadcasting\BroadcastException;
 use Illuminate\Broadcasting\BroadcastManager;
@@ -62,7 +62,7 @@ final class BroadcastIntegrationTest extends TestCase
             'options' => ['host' => '127.0.0.1', 'port' => $this->port, 'scheme' => 'http', 'useTLS' => false],
             'client_options' => ['timeout' => 2, 'connect_timeout' => 1],
         ]);
-        ReverbIntegration::configure();
+        BroadcastIntegration::configure();
         app(BroadcastManager::class)->purge('reverb');
     }
 
@@ -73,8 +73,19 @@ final class BroadcastIntegrationTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_actual_adapt_immediate_and_queued_events_submit_to_isolated_reverb_without_payload_capture(): void
+    public static function broadcastDrivers(): array
     {
+        return ['Reverb driver' => ['reverb'], 'Pusher driver' => ['pusher']];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('broadcastDrivers')]
+    public function test_actual_adapt_events_submit_through_both_drivers_to_an_isolated_protocol_server(string $driver): void
+    {
+        config()->set('broadcasting.connections.reverb.driver', $driver);
+        BroadcastIntegration::configure();
+        app(BroadcastManager::class)->purge('reverb');
+        $this->assertSame('current-'.$driver, config('broadcasting.connections.reverb.driver'));
+
         event(new ChatMessageSent(['text' => 'private-message'], null, 987654));
         event(new WorkoutAnalysisCompleted(987654, ['completed_summary' => 'private-health-summary']));
         $this->artisan('queue:work', ['connection' => 'redis', '--queue' => 'default', '--once' => true, '--sleep' => 0, '--tries' => 1])->assertExitCode(0);
@@ -134,7 +145,7 @@ final class BroadcastIntegrationTest extends TestCase
         (require dirname(__DIR__, 3).'/database/migrations/2026_10_25_000009_add_broadcast_context.php')->up();
         $this->server->stop(1);
         // Server outage must not hide navigation.
-        $this->assertTrue(ReverbIntegration::visible());
+        $this->assertTrue(BroadcastIntegration::visible());
         $this->get('/current/broadcasts')->assertOk()->assertSee('No broadcast submissions observed');
     }
 }

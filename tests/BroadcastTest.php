@@ -3,7 +3,7 @@
 namespace HorizonLens\Tests;
 
 use HorizonLens\Broadcasts\BroadcastRecorder;
-use HorizonLens\Broadcasts\ReverbIntegration;
+use HorizonLens\Broadcasts\BroadcastIntegration;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Support\Facades\Schema;
 
@@ -15,8 +15,8 @@ final class BroadcastTest extends TestCase
         $this->get('/horizon-lens')->assertOk()->assertDontSee('href="'.route('horizon-lens.broadcasts').'"', false);
         config()->set('broadcasting.connections.remote-reverb.driver', 'reverb');
         config()->set('broadcasting.default', 'remote-reverb');
-        $this->assertTrue(ReverbIntegration::visible());
-        $this->get('/horizon-lens/broadcasts')->assertOk()->assertSee('Reverb is available');
+        $this->assertTrue(BroadcastIntegration::visible());
+        $this->get('/horizon-lens/broadcasts')->assertOk()->assertSee('Broadcast observation is available');
         config()->set('horizon-lens.broadcasts.visible', false);
         $this->get('/horizon-lens/broadcasts')->assertNotFound();
         config()->set('horizon-lens.broadcasts.visible', true);

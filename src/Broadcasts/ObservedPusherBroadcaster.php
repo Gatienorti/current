@@ -5,9 +5,9 @@ namespace HorizonLens\Broadcasts;
 use Illuminate\Broadcasting\Broadcasters\PusherBroadcaster;
 use Throwable;
 
-final class ObservedReverbBroadcaster extends PusherBroadcaster
+final class ObservedPusherBroadcaster extends PusherBroadcaster
 {
-    public string $connectionName = 'reverb';
+    public string $connectionName = 'pusher';
 
     public function broadcast(array $channels, $event, array $payload = [])
     {

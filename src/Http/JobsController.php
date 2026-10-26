@@ -2,7 +2,7 @@
 
 namespace HorizonLens\Http;
 
-use HorizonLens\Broadcasts\ReverbIntegration;
+use HorizonLens\Broadcasts\BroadcastIntegration;
 use HorizonLens\DebugPrompt;
 use HorizonLens\HorizonAdapter;
 use HorizonLens\RetryContext;
@@ -33,7 +33,7 @@ final class JobsController
             'history' => ['nullable', Rule::in(['unfinished', 'overlapping', 'partial'])],
             'queue' => ['nullable', Rule::when(is_array($request->input('queue')), ['array', 'max:50'], ['string', 'max:100'])],
             'queue.*' => 'nullable|string|max:100', 'job_class' => 'nullable|string|max:240',
-            'job_id' => 'nullable|string|max:100', 'exception_class' => 'nullable|string|max:240',
+            'connection' => 'nullable|string|max:100', 'job_id' => 'nullable|string|max:100', 'exception_class' => 'nullable|string|max:240',
             'tags' => 'nullable|string|max:500',
             'from' => 'nullable|date_format:Y-m-d\TH:i,Y-m-d\TH:i:s', 'to' => ['nullable', 'date_format:Y-m-d\TH:i,Y-m-d\TH:i:s', Rule::when($request->filled('from'), 'after:from')],
         ]);
@@ -68,7 +68,7 @@ final class JobsController
         } elseif ($section === 'completed') {
             $query->where(fn ($q) => $q->where('silenced', false)->orWhereNull('silenced'));
         }
-        foreach (['queue', 'job_class', 'exception_class'] as $field) {
+        foreach (['queue', 'connection', 'job_class', 'exception_class'] as $field) {
             if (! empty($filters[$field])) {
                 if ($field === 'queue') {
                     $query->whereIn($field, (array) $filters[$field]);
@@ -163,7 +163,7 @@ final class JobsController
 
         return view('horizon-lens::show', [
             'debugPrompt' => $debugPrompt,
-            'relatedBroadcasts' => ReverbIntegration::visible() ? $this->store->table('broadcasts')->where('job_id', $id)->where('expires_at', '>', microtime(true))->orderByDesc('started_at')->orderByDesc('id')->limit(100)->get() : collect(),
+            'relatedBroadcasts' => BroadcastIntegration::visible() ? $this->store->table('broadcasts')->where('job_id', $id)->where('expires_at', '>', microtime(true))->orderByDesc('started_at')->orderByDesc('id')->limit(100)->get() : collect(),
             'webhookReceipts' => app(WebhookRelations::class)->receipts($id),
             'webhookDeliveries' => app(WebhookRelations::class)->deliveries([$id]),
             'retryContext' => $retryContext, 'argumentsSource' => $argumentsSource, 'metadataSource' => $metadataSource,

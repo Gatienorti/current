@@ -65,6 +65,53 @@ final class HorizonAdapter
         ];
     }
 
+    public function queueTopology(): array
+    {
+        return $this->read(function () {
+            $queues = [];
+            foreach (app(SupervisorRepository::class)->all() as $supervisor) {
+                $connection = (string) data_get($supervisor, 'options.connection', '');
+                $configured = explode(',', (string) data_get($supervisor, 'options.queue', ''));
+                foreach ($configured as $queue) {
+                    if ($connection !== '' && trim($queue) !== '') {
+                        $key = $connection.':'.trim($queue);
+                        $queues[$key] ??= ['connection' => $connection, 'queue' => trim($queue), 'dedicated' => 0, 'groups' => [], 'supervisors' => []];
+                    }
+                }
+                foreach ((array) $supervisor->processes as $key => $count) {
+                    [$connection, $names] = explode(':', $key, 2);
+                    $names = array_values(array_unique(array_filter(array_map('trim', explode(',', $names)))));
+                    foreach ($names as $name) {
+                        $id = $connection.':'.$name;
+                        $queues[$id] ??= ['connection' => $connection, 'queue' => $name, 'dedicated' => 0, 'groups' => [], 'supervisors' => []];
+                        if (count($names) === 1) {
+                            $queues[$id]['dedicated'] += (int) $count;
+                        } else {
+                            $queues[$id]['groups'][$key] ??= ['queues' => $names, 'workers' => 0];
+                            $queues[$id]['groups'][$key]['workers'] += (int) $count;
+                        }
+                    }
+                }
+                foreach ($configured as $queue) {
+                    $key = (string) data_get($supervisor, 'options.connection', '').':'.trim($queue);
+                    if (isset($queues[$key])) {
+                        $master = $supervisor->master ?? '';
+                        $name = $supervisor->name;
+                        $queues[$key]['supervisors'][] = [
+                            'name' => $master !== '' && str_starts_with($name, $master.':') ? substr($name, strlen($master) + 1) : $name,
+                            'full_name' => $name, 'status' => $supervisor->status ?? 'unknown',
+                            'balance' => data_get($supervisor, 'options.balance') ?: 'disabled',
+                            'workers' => collect($supervisor->processes)->sum(),
+                            'allocations' => (array) $supervisor->processes,
+                        ];
+                    }
+                }
+            }
+
+            return $queues;
+        });
+    }
+
     private function read(callable $callback): array
     {
         try {

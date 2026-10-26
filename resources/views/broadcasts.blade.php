@@ -1,8 +1,8 @@
 @extends('horizon-lens::layout')
 @section('title', 'Broadcasts')
 @section('content')
-<div class="page-heading"><div><h1>Broadcasts<span class="heading-dot">.</span></h1></div><span class="soft-badge">PROOF OF CONCEPT</span></div>
-@if(!config('horizon-lens.broadcasts.enabled'))<p class="observation-notice">Reverb is available. Enable CURRENT_BROADCASTS_ENABLED and configure approved event names and channel patterns to collect submissions. Server health has not been checked.</p>
+<div class="page-heading"><div><h1>Broadcasts</h1></div><span class="soft-badge">PROOF OF CONCEPT</span></div>
+@if(!config('horizon-lens.broadcasts.enabled'))<p class="observation-notice">Broadcast observation is available. Enable CURRENT_BROADCASTS_ENABLED and configure approved event names and channel patterns to collect submissions. Server health has not been checked.</p>
 @elseif(!config('horizon-lens.broadcasts.events') || !config('horizon-lens.broadcasts.channels'))<p class="observation-notice">Configure approved event names and channel patterns to start collection.</p>@endif
 <nav class="filter-actions" aria-label="Broadcast issue views">
 @foreach(['failed' => 'Failed submissions', 'slow' => 'Slow submissions', 'unfinished' => 'Missing completion'] as $value => $label)<a class="button secondary small" @if(($filters['issue'] ?? '') === $value) aria-current="page" @endif href="{{ route('horizon-lens.broadcasts', array_replace($filters, ['issue' => $value])) }}">{{ $label }}</a>@endforeach

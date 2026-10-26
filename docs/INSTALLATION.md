@@ -69,7 +69,7 @@ Start with jobs working. Optional collectors are **off by default**; adding a ta
 | --- | --- | --- |
 | Incoming webhooks | Set `CURRENT_WEBHOOKS_ENABLED=true`; add `current.webhook:provider` to an existing validated receiver route. Preserve its signature verification and middleware. | Webhooks → Dashboard → Incoming receipts |
 | Outgoing webhooks | Set `CURRENT_OUTGOING_WEBHOOKS_ENABLED=true`; add exact destination URLs under `webhooks.outgoing.destinations`. The sender must use Laravel's `Http` client. | Webhooks → Dashboard → Outgoing deliveries |
-| Broadcast submissions | Use an existing configured Reverb connection; set `CURRENT_BROADCASTS_ENABLED=true`; approve exact event names and channel patterns under `broadcasts`. | Broadcasts → Dashboard → Submissions |
+| Broadcast submissions | Use an existing configured Reverb or Pusher connection; set `CURRENT_BROADCASTS_ENABLED=true`; approve exact event names and channel patterns under `broadcasts`. | Broadcasts → Dashboard → Submissions |
 | Channel authorization failures | Set `broadcasts.authorization.enabled=true` and approve exact auth route names or templates (often `broadcasting/auth`). | Broadcasts → Authorization failures |
 
 Rebuild configuration/route caches and restart the application's long-lived producers/workers after changing settings. Use synthetic requests/events in development first. Follow the complete [incoming](#incoming-webhook-proof-of-concept), [outgoing](#outgoing-webhook-proof-of-concept), [Reverb](#optional-reverb-broadcast-observation) and [authorization](#broadcast-authorization-failures) examples below. No additional frontend build is needed.
@@ -88,7 +88,7 @@ For beta feedback, use ordinary investigations over several days and record the 
 | Args/Metadata unavailable | Encrypted/unsupported/oversized data is omitted. Raw retries may show a labeled earlier snapshot if retained. |
 | Failed job cannot retry | Horizon must still retain its failed payload. Check `CURRENT_ALLOW_RETRIES`; a worker must consume the original queue. |
 | Storage errors or observations missing | Ensure web and worker processes can access the dedicated database. Review `storage/logs/current-health.json` when present and application logs. |
-| Broadcasts tab is missing | Current detects installed Reverb or the selected Reverb driver on boot. Installing it later requires normal config/process refresh; not a Current reinstall. An explicit `broadcasts.visible` override controls navigation only. |
+| Broadcasts tab is missing | Current detects installed Reverb or the selected Reverb/Pusher driver on boot. Installing it later requires normal config/process refresh; not a Current reinstall. An explicit `broadcasts.visible` override controls navigation only. |
 | Webhook/broadcast dashboard is empty | Confirm collection is enabled and its route/destination/event/channel allowlists match. Only new observations are collected. Read Observation coverage to distinguish disabled capture from empty retained history. |
 | Migration table exists but a feature table is missing | Run `php artisan current:install` after updating, then restart long-lived processes. Existing config files are preserved; add new optional settings explicitly. |
 | Configuration changes do not apply | Rebuild Laravel's config/route caches and restart long-lived producers/workers through your deployment process. |
@@ -282,7 +282,7 @@ The outgoing list shows one row per retained group with its latest started attem
 
 ## Optional Reverb broadcast observation
 
-Broadcasts appears automatically when Laravel Reverb is installed, or the application's selected broadcast connection uses the Reverb driver (including a remote Reverb server). Without either, the tab is hidden and its routes return 404. `broadcasts.visible` in Current config accepts `null` for detection, or `true`/`false` as an explicit override. This controls visibility, not collection or access authorization. Server reachability never hides the tab.
+Broadcasts appears automatically when Laravel Reverb is installed, or the application's selected broadcast connection uses the Reverb or Pusher driver (including a remote Reverb server). Without either, the tab is hidden and its routes return 404. `broadcasts.visible` in Current config accepts `null` for detection, or `true`/`false` as an explicit override. This controls visibility, not collection or access authorization. Server reachability never hides the tab.
 
 Installing Reverb later does not require reinstalling Current: complete normal Reverb configuration, rebuild Laravel's config cache and reload long-lived application/queue workers. Detection is evaluated from the current process's classes/configuration, not a permanent installation flag.
 
@@ -301,9 +301,17 @@ Run `php artisan current:install` for migration 8, set `CURRENT_BROADCASTS_ENABL
 
 Rebuild configuration caches and restart workers after changes. Collection defaults off; empty event/channel lists capture nothing. Event names match exactly. Channel matching uses Laravel's normalized channel names, including `private-` and `presence-` prefixes. By default only configured matching patterns are stored, not concrete channel IDs. Choose safe patterns; an exact configured name will be retained literally.
 
-At startup, enabled collection adapts standard configured Reverb connections to Current's observed Reverb driver. It preserves Laravel's Pusher/Reverb construction, channel authorization and send behavior. This slice supports the standard Reverb driver, not custom replacements, Pusher/Ably adapters or direct SDK calls. Existing driver credentials/timeouts are used; Current does not install or start Reverb in the host application.
+At startup, enabled collection adapts standard configured Reverb and Pusher connections to Current's shared observed broadcaster. It preserves Laravel's Pusher/Reverb construction, channel authorization and send behavior. Supported drivers are standard Laravel Reverb and Pusher; custom replacements, Ably and direct SDK calls are not observed. Existing driver credentials/timeouts are used; Current does not install or start Reverb in the host application.
 
 Open `/current/broadcasts` for event, outcome, time and approved-pattern filters. Details show duration/error class and the recorded sending job attempt when available. Queued and immediate submissions are supported; immediate events outside workers have no job link. Payloads, exact channel names and error messages are excluded by default; explicit investigation capture options are described below. Socket IDs are not automatically captured. “Accepted by broadcaster” means the call returned without an exception—not client receipt, business processing, subscriber count or server health. Missing completion stays unknown. Standard Current authorization, retention and pruning apply.
+
+## Pusher broadcast observation
+
+Existing Laravel Pusher applications use the same Current broadcast settings above: enable `CURRENT_BROADCASTS_ENABLED`, approve event names/channel patterns, rebuild configuration caches and restart long-lived producers/workers. Keep the standard `pusher` driver in your application's broadcasting configuration; Current applies its internal wrapper at boot. Existing credentials, cluster/host, TLS, client options and channel authorization remain Laravel's responsibility. No Reverb installation or extra Current dependency is required; the application must already have Laravel's Pusher SDK dependency installed.
+
+The Broadcasts tab detects a selected Pusher connection. If Pusher is used only as a secondary connection, set `broadcasts.visible=true`. Visibility alone does not enable recording. Multiple named Pusher/Reverb connections retain their names in observations.
+
+VERIFIED: mocked HTTP tests exercise the actual installed Pusher SDK, immediate Laravel events, payload/socket forwarding, private-channel authorization, rejected sends, and unavailable observation storage. Actual hosted Pusher delivery and browser receipt are UNVALIDATED. Both standard Laravel Pusher and Reverb drivers also pass the ADAPT integration against a real loopback Reverb protocol server: immediate/queued submissions, linked jobs, channel authorization, invalid-signature rejection and observer-storage failure. This validates the Pusher-compatible protocol locally, not the hosted Pusher service.
 
 ## Broadcast investigation details
 
@@ -359,7 +367,7 @@ Run `php artisan current:install` for migration 11. Add these settings inside `b
 ],
 ```
 
-Use `php artisan route:list --path=broadcasting` to check your actual route template/name, including any API prefix. Laravel's default authorization route may be unnamed; approving its path avoids changing the route. Keep your existing authentication and middleware. Rebuild configuration caches and restart long-lived processes as usual. This collector is independently opt-in; it does not require submission collection to be enabled. Current's overall enabled flag still applies. Broadcast navigation uses the existing Reverb detection/visibility override.
+Use `php artisan route:list --path=broadcasting` to check your actual route template/name, including any API prefix. Laravel's default authorization route may be unnamed; approving its path avoids changing the route. Keep your existing authentication and middleware. Rebuild configuration caches and restart long-lived processes as usual. This collector is independently opt-in; it does not require submission collection to be enabled. Current's overall enabled flag still applies. Broadcast navigation uses the Reverb/Pusher detection/visibility override.
 
 Only HTTP responses of 400 or higher on explicitly approved routes are captured, after Laravel renders the response. The **Authorization failures** page combines route, HTTP status, time and approved-channel-pattern filters. It retains a route name (when explicitly approved) or route template, method, observed response time, HTTP status, matching approved channel patterns and type. It reads only `channel_name` from input. Exact channel names require both a match against `broadcasts.channels` and `broadcasts.capture_channels = true`; otherwise no concrete channel is persisted. Missing, oversized, malformed or unapproved channels are labeled unknown. User identifiers, socket IDs, credentials, request headers and response bodies are not retained.
 

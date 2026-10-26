@@ -161,7 +161,6 @@ main { flex: 1; width: 100%; max-width: 1500px; margin: 0 auto; padding: 32px 36
 .page-heading { display: flex; align-items: center; justify-content: space-between; gap: 22px; margin-bottom: 25px; }
 .eyebrow { margin-bottom: 8px; color: var(--accent-text); font-size: 10px; font-weight: 650; letter-spacing: 1.5px; }
 h1 { margin: 0 0 8px; font-size: 31px; font-weight: 650; line-height: 1.2; letter-spacing: -.9px; }
-.heading-dot { color: var(--accent); }
 .page-heading p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
 .button { display: inline-flex; align-items: center; justify-content: center; gap: 12px; padding: 9px 13px; border: 1px solid; border-radius: 6px; font-size: 12px; font-weight: 550; line-height: 1.4; white-space: nowrap; cursor: pointer; }
 .button.secondary { border-color: var(--line-strong); background: var(--paper); color: var(--text); }
@@ -729,3 +728,25 @@ select:disabled { opacity: 1; cursor: default; background: var(--surface-recesse
 
 .related-webhooks-label { padding: 10px 20px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 11px; font-weight: 600; }
 .related-webhooks-panel td { padding-top: 12px; padding-bottom: 12px; }
+
+/* Keep schedule definitions readable without letting long descriptions widen the table. */
+.schedule-panel table { table-layout: fixed; min-width: 850px; }
+.schedule-panel th:first-child { width: 32%; }
+.schedule-panel th:nth-child(2) { width: 23%; }
+.schedule-panel th:nth-child(3) { width: 14%; }
+.schedule-panel th:nth-child(4) { width: 15%; }
+.schedule-panel td { white-space: normal; overflow-wrap: anywhere; }
+.schedule-panel td .subtle { margin-top: 4px; }
+
+.supervisor-queues table { width: 100%; table-layout: fixed; min-width: 760px; }
+.supervisor-queues th:first-child { width: 22%; }
+.supervisor-queues th:nth-child(2) { width: 36%; }
+.supervisor-queues th:nth-child(3), .supervisor-queues th:nth-child(4) { width: 9%; }
+.supervisor-queues th:nth-child(5) { width: 12%; }
+.supervisor-queues td { vertical-align: top; white-space: normal; overflow-wrap: anywhere; }
+.supervisor-allocation { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.queue-class-list { display: grid; gap: 8px; }
+.queue-class-list a { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; color: var(--accent-text); }
+.queue-class-count { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.supervisor-queues th:last-child { width: 18%; }
+.queue-declared-class { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }

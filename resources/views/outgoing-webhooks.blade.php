@@ -1,7 +1,7 @@
 @extends('horizon-lens::layout')
 @section('title', 'Outgoing webhooks')
 @section('content')
-<div class="page-heading"><div><h1>Outgoing webhooks<span class="heading-dot">.</span></h1></div><span class="soft-badge">PROOF OF CONCEPT</span></div>
+<div class="page-heading"><div><h1>Outgoing webhooks</h1></div><span class="soft-badge">PROOF OF CONCEPT</span></div>
 @if(!config('horizon-lens.webhooks.outgoing.enabled'))<p class="observation-notice">Collection is disabled. Enable CURRENT_OUTGOING_WEBHOOKS_ENABLED and configure destination endpoints.</p>@endif
 <section class="panel filters-panel compact-filters webhook-filters"><form class="filters" method="get" data-job-filters>
 <label>Destination<input name="destination" placeholder="Any destination" value="{{ $filters['destination'] ?? '' }}"></label>

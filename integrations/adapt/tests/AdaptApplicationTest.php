@@ -69,9 +69,18 @@ final class AdaptApplicationTest extends TestCase
         $this->post('/__lens-lab/login', ['email' => 'operator@lens.invalid', 'password' => 'lens-local-only'])->assertRedirect('/current');
         $this->assertAuthenticatedAs($this->fixtures['users']['operator']);
         $this->assertTrue(Gate::allows('viewHorizon'));
-        foreach (['/current', '/current/monitoring', '/current/metrics/jobs', '/current/metrics/queues', '/current/batches', '/current/jobs/pending', '/current/jobs/completed', '/current/jobs/failed', '/current/silenced'] as $path) {
+        foreach (['/current', '/current/monitoring', '/current/metrics/jobs', '/current/metrics/queues', '/current/batches', '/current/schedule', '/current/queues', '/current/jobs/pending', '/current/jobs/completed', '/current/jobs/failed', '/current/silenced'] as $path) {
             $this->get($path)->assertOk();
         }
+    }
+
+    public function test_schedule_reads_actual_console_definitions_without_dispatching_jobs(): void
+    {
+        $before = $this->store()->table('jobs')->count();
+        $response = $this->actingAs($this->fixtures['users']['operator'])->get('/current/schedule')
+            ->assertOk()->assertSee('Deactivate subscriptions that have expired')->assertSee('Sundays · 21:30');
+        $this->assertGreaterThan(25, $response->viewData('tasks')->total());
+        $this->assertSame($before, $this->store()->table('jobs')->count());
     }
 
     public function test_real_training_job_writes_phases_and_captures_uninstrumented_source(): void
@@ -207,6 +216,12 @@ final class AdaptApplicationTest extends TestCase
             $this->assertNotNull($record);
             $this->assertSame('completed', $record->status, $process->getOutput().$process->getErrorOutput());
             $this->assertSame(1, DB::table('training_phases')->where('training_plan_id', $this->fixtures['plan'])->count());
+            $response = $this->actingAs($this->fixtures['users']['operator'])->get('/current/queues')
+                ->assertOk()->assertSee('ClassifyWorkoutLog')->assertSee('AnalyzeWorkoutCompletion')
+                ->assertSee('ImportUserRouteChunk')->assertSee('EnrichRouteElevation')->assertDontSee('None observed');
+            $this->assertCount(4, $response->viewData('supervisorTables'));
+            $this->assertSame(4, array_sum(array_column($response->viewData('supervisorTables'), 'allocated')));
+
         } finally {
             if ($process->isRunning()) {
                 $process->stop(8, SIGTERM);

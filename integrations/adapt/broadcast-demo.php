@@ -4,7 +4,7 @@ require __DIR__.'/bootstrap.php';
 
 use App\Events\ChatMessageSent;
 use App\Events\WorkoutAnalysisCompleted;
-use HorizonLens\Broadcasts\ReverbIntegration;
+use HorizonLens\Broadcasts\BroadcastIntegration;
 use Illuminate\Broadcasting\BroadcastEvent;
 use Illuminate\Broadcasting\BroadcastException;
 use Illuminate\Broadcasting\BroadcastManager;
@@ -50,7 +50,7 @@ try {
         'options' => ['host' => '127.0.0.1', 'port' => $port, 'scheme' => 'http', 'useTLS' => false],
         'client_options' => ['timeout' => 2, 'connect_timeout' => 1],
     ]);
-    ReverbIntegration::configure();
+    BroadcastIntegration::configure();
     app(BroadcastManager::class)->purge('reverb');
     event(new ChatMessageSent(['text' => 'Synthetic demo'], null, 987654));
     dispatch((new BroadcastEvent(new WorkoutAnalysisCompleted(987654, [])))->onQueue('current-broadcast-demo'));

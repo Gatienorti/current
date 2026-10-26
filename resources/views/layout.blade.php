@@ -15,7 +15,7 @@
 @php
     $activeArea = request()->routeIs('horizon-lens.webhooks', 'horizon-lens.webhooks.*') ? 'webhooks' : (request()->routeIs('horizon-lens.broadcasts', 'horizon-lens.broadcasts.*') ? 'broadcasts' : 'jobs');
     $activeSection = $section ?? 'monitoring';
-    $jobPages = ['dashboard' => ['dashboard', 'Dashboard'], 'monitoring' => ['search', 'Monitoring'], 'metrics' => ['metrics', 'Metrics'], 'batches' => ['layers', 'Batches'], 'pending' => ['clock', 'Pending'], 'completed' => ['circle-check', 'Completed'], 'silenced' => ['bell-off', 'Silenced'], 'failed' => ['alert', 'Failed']];
+    $jobPages = ['dashboard' => ['dashboard', 'Dashboard'], 'queues' => ['layers', 'Queues'], 'monitoring' => ['search', 'Monitoring'], 'metrics' => ['metrics', 'Metrics'], 'batches' => ['layers', 'Batches'], 'schedule' => ['calendar', 'Schedule'], 'pending' => ['clock', 'Pending'], 'completed' => ['circle-check', 'Completed'], 'silenced' => ['bell-off', 'Silenced'], 'failed' => ['alert', 'Failed']];
 @endphp
 <div class="shell">
     <aside class="sidebar">

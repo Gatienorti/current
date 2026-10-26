@@ -5,7 +5,7 @@ use HorizonLens\Http\Authorize;
 return [
     'enabled' => env('CURRENT_ENABLED', env('HORIZON_LENS_ENABLED', true)),
     'broadcasts' => [
-        'visible' => null, // null: detect Reverb; true/false: explicit navigation override.
+        'visible' => null, // null: detect Reverb or the selected Pusher driver; true/false: explicit navigation override.
         'enabled' => env('CURRENT_BROADCASTS_ENABLED', false),
         'events' => [], // Exact approved broadcast names.
         'channels' => [], // Approved patterns only are persisted, e.g. private-chat.*.
