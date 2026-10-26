@@ -21,6 +21,11 @@ final class Recorder
 
     private ?array $current = null;
 
+    public function currentExecution(): ?array
+    {
+        return $this->current;
+    }
+
     private array $stack = [];
 
     private int $sequence = 0;

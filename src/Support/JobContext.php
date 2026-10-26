@@ -64,7 +64,7 @@ final class JobContext
         return $result;
     }
 
-    private function encode(mixed $value): array
+    public function encode(mixed $value): array
     {
         $remaining = max(1, min(1000, (int) config('horizon-lens.context_max_items', 100)));
         $limited = false;
@@ -95,7 +95,7 @@ final class JobContext
                 }
                 $name = preg_replace('/[^a-z0-9]/', '', strtolower((string) $key));
                 $key = is_string($key) ? mb_substr($key, 0, 120) : $key;
-                if (preg_match('/password|passwd|passphrase|secret|token|authorization|cookie|credentials|apikey|privatekey/', $name)) {
+                if (preg_match('/password|passwd|passphrase|secret|token|authorization|cookie|signature|credentials|apikey|privatekey/', $name)) {
                     $clean[$key] = '[REDACTED]';
                 } else {
                     $clean[$key] = $this->clean($item, $depth + 1, $remaining, $limited);

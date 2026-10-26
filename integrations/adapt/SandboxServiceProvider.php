@@ -58,7 +58,7 @@ final class SandboxServiceProvider extends ServiceProvider
                 abort_unless(Auth::attempt($request->only('email', 'password')), 403);
                 $request->session()->regenerate();
 
-                return redirect('/horizon-lens');
+                return redirect()->route('horizon-lens.index');
             });
         });
     }

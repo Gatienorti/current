@@ -10,7 +10,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Schema;
 use Laravel\Horizon\Horizon;
+use Laravel\Reverb\ReverbServiceProvider;
 
 $root = $argv[1];
 require $root.'/vendor/autoload.php';
@@ -54,6 +56,9 @@ config()->set([
 ]);
 check(Artisan::call('current:install') === 0, 'installer through discovered provider');
 check(Artisan::call('current:install') === 0, 'repeat installation');
+check(app(Store::class)->connection()->table('migrations')->count() === 11, 'all eleven package migrations');
+check(! config('horizon-lens.webhooks.enabled') && ! config('horizon-lens.webhooks.outgoing.enabled') && ! config('horizon-lens.broadcasts.enabled'), 'optional collectors default off');
+check(! class_exists(ReverbServiceProvider::class), 'jobs-only install needs no Reverb');
 check(config('horizon-lens.path') === 'current', 'canonical Current path');
 check(str_ends_with(route('horizon-lens.index'), '/current'), 'registered Current route');
 $http = $app->make(Illuminate\Contracts\Http\Kernel::class);
@@ -64,6 +69,10 @@ Gate::define('viewHorizon', fn ($user) => true);
 Horizon::auth(fn ($request) => true);
 $response = $http->handle(Request::create('/current'));
 check($response->getStatusCode() === 200, 'authorized dashboard available');
+$response = $http->handle(Request::create('/current/webhooks/dashboard'));
+check($response->getStatusCode() === 200 && str_contains($response->getContent(), 'capture: disabled'), 'webhook dashboard has explicit disabled coverage');
+check($http->handle(Request::create('/current/broadcasts/dashboard'))->getStatusCode() === 404, 'broadcast dashboard hidden without Reverb');
+check(! Schema::connection(config('database.default'))->hasTable('migrations'), 'application database is untouched');
 
 class CurrentInstallJob implements ShouldQueue
 {

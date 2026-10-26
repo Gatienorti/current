@@ -57,6 +57,8 @@ final class IntegrationTest extends TestCase
         $this->assertNotSame($attempts[0]->id, $attempts[1]->id);
         $this->assertNotNull($attempts[0]->exception_class);
         $this->assertNull($attempts[1]->exception_class);
+        $response = $this->get('/horizon-lens/jobs/'.$attempts[0]->job_id)->assertOk()->assertSee('Attempt 1 · Retried');
+        $this->assertSame('failed', $response->viewData('attempts')->last()->display_status);
     }
 
     public function test_explicit_release_is_not_marked_completed(): void
@@ -65,6 +67,8 @@ final class IntegrationTest extends TestCase
         $this->work();
         $this->assertSame('pending', $this->store()->table('jobs')->first()->status);
         $this->assertSame('released', $this->store()->table('attempts')->first()->status);
+        $response = $this->get('/horizon-lens/jobs/'.$this->store()->table('jobs')->first()->id)->assertOk()->assertSee('Attempt 1 · Released');
+        $this->assertSame('released', $response->viewData('attempts')->first()->display_status);
         $this->work();
         $this->assertSame('completed', $this->store()->table('jobs')->first()->status);
     }
@@ -111,7 +115,7 @@ final class IntegrationTest extends TestCase
         $this->assertSame(0, $this->store()->table('steps')->count());
         $outline = $this->store()->table('attempts')->first();
         $this->assertNotNull($outline->source_hash);
-        $this->get('/horizon-lens/jobs/'.$row->id)->assertOk()->assertSee('No internal steps captured')->assertSee('$lookup-&gt;basic()', false);
+        $this->get('/horizon-lens/jobs/'.$row->id)->assertOk()->assertDontSee('No internal steps captured')->assertDontSee('Execution map')->assertDontSee('aria-label="Execution steps"', false)->assertDontSee('Open in Horizon')->assertSee('$lookup-&gt;basic()', false);
         Http::assertNothingSent();
     }
 
@@ -241,7 +245,7 @@ final class IntegrationTest extends TestCase
         $this->assertSame(1, $response->viewData('total'));
         $unknown = $this->store()->newJob('unknown-classification', 'redis', 'quiet', ['data' => ['commandName' => 'QuietJob']]);
         $this->store()->table('jobs')->where('id', $unknown)->update(['status' => 'completed']);
-        $this->get('/horizon-lens/silenced')->assertDontSee('unknown-classification')->assertSee('Earlier records have unknown classification');
+        $this->get('/horizon-lens/silenced')->assertDontSee('unknown-classification')->assertDontSee('Earlier records have unknown classification');
     }
 
     public function test_scoped_time_filter_accepts_seconds_and_preserves_exclusive_upper_bound(): void

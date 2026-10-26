@@ -35,10 +35,10 @@ final class Sanitizer
         return null;
     }
 
-    public function exception(Throwable $error): array
+    public function exception(Throwable $error, ?callable $messageSanitizer = null, bool $useDefault = true): array
     {
         $message = null;
-        if ($sanitizer = config('horizon-lens.message_sanitizer')) {
+        if ($sanitizer = ($useDefault ? config('horizon-lens.message_sanitizer') : $messageSanitizer)) {
             $message = mb_substr((string) $sanitizer($error->getMessage()), 0, 1000);
         }
         $frames = [];

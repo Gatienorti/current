@@ -21,7 +21,7 @@
                 </div>
                 <div data-range-fallback><label>From · UTC<input type="datetime-local" step="1" name="from" value="{{ $filters['from'] ?? '' }}"></label><label>Before · UTC<input type="datetime-local" step="1" name="to" value="{{ $filters['to'] ?? '' }}"></label></div>
                 <p class="range-error" data-range-error role="alert" hidden></p>
-                <div class="range-footer"><span>Latest job observation</span><button type="button" class="button primary small" data-range-apply>Set range</button></div>
+                <div class="range-footer"><span>{{ $timeCaption ?? 'Latest job observation' }}</span><button type="button" class="button primary small" data-range-apply>Set range</button></div>
             </div>
         </div>
     </details>

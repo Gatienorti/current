@@ -33,4 +33,35 @@ if (! Schema::connection('lens')->hasColumn('lens_jobs', 'silenced')) {
 if (! Schema::connection('lens')->hasColumn('lens_jobs', 'arguments_json')) {
     (require dirname(__DIR__).'/database/migrations/2026_10_25_000003_add_job_details.php')->up();
 }
+if (! Schema::connection('lens')->hasTable('lens_webhook_receipts')) {
+    (require dirname(__DIR__).'/database/migrations/2026_10_25_000004_add_webhook_receipts.php')->up();
+}
 echo "Isolated lab storage ready.\n";
+
+if (! Schema::connection('lens')->hasTable('lens_webhook_deliveries')) {
+    (require dirname(__DIR__).'/database/migrations/2026_10_25_000005_add_webhook_deliveries.php')->up();
+}
+
+if (! Schema::connection('lens')->hasColumn('lens_webhook_receipts', 'event_id')) {
+    (require dirname(__DIR__).'/database/migrations/2026_10_25_000006_add_webhook_context.php')->up();
+}
+
+if (! Schema::connection('lens')->hasColumn('lens_webhook_deliveries', 'delivery_key')) {
+    (require dirname(__DIR__).'/database/migrations/2026_10_25_000007_add_delivery_grouping.php')->up();
+}
+
+if (! Schema::connection('lens')->hasTable('lens_broadcasts')) {
+    (require dirname(__DIR__).'/database/migrations/2026_10_25_000008_add_broadcasts.php')->up();
+}
+
+if (! Schema::connection('lens')->hasColumn('lens_broadcasts', 'payload_json')) {
+    (require dirname(__DIR__).'/database/migrations/2026_10_25_000009_add_broadcast_context.php')->up();
+}
+
+if (! Schema::connection(config('horizon-lens.connection'))->hasColumn('lens_webhook_receipts', 'receipt_key')) {
+    (require dirname(__DIR__).'/database/migrations/2026_10_25_000010_add_receipt_grouping.php')->up();
+}
+
+if (! Schema::connection(config('horizon-lens.connection'))->hasTable('lens_broadcast_auth_failures')) {
+    (require dirname(__DIR__).'/database/migrations/2026_10_25_000011_add_broadcast_authorization_failures.php')->up();
+}

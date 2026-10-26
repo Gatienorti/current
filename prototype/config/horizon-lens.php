@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'path' => 'horizon-lens',
+    'path' => env('CURRENT_PATH', 'current'),
     'connection' => 'lens',
     'tag_prefixes' => ['order:', 'scenario:'],
 ];

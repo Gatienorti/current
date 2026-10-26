@@ -22,7 +22,3 @@
     </ol>@if($queueToStart !== null)<div class="lifecycle-footnote">Enqueue → first start: {{ number_format($queueToStart * 1000, 1) }} ms <span class="subtle">· includes delay</span></div>@endif</section>
 </div>
 @include('horizon-lens::retry-context')
-<div class="job-payload-grid">
-    @include('horizon-lens::json-panel', ['snapshot' => $argumentsSnapshot, 'snapshotTitle' => 'Args', 'snapshotId' => 'job-args-json', 'snapshotSource' => $argumentsSource])
-    @include('horizon-lens::json-panel', ['snapshot' => $metadataSnapshot, 'snapshotTitle' => 'Metadata', 'snapshotId' => 'job-metadata-json', 'snapshotSource' => $metadataSource])
-</div>

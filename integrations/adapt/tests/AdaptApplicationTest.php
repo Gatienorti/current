@@ -59,17 +59,17 @@ final class AdaptApplicationTest extends TestCase
         foreach (['AppServiceProvider', 'ActionServiceProvider', 'AuthServiceProvider', 'HorizonServiceProvider'] as $provider) {
             $this->assertTrue($this->app->providerIsLoaded('App\\Providers\\'.$provider));
         }
-        foreach (['/horizon-lens', '/horizon-lens/monitoring', '/horizon-lens/metrics/queues', '/horizon-lens/assets/lens.css'] as $path) {
+        foreach (['/current', '/current/monitoring', '/current/metrics/queues', '/current/assets/lens.css'] as $path) {
             $this->get($path)->assertForbidden();
         }
-        $this->post('/__lens-lab/login', ['email' => 'member@lens.invalid', 'password' => 'lens-local-only'])->assertRedirect('/horizon-lens');
+        $this->post('/__lens-lab/login', ['email' => 'member@lens.invalid', 'password' => 'lens-local-only'])->assertRedirect('/current');
         $this->assertAuthenticatedAs($this->fixtures['users']['member']);
-        $this->get('/horizon-lens')->assertForbidden();
+        $this->get('/current')->assertForbidden();
         $this->assertFalse(Gate::allows('viewHorizon'));
-        $this->post('/__lens-lab/login', ['email' => 'operator@lens.invalid', 'password' => 'lens-local-only'])->assertRedirect('/horizon-lens');
+        $this->post('/__lens-lab/login', ['email' => 'operator@lens.invalid', 'password' => 'lens-local-only'])->assertRedirect('/current');
         $this->assertAuthenticatedAs($this->fixtures['users']['operator']);
         $this->assertTrue(Gate::allows('viewHorizon'));
-        foreach (['/horizon-lens', '/horizon-lens/monitoring', '/horizon-lens/metrics/jobs', '/horizon-lens/metrics/queues', '/horizon-lens/batches', '/horizon-lens/jobs/pending', '/horizon-lens/jobs/completed', '/horizon-lens/jobs/failed', '/horizon-lens/silenced'] as $path) {
+        foreach (['/current', '/current/monitoring', '/current/metrics/jobs', '/current/metrics/queues', '/current/batches', '/current/jobs/pending', '/current/jobs/completed', '/current/jobs/failed', '/current/silenced'] as $path) {
             $this->get($path)->assertOk();
         }
     }
@@ -94,7 +94,7 @@ final class AdaptApplicationTest extends TestCase
         $attempt = $this->store()->table('attempts')->first();
         $this->assertSame('app/Jobs/TrainingPlan/CreateTrainingPhasesJob.php', $attempt->source_file);
         $this->assertNotNull($attempt->source_hash);
-        $this->actingAs($this->fixtures['users']['operator'])->get('/horizon-lens/jobs/'.$job->id)->assertOk()->assertSee('No internal steps captured')->assertSee('TrainingPhase::insertOrIgnore()');
+        $this->actingAs($this->fixtures['users']['operator'])->get('/current/jobs/'.$job->id)->assertOk()->assertDontSee('No internal steps captured')->assertDontSee('Execution map')->assertDontSee('aria-label="Execution steps"', false)->assertDontSee('Open in Horizon')->assertSee('TrainingPhase::insertOrIgnore()');
     }
 
     public function test_real_training_error_maps_actual_application_file_and_filters(): void
@@ -112,13 +112,13 @@ final class AdaptApplicationTest extends TestCase
         $this->assertNull($attempt->exception_message);
         $this->assertSame(1, DB::table('failed_jobs')->count());
         $this->actingAs($this->fixtures['users']['operator']);
-        $this->get('/horizon-lens/jobs/'.$record->id)->assertOk()->assertSee('Failure location')->assertSee($attempt->exception_file.':'.$attempt->exception_line);
-        $this->get('/horizon-lens/jobs/failed?'.http_build_query([
+        $this->get('/current/jobs/'.$record->id)->assertOk()->assertSee('Failure location')->assertSee($attempt->exception_file.':'.$attempt->exception_line);
+        $this->get('/current/jobs/failed?'.http_build_query([
             'queue' => 'training-plans', 'job_class' => CreateTrainingPhasesJob::class,
             'job_id' => $record->external_id, 'exception_class' => 'ErrorException',
             'from' => gmdate('Y-m-d\TH:i:s', time() - 60), 'to' => gmdate('Y-m-d\TH:i:s', time() + 60),
         ]))->assertOk()->assertSee($record->external_id);
-        $this->get('/horizon-lens/monitoring?queue=notifications')->assertOk()->assertDontSee($record->external_id);
+        $this->get('/current/monitoring?queue=notifications')->assertOk()->assertDontSee($record->external_id);
     }
 
     public function test_unique_push_dispatch_records_one_job_and_mock_instrumentation_is_nested(): void

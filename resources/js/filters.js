@@ -8,6 +8,8 @@
         const field = control.closest('.filter-field');
         const label = field.querySelector('label').textContent;
         const editable = control.tagName === 'INPUT';
+        const multiple = !editable && control.multiple;
+        const selected = value => multiple ? Array.from(control.selectedOptions).some(option => option.value === value) : control.value === value;
         const values = editable
             ? [{ value: '', label: control.placeholder }, ...Array.from(control.list.options, option => ({ value: option.value, label: option.value.split('\\').pop() }))]
             : Array.from(control.options, option => ({ value: option.value, label: option.text }));
@@ -57,13 +59,15 @@
         const list = document.createElement('div');
         list.id = `${control.id}-options`; list.className = 'dropdown-options';
         list.setAttribute('role', 'listbox'); list.setAttribute('aria-label', label);
+        if (multiple) list.setAttribute('aria-multiselectable', 'true');
         popup.append(list);
         const empty = document.createElement('p'); empty.className = 'dropdown-no-results';
         popup.append(empty);
         let matches = [], active = -1;
         const syncValue = () => {
             if (!editable) {
-                const selectedLabel = values.find(option => option.value === control.value)?.label || values[0].label;
+                const chosen = multiple ? Array.from(control.selectedOptions).filter(option => option.value) : [];
+                const selectedLabel = multiple ? (chosen.map(option => option.text).join(', ') || values[0].label) : (values.find(option => option.value === control.value)?.label || values[0].label);
                 trigger.querySelector('.dropdown-value').textContent = selectedLabel;
                 trigger.setAttribute('aria-label', `${label}: ${selectedLabel}`);
                 trigger.classList.toggle('has-value', Boolean(control.value));
@@ -94,9 +98,17 @@
             } else search.removeAttribute('aria-activedescendant');
         }
         function choose(option) {
-            control.value = option.value;
+            if (multiple) {
+                if (!option.value) Array.from(control.options).forEach(item => item.selected = false);
+                else {
+                    const item = Array.from(control.options).find(item => item.value === option.value);
+                    item.selected = !item.selected;
+                    control.options[0].selected = false;
+                }
+            } else control.value = option.value;
             control.dispatchEvent(new Event('change', { bubbles: true }));
-            syncValue(); close(true);
+            syncValue();
+            if (multiple) render(search.value); else close(true);
         }
         function render(query = '') {
             matches = values.filter(option => !option.value || `${option.label} ${option.value}`.toLowerCase().includes(query.toLowerCase().trim()));
@@ -104,14 +116,14 @@
             matches.forEach((option, index) => {
                 const row = document.createElement('div');
                 row.id = `${list.id}-${index}`; row.className = 'dropdown-option';
-                row.setAttribute('role', 'option'); row.setAttribute('aria-selected', String(control.value === option.value));
+                row.setAttribute('role', 'option'); row.setAttribute('aria-selected', String(multiple && !option.value ? !Array.from(control.selectedOptions).some(item => item.value) : selected(option.value)));
                 const text = document.createElement('span'); text.className = 'dropdown-option-text';
                 const title = document.createElement('span'); title.textContent = option.label;
                 text.append(title);
                 if (editable && option.value) { const detail = document.createElement('small'); detail.textContent = option.value; text.append(detail); }
                 row.append(text);
                 const check = document.createElement('span'); check.className = 'dropdown-option-check';
-                if (control.value === option.value) check.append(document.getElementById('lens-icon-check').content.firstElementChild.cloneNode(true));
+                if (selected(option.value)) check.append(document.getElementById('lens-icon-check').content.firstElementChild.cloneNode(true));
                 check.setAttribute('aria-hidden', 'true'); row.append(check);
                 row.addEventListener('mousedown', event => event.preventDefault());
                 row.addEventListener('click', () => choose(option));

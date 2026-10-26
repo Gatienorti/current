@@ -2,10 +2,12 @@
 
 namespace HorizonLens\Http;
 
+use HorizonLens\Broadcasts\ReverbIntegration;
 use HorizonLens\DebugPrompt;
 use HorizonLens\HorizonAdapter;
 use HorizonLens\RetryContext;
 use HorizonLens\Store;
+use HorizonLens\Webhooks\WebhookRelations;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -29,11 +31,15 @@ final class JobsController
         $filters = $request->validate([
             'status' => ['nullable', Rule::in(['pending', 'processing', 'completed', 'failed', 'unknown', 'incomplete', 'conflicting'])],
             'history' => ['nullable', Rule::in(['unfinished', 'overlapping', 'partial'])],
-            'queue' => 'nullable|string|max:100', 'job_class' => 'nullable|string|max:240',
+            'queue' => ['nullable', Rule::when(is_array($request->input('queue')), ['array', 'max:50'], ['string', 'max:100'])],
+            'queue.*' => 'nullable|string|max:100', 'job_class' => 'nullable|string|max:240',
             'job_id' => 'nullable|string|max:100', 'exception_class' => 'nullable|string|max:240',
             'tags' => 'nullable|string|max:500',
             'from' => 'nullable|date_format:Y-m-d\TH:i,Y-m-d\TH:i:s', 'to' => ['nullable', 'date_format:Y-m-d\TH:i,Y-m-d\TH:i:s', Rule::when($request->filled('from'), 'after:from')],
         ]);
+        if (is_array($filters['queue'] ?? null)) {
+            $filters['queue'] = array_values(array_unique(array_filter($filters['queue'], fn ($queue) => $queue !== null && $queue !== '')));
+        }
         if (in_array($filters['status'] ?? '', ['incomplete', 'conflicting'], true)) {
             $parameters = $request->query();
             $parameters['history'] = $filters['status'] === 'incomplete' ? 'unfinished' : 'overlapping';
@@ -64,7 +70,11 @@ final class JobsController
         }
         foreach (['queue', 'job_class', 'exception_class'] as $field) {
             if (! empty($filters[$field])) {
-                $query->where($field, $filters[$field]);
+                if ($field === 'queue') {
+                    $query->whereIn($field, (array) $filters[$field]);
+                } else {
+                    $query->where($field, $filters[$field]);
+                }
             }
         }
         if (! empty($filters['status'])) {
@@ -120,6 +130,12 @@ final class JobsController
         $job = $this->store->jobsWithObservationState()->where('id', $id)->where('expires_at', '>', microtime(true))->first();
         abort_unless($job, 404);
         $attempts = $this->store->table('attempts')->where('job_id', $id)->orderByDesc('started_at')->orderByDesc('id')->get();
+        $attempts->each(function ($item) use ($attempts) {
+            $retryAfterError = $item->status === 'released' && $item->exception_class;
+            $retried = $retryAfterError && $item->finished_at && $attempts->contains(fn ($next) => $next->id !== $item->id && $next->started_at >= $item->finished_at);
+            $item->display_status = $retryAfterError ? 'failed' : $item->status;
+            $item->display_label = $retryAfterError ? ($retried ? 'Retried' : 'Retry pending') : ucfirst(str_replace('_', ' ', $item->status));
+        });
         $validated = $request->validate(['attempt' => 'nullable|string|size:26', 'return' => 'nullable|string|max:8192']);
         $selected = $validated['attempt'] ?? null;
         $attempt = $selected ? $attempts->firstWhere('id', $selected) : $attempts->first();
@@ -147,6 +163,9 @@ final class JobsController
 
         return view('horizon-lens::show', [
             'debugPrompt' => $debugPrompt,
+            'relatedBroadcasts' => ReverbIntegration::visible() ? $this->store->table('broadcasts')->where('job_id', $id)->where('expires_at', '>', microtime(true))->orderByDesc('started_at')->orderByDesc('id')->limit(100)->get() : collect(),
+            'webhookReceipts' => app(WebhookRelations::class)->receipts($id),
+            'webhookDeliveries' => app(WebhookRelations::class)->deliveries([$id]),
             'retryContext' => $retryContext, 'argumentsSource' => $argumentsSource, 'metadataSource' => $metadataSource,
             'watch' => $request->boolean('watch') && ! $selected,
             'retryRequested' => ! empty($retryState), 'retryJob' => $retryJob,

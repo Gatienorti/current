@@ -1,0 +1,1 @@
+<span class="status status-{{ $broadcast->outcome === 'accepted' ? 'completed' : ($broadcast->outcome === 'failed' ? 'failed' : 'pending') }}">{{ match($broadcast->outcome) { 'accepted' => 'Accepted by broadcaster', 'failed' => 'Submission failed', default => 'Completion not observed' } }}</span>

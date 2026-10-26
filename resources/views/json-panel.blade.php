@@ -1,7 +1,7 @@
 @php
     $snapshotLabel = match ($snapshot['state']) { 'captured' => 'Captured', 'limited' => 'Captured with limits', 'unavailable' => 'Unavailable', 'failed' => 'Capture unavailable', 'size_limit' => 'Not captured · size limit', default => 'Not captured' };
 @endphp
-<details class="panel json-panel">
+<details class="panel json-panel" data-payload-panel open>
     <summary class="panel-heading"><h2>{{ $snapshotTitle }}</h2><span class="soft-badge">{{ $snapshotLabel }}{{ $snapshotSource->id !== $job->id ? ' · Earlier enqueue' : '' }}</span>@include('horizon-lens::icon', ['iconName' => 'chevron-down', 'iconClass' => 'json-panel-chevron'])</summary>
     <div class="json-panel-body">
         @if($snapshotSource->id !== $job->id)

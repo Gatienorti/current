@@ -1,7 +1,7 @@
 @extends('horizon-lens::layout')
 @section('title', $title)
 @section('content')
-<div class="page-heading"><div><h1>{{ $title }}<span class="heading-dot">.</span></h1><p>{{ $description }}</p></div><span class="soft-badge">HORIZON DATA</span></div>
+<div class="page-heading"><div><h1>{{ $title }}<span class="heading-dot">.</span></h1></div></div>
 <section class="panel" data-live-region="horizon-section">
 @if($section === 'metrics')
 <nav class="metric-tabs" aria-label="Metric categories">

@@ -1,9 +1,18 @@
 (() => {
     let cleanup = () => {};
+    let payloadOpen = true;
     const enhance = () => {
         cleanup();
         const root = document.querySelector('[data-investigation]');
-        if (!root) return;
+        const payloadPanels = [...document.querySelectorAll('[data-payload-panel]')];
+        payloadPanels.forEach(panel => {
+            panel.open = payloadOpen;
+            panel.querySelector(':scope > summary').addEventListener('click', event => {
+                event.preventDefault();
+                payloadOpen = !panel.open;
+                payloadPanels.forEach(item => { item.open = payloadOpen; });
+            });
+        });
         document.querySelectorAll('[data-copy-json]').forEach(button => {
             button.hidden = false;
             button.addEventListener('click', async () => {
@@ -45,6 +54,7 @@
                 }
             });
         }
+        if (!root) return;
         const panels = [...root.querySelectorAll('[data-step-inspector]')];
         const links = [...root.querySelectorAll('[data-step-target]')];
         const valid = id => panels.some(panel => panel.id === id);
@@ -65,12 +75,20 @@
             if (link.classList.contains('execution-step-summary') && link.getAttribute('aria-expanded') === 'true') id = 'attempt-context';
             if (!valid(id)) return;
             event.preventDefault();
-            if (window.location.hash !== `#${id}`) history.pushState(null, '', `#${id}`);
-            select(id);
+            if (!link.hasAttribute('data-step-context-link')) {
+                if (window.location.hash !== `#${id}`) history.pushState(null, '', `#${id}`);
+                select(id);
+            }
             const panel = panels.find(panel => panel.id === id);
             const bounds = panel.getBoundingClientRect();
-            if (bounds.top < 0 || bounds.bottom > window.innerHeight) {
-                panel.scrollIntoView({ block: 'nearest', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+            if (link.hasAttribute('data-step-context-link')) {
+                panel.setAttribute('tabindex', '-1');
+                panel.focus({ preventScroll: true });
+            }
+            const jumpToStep = link.classList.contains('step-map-node') || link.classList.contains('error-button');
+            const target = jumpToStep ? (panel.closest('.execution-step') || panel) : panel;
+            if (jumpToStep || bounds.top < 0 || bounds.bottom > window.innerHeight) {
+                target.scrollIntoView({ block: jumpToStep ? 'center' : 'nearest', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
             }
         }));
         window.addEventListener('hashchange', fromLocation);

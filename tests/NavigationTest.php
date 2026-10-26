@@ -8,12 +8,12 @@ use Mockery;
 
 final class NavigationTest extends TestCase
 {
-    public function test_product_tabs_and_horizon_sections_render_without_collecting_other_operations(): void
+    public function test_product_tabs_and_horizon_sections_render_with_webhook_receipts(): void
     {
         $this->get('/horizon-lens')->assertOk()->assertSee('Product areas')->assertSee('Pending')->assertSee('Silenced')->assertDontSee('Job explorer');
         $this->get('/horizon-lens/dashboard')->assertOk()->assertSee('Current workload')->assertSee('Jobs Per Minute')->assertSee('Recorded queues');
-        $this->get('/horizon-lens/webhooks')->assertOk()->assertSee('No webhooks telemetry is being collected.');
-        $this->get('/horizon-lens/broadcasts')->assertOk()->assertSee('No broadcasts telemetry is being collected.');
+        $this->get('/horizon-lens/webhooks')->assertOk()->assertSee('No receipts observed');
+        $this->get('/horizon-lens/broadcasts')->assertNotFound();
         $this->assertSame(0, $this->store()->table('jobs')->count());
     }
 

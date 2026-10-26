@@ -2,7 +2,11 @@
 
 namespace HorizonLens\Console;
 
+use HorizonLens\Broadcasts\AuthorizationRecorder;
+use HorizonLens\Broadcasts\BroadcastRecorder;
 use HorizonLens\Store;
+use HorizonLens\Webhooks\OutgoingRecorder;
+use HorizonLens\Webhooks\WebhookRecorder;
 use Illuminate\Console\Command;
 
 final class PruneCommand extends Command
@@ -20,6 +24,30 @@ final class PruneCommand extends Command
             $count += $removed;
         }
         $this->info("Removed {$count} expired jobs and their attempts/steps.");
+
+        $receipts = 0;
+        while ($removed = app(WebhookRecorder::class)->prune()) {
+            $receipts += $removed;
+        }
+        $this->info("Removed {$receipts} expired webhook receipts and their links.");
+
+        $deliveries = 0;
+        while ($removed = app(OutgoingRecorder::class)->prune()) {
+            $deliveries += $removed;
+        }
+        $this->info("Removed {$deliveries} expired outgoing webhook attempts.");
+
+        $broadcasts = 0;
+        while ($removed = app(BroadcastRecorder::class)->prune()) {
+            $broadcasts += $removed;
+        }
+        $this->info("Removed {$broadcasts} expired broadcast submissions.");
+
+        $authorizations = 0;
+        while ($removed = app(AuthorizationRecorder::class)->prune()) {
+            $authorizations += $removed;
+        }
+        $this->info("Removed {$authorizations} expired broadcast authorization failures.");
 
         return self::SUCCESS;
     }

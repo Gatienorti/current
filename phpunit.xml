@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <phpunit bootstrap="bootstrap.php" colors="true" cacheDirectory=".phpunit.cache">
     <testsuites><testsuite name="Horizon Lens"><directory>tests</directory></testsuite></testsuites>
-    <php><env name="APP_ENV" value="testing" force="true"/></php>
+    <php><env name="APP_ENV" value="testing" force="true"/><env name="CURRENT_PATH" value="horizon-lens" force="true"/></php>
 </phpunit>

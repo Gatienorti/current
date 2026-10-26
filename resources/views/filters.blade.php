@@ -30,5 +30,13 @@
         @endif
     </form>
     @if($errors->any())<div class="validation-error">{{ $errors->first() }}</div>@endif
-    @if($activeFilters || $hasTimeFilter)<div class="active-filters"><span>ACTIVE</span>@foreach($activeFilters as $key => $value)<a class="filter-chip" href="{{ route($pageRoute, array_diff_key($filters, [$key => true])) }}">{{ str_replace('_', ' ', $key) }}: {{ $value }} @include('horizon-lens::icon', ['iconName' => 'x'])</a>@endforeach @if($hasTimeFilter)<a class="filter-chip" href="{{ route($pageRoute, array_diff_key($filters, ['from' => true, 'to' => true])) }}">time: {{ str_replace('T', ' ', $filters['from'] ?? 'Any start') }} → {{ str_replace('T', ' ', $filters['to'] ?? 'Now') }} UTC @include('horizon-lens::icon', ['iconName' => 'x'])</a>@endif</div>@endif
+    @if($activeFilters || $hasTimeFilter)<div class="active-filters"><span>ACTIVE</span>@foreach($activeFilters as $key => $value)
+        @foreach(is_array($value) ? $value : [$value] as $selectedValue)
+            @php
+                $remaining = is_array($value) ? array_values(array_filter($value, fn ($item) => $item !== $selectedValue)) : [];
+                $chipFilters = $remaining ? array_replace($filters, [$key => $remaining]) : array_diff_key($filters, [$key => true]);
+            @endphp
+            <a class="filter-chip" aria-label="Remove {{ str_replace('_', ' ', $key) }}: {{ $selectedValue }}" href="{{ route($pageRoute, $chipFilters) }}">{{ str_replace('_', ' ', $key) }}: {{ $selectedValue }} @include('horizon-lens::icon', ['iconName' => 'x'])</a>
+        @endforeach
+    @endforeach @if($hasTimeFilter)<a class="filter-chip" href="{{ route($pageRoute, array_diff_key($filters, ['from' => true, 'to' => true])) }}">time: {{ str_replace('T', ' ', $filters['from'] ?? 'Any start') }} → {{ str_replace('T', ' ', $filters['to'] ?? 'Now') }} UTC @include('horizon-lens::icon', ['iconName' => 'x'])</a>@endif</div>@endif
 </section>

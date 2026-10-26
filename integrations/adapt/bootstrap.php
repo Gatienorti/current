@@ -93,7 +93,7 @@ function bootAdaptLab(?string $state = null): Application
             'filesystems.default' => 'local', 'filesystems.disks' => ['local' => ['driver' => 'local', 'root' => $state.'/storage/app/private'], 'public' => ['driver' => 'local', 'root' => $state.'/storage/app/public']],
             'view.compiled' => $state.'/storage/framework/views', 'horizon.prefix' => $prefix.'horizon:',
             'horizon.environments.testing' => $supervisors,
-            'horizon-lens.path' => getenv('CURRENT_ADAPT_ROUTE') ?: 'horizon-lens', 'horizon-lens.connection' => 'lens', 'horizon-lens.queue_connections' => ['redis'],
+            'horizon-lens.path' => getenv('CURRENT_ADAPT_ROUTE') ?: 'current', 'horizon-lens.connection' => 'lens', 'horizon-lens.queue_connections' => ['redis'],
             'horizon-lens.source_roots' => [$source.'/app'], 'horizon-lens.tag_prefixes' => [],
             'horizon-lens.diagnostic_path' => $state.'/storage/logs/lens-health.json',
         ]);

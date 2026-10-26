@@ -45,6 +45,14 @@ abstract class TestCase extends LaravelTestCase
         (require dirname(__DIR__).'/database/migrations/2026_10_25_000001_create_horizon_lens_tables.php')->up();
         (require dirname(__DIR__).'/database/migrations/2026_10_25_000002_add_silenced_classification.php')->up();
         (require dirname(__DIR__).'/database/migrations/2026_10_25_000003_add_job_details.php')->up();
+        (require dirname(__DIR__).'/database/migrations/2026_10_25_000004_add_webhook_receipts.php')->up();
+        (require dirname(__DIR__).'/database/migrations/2026_10_25_000005_add_webhook_deliveries.php')->up();
+        (require dirname(__DIR__).'/database/migrations/2026_10_25_000006_add_webhook_context.php')->up();
+        (require dirname(__DIR__).'/database/migrations/2026_10_25_000007_add_delivery_grouping.php')->up();
+        (require dirname(__DIR__).'/database/migrations/2026_10_25_000008_add_broadcasts.php')->up();
+        (require dirname(__DIR__).'/database/migrations/2026_10_25_000009_add_broadcast_context.php')->up();
+        (require dirname(__DIR__).'/database/migrations/2026_10_25_000010_add_receipt_grouping.php')->up();
+        (require dirname(__DIR__).'/database/migrations/2026_10_25_000011_add_broadcast_authorization_failures.php')->up();
         Schema::connection('app')->create('failed_jobs', function ($table) {
             $table->id();
             $table->string('uuid')->unique();

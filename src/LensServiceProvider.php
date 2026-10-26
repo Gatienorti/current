@@ -2,7 +2,10 @@
 
 namespace HorizonLens;
 
+use Illuminate\Broadcasting\BroadcastManager;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Foundation\Http\Events\RequestHandled;
+use Illuminate\Http\Client\Factory;
 use Illuminate\Queue\Events\JobAttempted;
 use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\Events\JobFailed;
@@ -11,6 +14,7 @@ use Illuminate\Queue\Events\JobQueued;
 use Illuminate\Queue\Events\JobTimedOut;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 use Laravel\Horizon\Events\JobPushed;
 
 final class LensServiceProvider extends ServiceProvider
@@ -37,9 +41,15 @@ final class LensServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        Broadcasts\ReverbIntegration::configure();
+        $this->callAfterResolving(BroadcastManager::class, fn ($manager) => Broadcasts\ReverbIntegration::register($manager));
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         $this->loadViewsFrom(__DIR__.'/../resources/views', 'horizon-lens');
         $this->app['view']->composer('horizon-lens::layout', function ($view) {
+            $view->with('currentVersion', \Composer\InstalledVersions::isInstalled('horizon-lens/horizon-lens')
+                ? (\Composer\InstalledVersions::getPrettyVersion('horizon-lens/horizon-lens') ?? 'Development')
+                : 'Development');
+            $view->with('broadcastsVisible', Broadcasts\ReverbIntegration::visible());
             $view->with('currentMark', file_get_contents(__DIR__.'/../resources/brand/current-mark.svg'));
             $view->with('lensThemeVersion', filemtime(__DIR__.'/../resources/js/theme.js'));
             $view->with('lensFiltersVersion', filemtime(__DIR__.'/../resources/js/filters.js'));
@@ -64,8 +74,16 @@ final class LensServiceProvider extends ServiceProvider
                 Route::get('/metrics/'.$kind, [Http\SectionsController::class, 'horizon'])->defaults('section', 'metrics')->defaults('metricKind', $kind)->name('metrics.'.$kind);
             }
             foreach (['webhooks', 'broadcasts'] as $area) {
-                Route::get('/'.$area, [Http\SectionsController::class, 'planned'])->defaults('area', $area)->name($area);
+                Route::get('/'.$area.'/dashboard', Http\ActivityDashboardController::class)->defaults('area', $area)->name($area.'.dashboard');
             }
+            Route::get('/webhooks', [Http\WebhooksController::class, 'index'])->name('webhooks');
+            Route::get('/webhooks/outgoing', [Http\OutgoingWebhooksController::class, 'index'])->name('webhooks.outgoing');
+            Route::get('/webhooks/outgoing/{id}', [Http\OutgoingWebhooksController::class, 'show'])->name('webhooks.outgoing.show')->where('id', '[A-Z0-9]{26}');
+            Route::get('/webhooks/{id}', [Http\WebhooksController::class, 'show'])->name('webhooks.show')->where('id', '[A-Z0-9]{26}');
+            Route::get('/broadcasts', [Http\BroadcastsController::class, 'index'])->name('broadcasts');
+            Route::get('/broadcasts/authorization', Http\BroadcastAuthorizationController::class)->name('broadcasts.authorization');
+            Route::get('/broadcasts/{id}/compare', [Http\BroadcastsController::class, 'compare'])->name('broadcasts.compare')->where('id', '[A-Z0-9]{26}');
+            Route::get('/broadcasts/{id}', [Http\BroadcastsController::class, 'show'])->name('broadcasts.show')->where('id', '[A-Z0-9]{26}');
             Route::get('/assets/lens.css', fn () => response(file_get_contents(__DIR__.'/../resources/css/lens.css'), 200, ['Content-Type' => 'text/css', 'Cache-Control' => 'public, max-age=3600']))->name('css');
             Route::get('/assets/theme.js', fn () => response(file_get_contents(__DIR__.'/../resources/js/theme.js'), 200, ['Content-Type' => 'text/javascript', 'Cache-Control' => 'public, max-age=3600']))->name('theme');
             Route::get('/assets/filters.js', fn () => response(file_get_contents(__DIR__.'/../resources/js/filters.js'), 200, ['Content-Type' => 'text/javascript', 'Cache-Control' => 'public, max-age=3600']))->name('filters');
@@ -75,6 +93,31 @@ final class LensServiceProvider extends ServiceProvider
             Route::post('/jobs/{id}/retry', Http\RetryController::class)->name('retry')->where('id', '[A-Z0-9]{26}');
             Route::get('/jobs/{id}', [Http\JobsController::class, 'show'])->name('show')->where('id', '[A-Z0-9]{26}');
         });
+        if (! Factory::hasMacro('currentWebhook')) {
+            Factory::macro('currentWebhook', function (?string $deliveryId = null) {
+                return $this->createPendingRequest()->withOptions([
+                    'current_delivery_id' => $deliveryId ?? (string) Str::ulid(),
+                ]);
+            });
+        }
+        $this->callAfterResolving(Factory::class, function ($factory) {
+            $factory->globalMiddleware(Webhooks\OutgoingRecorder::middleware());
+        });
+        $this->app['router']->aliasMiddleware('current.webhook', Webhooks\ObserveWebhook::class);
+        $this->app['events']->listen(RequestHandled::class, function ($event) {
+            try {
+                $this->app->make(Broadcasts\AuthorizationRecorder::class)->record($event);
+            } catch (\Throwable) {
+            }
+        });
+        foreach ([RequestHandled::class => 'finish', JobQueued::class => 'queued'] as $event => $method) {
+            $this->app['events']->listen($event, function ($event) use ($method) {
+                try {
+                    $this->app->make(Webhooks\WebhookRecorder::class)->$method($event);
+                } catch (\Throwable) {
+                }
+            });
+        }
         foreach ([JobPushed::class => 'pushed', JobQueued::class => 'queued', JobProcessing::class => 'processing', JobExceptionOccurred::class => 'exception', JobFailed::class => 'exception', JobAttempted::class => 'attempted', JobTimedOut::class => 'timedOut'] as $event => $method) {
             $this->app['events']->listen($event, function ($event) use ($method) {
                 // Resolution failure is also isolated (for example a broken DB binding).

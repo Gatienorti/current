@@ -13,7 +13,7 @@
 </head>
 <body>
 @php
-    $activeArea = request()->routeIs('horizon-lens.webhooks') ? 'webhooks' : (request()->routeIs('horizon-lens.broadcasts') ? 'broadcasts' : 'jobs');
+    $activeArea = request()->routeIs('horizon-lens.webhooks', 'horizon-lens.webhooks.*') ? 'webhooks' : (request()->routeIs('horizon-lens.broadcasts', 'horizon-lens.broadcasts.*') ? 'broadcasts' : 'jobs');
     $activeSection = $section ?? 'monitoring';
     $jobPages = ['dashboard' => ['dashboard', 'Dashboard'], 'monitoring' => ['search', 'Monitoring'], 'metrics' => ['metrics', 'Metrics'], 'batches' => ['layers', 'Batches'], 'pending' => ['clock', 'Pending'], 'completed' => ['circle-check', 'Completed'], 'silenced' => ['bell-off', 'Silenced'], 'failed' => ['alert', 'Failed']];
 @endphp
@@ -25,25 +25,34 @@
             @foreach($jobPages as $key => [$icon, $label])
                 <a class="nav-item {{ $activeSection === $key ? 'selected' : '' }}" @if($activeSection === $key) aria-current="page" @endif href="{{ route('horizon-lens.'.$key) }}">@include('horizon-lens::icon', ['iconName' => $icon]){{ $label }}</a>
             @endforeach
+        @elseif($activeArea === 'webhooks')
+            <a class="nav-item {{ request()->routeIs('horizon-lens.webhooks.dashboard') ? 'selected' : '' }}" href="{{ route('horizon-lens.webhooks.dashboard') }}">@include('horizon-lens::icon', ['iconName' => 'dashboard'])Dashboard</a>
+            <a class="nav-item {{ request()->routeIs('horizon-lens.webhooks', 'horizon-lens.webhooks.show') ? 'selected' : '' }}" href="{{ route('horizon-lens.webhooks') }}" >@include('horizon-lens::icon', ['iconName' => 'webhook'])Incoming receipts</a>
+            <a class="nav-item {{ request()->routeIs('horizon-lens.webhooks.outgoing*') ? 'selected' : '' }}" href="{{ route('horizon-lens.webhooks.outgoing') }}">@include('horizon-lens::icon', ['iconName' => 'webhook'])Outgoing deliveries</a>
         @else
-            <div class="nav-label">{{ strtoupper($activeArea) }}</div>
-            <a class="nav-item selected" aria-current="page" href="{{ route('horizon-lens.'.$activeArea) }}">@include('horizon-lens::icon', ['iconName' => 'dashboard'])Overview</a>
-            @foreach($activeArea === 'webhooks' ? ['Incoming receipts', 'Outgoing deliveries'] : ['Events', 'Reverb inspection'] as $label)
-                <span class="nav-item muted" aria-disabled="true">{{ $label }}<small>Planned</small></span>
-            @endforeach
+            <a class="nav-item {{ request()->routeIs('horizon-lens.broadcasts.dashboard') ? 'selected' : '' }}" href="{{ route('horizon-lens.broadcasts.dashboard') }}">@include('horizon-lens::icon', ['iconName' => 'dashboard'])Dashboard</a>
+            <a class="nav-item {{ request()->routeIs('horizon-lens.broadcasts', 'horizon-lens.broadcasts.show', 'horizon-lens.broadcasts.compare') ? 'selected' : '' }}" href="{{ route('horizon-lens.broadcasts') }}">@include('horizon-lens::icon', ['iconName' => 'broadcast'])Submissions</a>
+            <a class="nav-item {{ request()->routeIs('horizon-lens.broadcasts.authorization') ? 'selected' : '' }}" href="{{ route('horizon-lens.broadcasts.authorization') }}">@include('horizon-lens::icon', ['iconName' => 'alert'])Authorization failures</a>
         @endif
         </nav>
-        <div class="sidebar-bottom"><p>Execution by Horizon.<br>Investigation with Current.</p><a href="{{ route('horizon.index') }}">Open Horizon @include('horizon-lens::icon', ['iconName' => 'external'])</a></div>
+        <div class="sidebar-bottom"><div class="package-version"><span>Current</span><span>{{ $currentVersion }}</span></div></div>
     </aside>
     <div class="main-shell">
         <header class="topbar">
             <nav class="product-tabs" aria-label="Product areas">
-                <a class="product-tab {{ $activeArea === 'jobs' ? 'active' : '' }}" @if($activeArea === 'jobs') aria-current="page" @endif href="{{ route('horizon-lens.index') }}">@include('horizon-lens::icon', ['iconName' => 'jobs'])Jobs</a>
-                <a class="product-tab {{ $activeArea === 'webhooks' ? 'active' : '' }}" @if($activeArea === 'webhooks') aria-current="page" @endif href="{{ route('horizon-lens.webhooks') }}">@include('horizon-lens::icon', ['iconName' => 'webhook'])Webhooks</a>
-                <a class="product-tab {{ $activeArea === 'broadcasts' ? 'active' : '' }}" @if($activeArea === 'broadcasts') aria-current="page" @endif href="{{ route('horizon-lens.broadcasts') }}">@include('horizon-lens::icon', ['iconName' => 'broadcast'])Broadcasts</a>
+                <a class="product-tab {{ $activeArea === 'jobs' ? 'active' : '' }}" @if($activeArea === 'jobs') aria-current="page" @endif href="{{ route('horizon-lens.index') }}">@include('horizon-lens::icon', ['iconName' => 'jobs'])Queues &amp; Jobs</a>
+                <a class="product-tab {{ $activeArea === 'webhooks' ? 'active' : '' }}" @if($activeArea === 'webhooks') aria-current="page" @endif href="{{ route('horizon-lens.webhooks.dashboard') }}">@include('horizon-lens::icon', ['iconName' => 'webhook'])Webhooks</a>
+                @if($broadcastsVisible)<a class="product-tab {{ $activeArea === 'broadcasts' ? 'active' : '' }}" @if($activeArea === 'broadcasts') aria-current="page" @endif href="{{ route('horizon-lens.broadcasts.dashboard') }}">@include('horizon-lens::icon', ['iconName' => 'broadcast'])Broadcasts</a>@endif
             </nav>
             <div class="topbar-right">
-                <button type="button" class="refresh-toggle" data-auto-refresh hidden aria-pressed="true" aria-label="Pause automatic refresh">@include('horizon-lens::icon', ['iconName' => 'refresh'])<span data-refresh-label>Auto · 5s</span></button>
+                <details class="refresh-picker" data-refresh-picker hidden>
+                    <summary class="refresh-toggle" data-auto-refresh aria-label="Live updates: 5 seconds">@include('horizon-lens::icon', ['iconName' => 'refresh'])<span data-refresh-label>5s</span></summary>
+                    <div class="refresh-menu" role="group" aria-label="Live updates">
+                        @foreach([0 => 'Pause', 1 => '1s', 5 => '5s', 15 => '15s', 30 => '30s', 60 => '60s'] as $seconds => $label)
+                        <button type="button" data-refresh-choice="{{ $seconds }}" aria-pressed="{{ $seconds === 5 ? 'true' : 'false' }}">{{ $label }}</button>
+                        @endforeach
+                    </div>
+                </details>
                 <details class="accent-picker" data-accent-picker hidden>
                     <summary aria-label="Choose accent color" title="Accent color"><span class="accent-preview" aria-hidden="true"></span><span data-accent-label>Violet</span>@include('horizon-lens::icon', ['iconName' => 'chevron-down'])</summary>
                     <div class="accent-menu" role="group" aria-label="Accent color">
@@ -68,7 +77,6 @@
         </nav>
         @endif
         <main>@yield('content')</main>
-        <footer><span>Current</span><span>All timestamps in UTC <span class="footer-dot">·</span> Observations, with coverage shown</span></footer>
     </div>
 </div>
 <template id="lens-icon-chevron-down">@include('horizon-lens::icon', ['iconName' => 'chevron-down'])</template>

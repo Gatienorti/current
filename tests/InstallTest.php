@@ -27,7 +27,7 @@ final class InstallTest extends TestCase
             $this->assertSame('keep', app('db')->connection('current')->table('lens_meta')->where('key', 'installation-proof')->value('value'));
             $this->assertStringContainsString('custom-current', file_get_contents($directory.'/current.php'));
             $this->assertFalse(Schema::connection('app')->hasTable('migrations'));
-            $this->assertSame(3, app('db')->connection('current')->table('migrations')->count());
+            $this->assertSame(11, app('db')->connection('current')->table('migrations')->count());
             $this->assertSame(0, Artisan::call('current:prune'));
             $this->assertSame(0, Artisan::call('lens:prune'));
             $events = app(Schedule::class)->events();

@@ -52,7 +52,8 @@ final class DashboardTest extends TestCase
         $response = $this->get('/horizon-lens/dashboard')->assertOk()
             ->assertSee('Jobs Past Hour')->assertSee('Failed Jobs Past 7 Days')->assertSee('Active')
             ->assertSee('149')->assertSee('36')->assertSee('slow-queue')->assertSee('busy-queue')
-            ->assertSee('Shared above')->assertSee('HORIZON DATA')->assertSee('CURRENT HISTORY')
+            ->assertSee('title="master:payments">payments</strong>', false)
+            ->assertDontSee('Shared above')->assertSee('queue%5B0%5D=first', false)->assertSee('queue%5B1%5D=second', false)->assertDontSee('HORIZON DATA')->assertDontSee('CURRENT HISTORY')->assertDontSee('Coverage matters.')
             ->assertDontSee('Horizon operations and captured job history in one place.')
             ->assertDontSee('refresh for the latest state')->assertSee('data-live-region="dashboard"', false)
             ->assertDontSee('private-supervisor-value')->assertDontSee('private-workload-value')->assertDontSee('Job explorer');
@@ -62,6 +63,28 @@ final class DashboardTest extends TestCase
         $this->assertSame(5, $data['supervisors']['data'][0]['processes']);
         $this->assertSame(1, $response->viewData('total'));
         $this->assertSame(['first, second', 'notifications', 'payments'], array_column($data['workload']['data'], 'name'));
+    }
+
+    public function test_monitoring_combines_multiple_queues_with_other_filters(): void
+    {
+        foreach (['first', 'second', 'other'] as $queue) {
+            $this->store()->newJob('multi-'.$queue, 'redis', $queue, ['data' => ['commandName' => 'GroupJob']]);
+        }
+        $response = $this->get('/horizon-lens/monitoring?'.http_build_query(['queue' => ['first', 'second'], 'job_class' => 'GroupJob']))->assertOk();
+        $this->assertSame(2, $response->viewData('total'));
+        $this->assertSame(['first', 'second'], $response->viewData('filters')['queue']);
+        $response->assertSee('name="queue[]" multiple', false)
+            ->assertSee('aria-label="Remove queue: first"', false)
+            ->assertSee('aria-label="Remove queue: second"', false);
+        foreach (['first' => 'second', 'second' => 'first'] as $removed => $remaining) {
+            preg_match('/aria-label="Remove queue: '.$removed.'" href="([^"]+)"/', $response->getContent(), $match);
+            parse_str(parse_url(html_entity_decode($match[1]), PHP_URL_QUERY), $parameters);
+            $this->assertSame([$remaining], $parameters['queue']);
+            $this->assertSame('GroupJob', $parameters['job_class']);
+        }
+        $this->get('/horizon-lens/monitoring?'.http_build_query(['queue' => ['first', 'second'], 'job_class' => 'AbsentJob']))->assertOk()->assertViewHas('total', 0);
+        $this->get('/horizon-lens/monitoring?queue=first')->assertOk()->assertViewHas('total', 1);
+        $this->get('/horizon-lens/monitoring?queue%5B0%5D=')->assertOk()->assertViewHas('total', 3);
     }
 
     public function test_empty_master_and_supervisor_reads_mean_inactive_with_zero_processes(): void

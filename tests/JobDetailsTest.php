@@ -28,9 +28,11 @@ final class JobDetailsTest extends TestCase
         $this->work(3);
         $this->assertSame(36, $this->store()->table('steps')->count());
         $this->assertSame('failed', $this->store()->table('jobs')->first()->status);
-        $this->get('/horizon-lens/jobs/'.$record->id)->assertOk()->assertSee('Args')->assertSee('Metadata')
+        $response = $this->get('/horizon-lens/jobs/'.$record->id)->assertOk()->assertSee('Args')->assertSee('Metadata')
             ->assertSee('Lifecycle')->assertSee('Attempt history')->assertSee('order-details-test')
             ->assertSee('[REDACTED]')->assertDontSee('demo-token-never-store')->assertDontSee('never-store-this');
+        $this->assertLessThan(strpos($response->getContent(), 'id="job-details"'), strpos($response->getContent(), '<h2>Execution map'));
+        $this->assertSame(2, substr_count($response->getContent(), 'data-payload-panel open'));
     }
 
     public function test_unopted_job_arguments_are_not_unserialized_or_persisted_and_delays_are_observed(): void

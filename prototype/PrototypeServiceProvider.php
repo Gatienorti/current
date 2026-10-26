@@ -25,7 +25,6 @@ final class PrototypeServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        config()->set('horizon-lens.path', 'horizon-lens');
         config()->set('horizon-lens.connection', 'lens');
         config()->set('horizon-lens.tag_prefixes', ['order:', 'scenario:']);
         config()->set('horizon-lens.source_roots', [__DIR__, base_path('../tests'), '/opt/vehify/app']);
@@ -38,6 +37,21 @@ final class PrototypeServiceProvider extends ServiceProvider
         Horizon::auth(fn ($request) => (bool) $request->user()?->is_admin);
         Gate::define('viewHorizon', fn ($user) => (bool) $user?->is_admin);
         Http::preventStrayRequests();
+        config()->set('horizon-lens.webhooks.enabled', true);
+        WebhookDemo::register();
+        config()->set('horizon-lens.webhooks.outgoing', [
+            'enabled' => true,
+            'destinations' => ['demo-receiver' => 'https://receiver.example.test/webhook'],
+        ]);
+        Artisan::command('lens:outgoing-demo', function () {
+            config()->set('horizon-lens.webhooks.capture_context', true);
+            config()->set('horizon-lens.webhooks.response_context', fn ($response) => ['http_status' => $response->getStatusCode()]);
+            foreach (['success', 'retry', 'connection'] as $scenario) {
+                dispatch(new Jobs\OutgoingWebhookJob($scenario));
+                app('queue.worker')->runNextJob('redis', 'lens-outgoing-demo', new WorkerOptions(sleep: 0, maxTries: 1));
+            }
+            $this->info('Synthetic outgoing attempts recorded using HTTP fakes; no external requests sent.');
+        });
         Route::get('/', fn () => redirect()->route('horizon-lens.index'));
         Artisan::command('lens:vehify-demo', function () {
             $lookup = \Mockery::mock(VinLookupService::class);

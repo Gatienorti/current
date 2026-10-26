@@ -42,7 +42,7 @@ final class RetryActionTest extends TestCase
         $response->assertRedirect(route('horizon-lens.show', ['id' => $retry->id, 'watch' => 1]).'#execution-map');
         $this->post($url)->assertRedirect($response->headers->get('Location'));
         $this->assertSame(2, $this->store()->table('jobs')->count());
-        $this->get('/horizon-lens/jobs/'.$retry->id.'?watch=1')->assertOk()->assertSee('data-refresh-ms="1000"', false);
+        $this->get('/horizon-lens/jobs/'.$retry->id.'?watch=1')->assertOk()->assertSee('data-refresh-ms="5000"', false);
         $this->work();
         $this->get('/horizon-lens/jobs/'.$retry->id.'?watch=1')->assertOk()->assertSee('data-refresh-ms="5000"', false)->assertSee('Follow live');
         $this->get('/horizon-lens/jobs/'.$original->id)->assertSee('View retry')->assertDontSee('>Retry job<', false);
