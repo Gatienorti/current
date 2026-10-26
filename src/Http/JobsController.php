@@ -62,7 +62,10 @@ final class JobsController
         }
         $now = microtime(true);
         $base = $this->store->table('jobs')->where('expires_at', '>', $now);
-        $query = $this->store->jobsWithObservationState()->where('expires_at', '>', $now);
+        $query = $this->store->jobsWithObservationState([
+            'lens_jobs.id', 'lens_jobs.external_id', 'lens_jobs.job_class', 'lens_jobs.queue',
+            'lens_jobs.coverage', 'lens_jobs.attempt_count', 'lens_jobs.observed_at',
+        ])->where('expires_at', '>', $now);
         if ($section === 'silenced') {
             $query->where('silenced', true)->whereRaw($this->store->outcomeSql()." = 'completed'");
         } elseif ($section === 'completed') {
@@ -101,9 +104,6 @@ final class JobsController
         $total = (clone $query)->count();
         $jobs = $query->orderByDesc('observed_at')->orderByDesc('id')->cursorPaginate(20)->withQueryString();
         $tags = $this->store->table('tags')->whereIn('job_id', $jobs->pluck('id'))->get()->groupBy('job_id');
-        $outcomes = (clone $base)->selectRaw($this->store->outcomeSql().' AS display_status');
-        $counts = $this->store->connection()->query()->fromSub($outcomes, 'observed_outcomes')
-            ->select('display_status')->selectRaw('COUNT(*) AS aggregate')->groupBy('display_status')->pluck('aggregate', 'display_status');
 
         return view(match ($section) {
             'dashboard' => 'current::dashboard',
@@ -112,8 +112,10 @@ final class JobsController
         }, [
             'section' => $section, 'pageTitle' => $pages[$section][0], 'pageDescription' => $pages[$section][1],
             'scopeStatus' => $scopeStatus, 'compactFilters' => true, 'pageRoute' => 'current.'.$section,
-            'queueSummary' => (clone $base)->select('queue')->selectRaw('COUNT(*) AS jobs')->groupBy('queue')->orderBy('queue')->get(),
-            'jobs' => $jobs, 'total' => $total, 'filters' => $filters, 'tags' => $tags, 'counts' => $counts,
+            'queueSummary' => $section === 'dashboard'
+                ? (clone $base)->select('queue')->selectRaw('COUNT(*) AS jobs')->groupBy('queue')->orderBy('queue')->get()
+                : collect(),
+            'jobs' => $jobs, 'total' => $total, 'filters' => $filters, 'tags' => $tags,
             'detailContext' => $request->getRequestUri(),
             'queues' => (clone $base)->distinct()->orderBy('queue')->pluck('queue'),
             'classes' => (clone $base)->distinct()->orderBy('job_class')->limit(100)->pluck('job_class'),

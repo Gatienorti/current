@@ -34,6 +34,9 @@ final class Recorder
 
     private string $workerId;
 
+    /** Monotonic deadline; this heartbeat is not an exact last-event timestamp. */
+    private float $nextHeartbeatAt = 0;
+
     public function __construct(private Store $store, private Sanitizer $sanitizer)
     {
         $this->executions = new WeakMap;
@@ -219,7 +222,11 @@ final class Recorder
         }
         try {
             $result = $callback();
-            $this->store->table('meta')->updateOrInsert(['key' => 'last_observed_at'], ['value' => (string) microtime(true)]);
+            $now = hrtime(true) / 1e9;
+            if ($now >= $this->nextHeartbeatAt) {
+                $this->store->table('meta')->updateOrInsert(['key' => 'last_observed_at'], ['value' => (string) microtime(true)]);
+                $this->nextHeartbeatAt = $now + 5;
+            }
 
             return $result;
         } catch (Throwable $error) {

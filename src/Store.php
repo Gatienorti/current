@@ -40,9 +40,9 @@ final class Store
         return '(SELECT COUNT(*) FROM lens_attempts a WHERE a.job_id = lens_jobs.id AND a.finished_at IS NULL AND a.id <> '.$this->latestAttemptSql().')';
     }
 
-    public function jobsWithObservationState()
+    public function jobsWithObservationState(array $columns = ['lens_jobs.*'])
     {
-        return $this->table('jobs')->select('lens_jobs.*')
+        return $this->table('jobs')->select($columns)
             ->selectRaw($this->outcomeSql().' AS display_status')
             ->selectRaw($this->unfinishedSql().' AS unfinished_attempts')
             ->selectRaw($this->earlierUnfinishedSql().' AS earlier_unfinished_attempts')
