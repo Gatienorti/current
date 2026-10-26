@@ -1,6 +1,7 @@
 name: Collector binaries
 on:
   push:
+    branches: [main]
     paths: ['collector/**', '.github/workflows/collector-binaries.yml']
   pull_request:
     paths: ['collector/**', '.github/workflows/collector-binaries.yml']

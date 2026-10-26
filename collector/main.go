@@ -112,7 +112,7 @@ func run() error {
 		if time.Now().After(nextHeartbeat) {
 			ok, err := r.Eval(ctx, renew, []string{owner}, token).Int()
 			if err != nil || ok != 1 {
-				return errors.New("collector ownership lost; restart after Redis recovers")
+				return stopOrError(ctx, "collector ownership lost; restart after Redis recovers")
 			}
 			r.HSet(ctx, health, "heartbeat_at", float64(time.Now().UnixMilli())/1000)
 			nextHeartbeat = time.Now().Add(3 * time.Second)
@@ -125,16 +125,16 @@ func run() error {
 		}
 		// Stream expiry/server restart may remove the group; MKSTREAM/BUSYGROUP are safe.
 		if e = r.XGroupCreateMkStream(ctx, stream, "collector", "0").Err(); e != nil && !isBusyGroup(e) {
-			return errors.New("Redis consumer group unavailable")
+			return stopOrError(ctx, "Redis consumer group unavailable")
 		}
 		msgs, _, err := r.XAutoClaim(ctx, &redis.XAutoClaimArgs{Stream: stream, Group: "collector", Consumer: token, MinIdle: 0, Start: "0-0", Count: 100}).Result()
 		if err != nil {
-			return errors.New("Redis pending read failed")
+			return stopOrError(ctx, "Redis pending read failed")
 		}
 		if len(msgs) == 0 {
 			blocks, err := r.XReadGroup(ctx, &redis.XReadGroupArgs{Group: "collector", Consumer: token, Streams: []string{stream, ">"}, Count: 100, Block: -1}).Result()
 			if err != nil && err != redis.Nil {
-				return errors.New("Redis stream read failed")
+				return stopOrError(ctx, "Redis stream read failed")
 			}
 			if len(blocks) > 0 {
 				msgs = blocks[0].Messages
@@ -205,7 +205,9 @@ func run() error {
 			continue
 		}
 		args := append([]interface{}{token, bad, expired, float64(time.Now().UnixMilli()) / 1000, newest}, ids...)
-		n, err := r.Eval(ctx, acknowledge, []string{stream, owner, health}, args...).Int()
+		ackContext, cancelAck := context.WithTimeout(context.Background(), 2*time.Second)
+		n, err := r.Eval(ackContext, acknowledge, []string{stream, owner, health}, args...).Int()
+		cancelAck()
 		if err != nil || n < 0 {
 			return errors.New("acknowledgement failed; committed events may replay")
 		}
@@ -221,3 +223,10 @@ func pause(ctx context.Context) {
 	}
 }
 func isBusyGroup(e error) bool { return len(e.Error()) >= 9 && e.Error()[:9] == "BUSYGROUP" }
+
+func stopOrError(ctx context.Context, message string) error {
+	if ctx.Err() != nil {
+		return nil
+	}
+	return errors.New(message)
+}

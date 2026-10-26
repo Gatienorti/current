@@ -409,6 +409,42 @@ final class AsyncTelemetryTest extends TestCase
         $this->assertSame((int) $r->hGet('health', 'accepted'), (int) $r->hGet('health', 'processed'));
     }
 
+    public function test_graceful_stop_acknowledges_an_in_flight_committed_batch(): void
+    {
+        if (! $this->serverDatabase) {
+            $this->markTestSkipped('Server SQL shutdown boundary check.');
+        }
+        dispatch(new PaymentJob('success'));
+        $this->work();
+        $db = $this->store()->connection();
+        $db->unprepared('CREATE TRIGGER current_test_slow BEFORE INSERT ON lens_async_receipts FOR EACH ROW DO SLEEP(0.05)');
+        try {
+            $p = $this->collector(false);
+            $r = app(Transport::class)->client();
+            $until = microtime(true) + 5;
+            $pending = 0;
+            do {
+                try {
+                    $pending = ($r->xPending('events', 'collector')[0] ?? 0);
+                } catch (\Throwable) {
+                }
+                if ($pending > 0) {
+                    break;
+                }
+                usleep(5000);
+            } while (microtime(true) < $until);
+            $this->assertGreaterThan(0, $pending);
+            $p->signal(SIGTERM);
+            $p->setTimeout(10);
+            $p->wait();
+            $this->assertTrue($p->isSuccessful(), $p->getErrorOutput());
+            $this->assertSame(0, $r->xLen('events'));
+            $this->assertSame('completed', $this->store()->table('jobs')->sole()->status);
+        } finally {
+            $db->unprepared('DROP TRIGGER current_test_slow');
+        }
+    }
+
     public function test_sql_tls_requires_trust_hostname_and_encryption(): void
     {
         $tls = getenv('CURRENT_ASYNC_TLS_DIR');
