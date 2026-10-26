@@ -27,10 +27,10 @@ Light, dark, and system appearance are included. Live data refreshes every five 
 
 ## Get started
 
-Current is available on [Packagist](https://packagist.org/packages/gatienorti/current) as **dev-main**. A tagged beta release is still pending. Install the development branch in a development application, following the [installation guide](docs/INSTALLATION.md):
+Current is available on [Packagist](https://packagist.org/packages/gatienorti/current) as **v0.1.0-beta.1**. Install the beta in a development application, following the [installation guide](docs/INSTALLATION.md):
 
 ```sh
-composer require gatienorti/current:dev-main
+composer require gatienorti/current:^0.1.0@beta
 php artisan current:install
 ```
 

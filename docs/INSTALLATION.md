@@ -4,10 +4,10 @@ Current runs alongside an existing Horizon installation. Laravel 11.44+, 12 and 
 
 ## 1. Install the development beta
 
-The source is public at [Gatienorti/current](https://github.com/Gatienorti/current), and the development branch is available on [Packagist](https://packagist.org/packages/gatienorti/current). A tagged beta release is still pending. Its Composer identifier is `gatienorti/current`. Install the development branch in a **disposable application** first:
+The source is public at [Gatienorti/current](https://github.com/Gatienorti/current), and the first beta is available on [Packagist](https://packagist.org/packages/gatienorti/current). Its Composer identifier is `gatienorti/current`. Install the beta in a **disposable application** first:
 
 ```sh
-composer require gatienorti/current:dev-main
+composer require gatienorti/current:^0.1.0@beta
 php artisan current:install
 ```
 
@@ -176,7 +176,7 @@ On failure details, select **Debug with AI**. The modal shows the selected attem
 
 ## Updating the beta checkout
 
-After updating the package, run `php artisan current:install` to apply any new package migrations (use `--force` in production), review newly documented settings, rebuild deployment caches and restart long-lived processes. The installer preserves existing configuration; it does not merge new settings into a published file. Existing captured history remains subject to its original retention. The development package is `gatienorti/current`; Packagist currently lists dev-main, with no tagged beta yet.
+After updating the package, run `php artisan current:install` to apply any new package migrations (use `--force` in production), review newly documented settings, rebuild deployment caches and restart long-lived processes. The installer preserves existing configuration; it does not merge new settings into a published file. Existing captured history remains subject to its original retention. The package is `gatienorti/current`; the first release is `v0.1.0-beta.1`. Use `^0.1.0@beta` for compatible beta updates.
 
 ## Incoming webhook proof of concept
 
