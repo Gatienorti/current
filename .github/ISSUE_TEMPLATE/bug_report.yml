@@ -1,0 +1,32 @@
+name: Bug report
+description: Report a reproducible problem in Current
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: "Use synthetic examples. Never include credentials, customer data, raw production payloads, or security vulnerability details. Read SECURITY.md for private reporting."
+  - type: textarea
+    id: versions
+    attributes:
+      label: Environment
+      description: Current revision, PHP, Laravel, Horizon, database, and relevant optional broadcaster versions
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include the smallest sanitized job, configuration, or request that demonstrates the issue.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized screenshots or errors
+      description: Remove private URLs, identifiers, payloads, and credentials before sharing.

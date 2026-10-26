@@ -1,0 +1,14 @@
+* text=auto
+*.png binary
+*.jpg binary
+*.svg text
+
+/.github export-ignore
+/tests export-ignore
+/integrations export-ignore
+/prototype export-ignore
+/docs/screenshots export-ignore
+/compose.prototype.yaml export-ignore
+/phpunit.xml export-ignore
+/AGENTS.md export-ignore
+/PLAN.md export-ignore

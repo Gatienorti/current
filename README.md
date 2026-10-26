@@ -1,61 +1,90 @@
-# Current
+<p align="center">
+  <img src="resources/brand/current-wordmark.svg" alt="Current" width="220">
+</p>
 
-Current is a free, open-source Laravel observability companion, for Horizon jobs, with opt-in webhook and Reverb/Pusher broadcast investigation. Name availability has not been checked; this is not an official Laravel product.
+# See what happened inside your Laravel jobs
 
-Help developers find the right job and understand its failure through combined filters, execution-attempt history, recorded execution steps, and captured exception locations.
+Current brings job investigation, webhook activity, and broadcast debugging into your Laravel application. Find a job, inspect its attempts, follow recorded steps, and see where an exception surfaced—all alongside Horizon.
 
-Status: preparing the first beta; not yet published. Current includes job filtering, execution maps, failure investigation, retries and coding-agent prompts. Installation and integration checks have run in isolated environments, including ADAPT and Vehify-backed labs. Production readiness and performance/usability improvements are not established; see the tested compatibility matrix and installation guide.
+**Early beta · MIT licensed · Self-hosted · No frontend build**
 
-The current lab reuses Vehify’s Laravel 12.69.3 and Horizon 5.47.2 dependencies without modifying its checkout. Queues & Jobs and Webhooks are top-level tabs; Webhooks opens its activity dashboard with Incoming and Outgoing investigation pages; Broadcasts appears when Reverb or the selected Pusher driver is detected, or explicitly enabled for navigation. The Queues & Jobs entry opens Dashboard; Monitoring replaces the former Job explorer. Dashboard reads Horizon’s overview metrics, workload/worker allocations, and supervisor records, with retained Current history labeled separately. Dashboard, job lists, job details, Metrics and Batches refresh in the background every five seconds by default, with a refresh menu offering Pause, 1s, 5s, 15s, 30s and 60s. Filter inputs remain intact; polling pauses in hidden tabs and while inspecting expanded details. Metrics has separate Jobs and Queues tabs. The Jobs sidebar is a flat list: Dashboard, Queues, Monitoring, Metrics, Batches, Schedule, Pending, Completed, Silenced, Failed; Monitoring and job-state lists share a compact Queue / Job class / Observed time row with Apply and Reset. Filter menus follow the active theme, with searchable choices and full class names shown beneath short labels. More filters expands for job ID and tags, plus Status on Monitoring and exception class when filtering failures. One range picker provides custom dates/times and 5/15/30-minute, hour, 12-hour, day, and 7-day presets. Silenced classification is captured prospectively, with earlier history explicitly unknown; incoming and outgoing webhook observation now have opt-in proofs of concept; optional Reverb broadcast-submission observation is now available. Violet is currently the only active accent, with the color selector hidden. The other palettes remain in the code for later. Light, Dark and System appearance remain selectable and remembered; status colors keep their meaning. A shared outline SVG set keeps navigation, controls and investigation icons consistent. Open the running [local preview](http://127.0.0.1:8097/current), or follow setup and testing instructions. Explicit instrumentation captures runtime steps; the automatic source outline shows possible calls separately. Unchanged source outlines reuse a bounded per-worker cache; file-content changes invalidate it automatically. Complete automatic step discovery remains an experiment. Existing extensions are references and reuse candidates.
 
-Failed-job details now offer **Retry job**, which opens Horizon’s new retry record in a live view. **Follow live** centers the latest recorded step without shrinking the cards; manual pan/zoom disables following and preserves your viewport. The selected refresh interval also applies after completion. Only instrumented steps are visible, and steps shorter than the polling interval may appear already completed. Retry history links retained originals and retries, including native Horizon retries. Missing retry Args/Metadata can display an earlier retained snapshot labeled **Earlier enqueue**, with its source job and capture time. These historical values are never presented as a fresh capture. Set `CURRENT_ALLOW_RETRIES=false` to disable retry actions.
 
-Failed-job details also offer **Debug with AI**: preview a locally generated debugging prompt in a modal, then use the clipboard button to copy it into your coding agent. It includes captured failure evidence and clearly labeled snapshot origins. Nothing is sent automatically.
 
-Optional **webhook proofs of concept** provide separate incoming receipts and outgoing delivery-attempt lists. Incoming receipts link dispatched jobs; explicit account-scoped provider event identities group repeated receipts with per-receipt history and job links; configured Laravel HTTP destinations record outgoing responses/errors and the sending job. Related webhooks panels connect retained receipt → job → delivery observations in both directions. The opt-in Http::currentWebhook() helper groups outgoing retries into one delivery with attempt history; an explicit stable ID supports grouping across job executions. Optional explicit event IDs and bounded, redacted Payload/Metadata/Response snapshots support investigation; automatic body/header capture and replay are excluded. Outcome filters distinguish HTTP errors, processing failures and missing observations. See [incoming setup](docs/INSTALLATION.md#incoming-webhook-proof-of-concept) and [outgoing setup](docs/INSTALLATION.md#outgoing-webhook-proof-of-concept).
+## What you can investigate
 
-## Brand
+| Area | Included |
+| --- | --- |
+| **Queues & Jobs** | Horizon dashboard, supervisor/queue architecture, combined job filters, metrics, batches, and registered schedules. |
+| **Job details** | Attempts and retries, pan/zoom execution maps, exception locations and stack context, Args and Metadata, and related webhook/broadcast activity. |
+| **Webhooks** | Incoming receipts and outgoing Laravel HTTP deliveries, HTTP outcomes, explicit retry grouping, optional context snapshots, and linked jobs. |
+| **Broadcasts** | Reverb and Pusher submissions, queued/immediate timelines, authorization failures, snapshot comparison, and linked jobs. |
 
-The Current mark uses two flowing paths to form an open C, paired with a lowercase wordmark. In the app it follows the selected accent and appearance. Reusable vector assets: [mark](resources/brand/current-mark.svg), [light wordmark](resources/brand/current-wordmark.svg), [dark wordmark](resources/brand/current-wordmark-dark.svg).
+Retry failed jobs through Horizon. Copy a **Debug with AI** prompt from captured failure evidence into your coding agent; Current sends nothing to an AI service automatically.
 
-New installations use `/current`, `config/current.php`, `current:install`, `current:prune`, and `Current\Current::step`. Legacy integrations and table/route names remain compatible. The unpublished Composer identifier remains `horizon-lens/horizon-lens` pending distribution naming. See [installation and optional instrumentation](docs/INSTALLATION.md).
+Light, dark, and system appearance are included. Live data refreshes every five seconds by default, with pause and interval controls.
 
-## Preview
+## Get started
 
-Current beta screenshots: dashboard, job investigation, webhooks, and broadcasts. These show isolated lab observations.
+Current is preparing its first public beta and is **not on Packagist yet**. For now, follow the [installation guide](docs/INSTALLATION.md) to add a local Composer checkout to a development application:
 
-## Try the beta locally
+```sh
+# After adding the path repository described in the installation guide:
+composer require horizon-lens/horizon-lens:dev-main
+php artisan current:install
+```
 
-Follow the [four-step quick start](docs/INSTALLATION.md): install the local Composer checkout, open Current using existing Horizon access, run one harmless job, then opt into webhooks or broadcasts. The package is not on Packagist yet. A jobs-only install needs no Reverb server, Node build or hosted account.
+Open **`/current`** using your application's existing Horizon access. The installer publishes configuration, creates a dedicated SQLite history store, and runs Current's migrations. Restart long-lived workers after installation and keep Laravel's scheduler running for pruning.
 
-## Start here
+The Composer identifier still uses the development name; the dashboard and public API are branded Current. No hosted account, Node build, or WebSocket server is required for jobs.
 
-Declared compatibility: Laravel **11.44+, 12.x, and 13.x**, Horizon **5.30+ within 5.x**, PHP **8.2+ within 8.x** (Laravel 13 requires 8.3+). Compatible pairs, tested profiles, upstream constraints, and runtime limits are documented in [Compatibility](docs/COMPATIBILITY.md). Package support is no longer tied to Vehify's patch versions.
+**Requirements:** PHP 8.2+, Laravel 11.44/12/13, and Horizon 5.30+ within 5.x, subject to compatible version pairs. Laravel 13 requires PHP 8.3+. See the [compatibility matrix](docs/COMPATIBILITY.md) for tested combinations and database limits.
 
-- [Installation](docs/INSTALLATION.md): one-command setup, access, retention and optional steps.
-- Plan: scope, order of work, and evidence gates.
-- Architecture: proposed boundaries and reliability constraints.
-- Research: source-backed observations and runtime evidence.
-- Development: local preview, tests, and direct-integration limits.
-- ADAPT integration: actual ADAPT application boot, job tests, and the separate [ADAPT preview](http://127.0.0.1:8098/__lens-lab/login).
-- [Contributor instructions](AGENTS.md): how to continue without expanding scope prematurely.
+## Give a job an execution map
 
-## Intended experience
+Queue lifecycle and attempt observations work without adding step calls. To see what happens *inside* a job, wrap useful operations:
 
-Job details include a policy/queue overview, observed lifecycle and attempt/worker history, plus expandable/copyable Args and Metadata JSON snapshots. New object dispatches automatically capture bounded, redacted job properties and standard metadata. Optional `currentArguments()` / `currentMetadata()` methods or a configured callback override these fields. Encrypted/unsupported payloads are unavailable; older history is not backfilled. The full-card execution map supports drag, wheel/button zoom, Fit View, 100% and a minimap; viewport state survives background data refresh. See the capture API and long-job demo.
+```php
+use Current\Current;
 
-The current investigation view places attempt selection above a compact full-width execution map, with expandable step details and persistent failure/attempt context below. Connected nodes show captured steps in recorded start order, with the failed node highlighted; arrows do not establish dependencies. Opening a job preserves its list filters and pagination when returning. A completed redelivery stays Completed while an earlier missing finish is shown separately; long-running attempts stay Processing with an uncertainty notice. History filters are independent of outcome. Source possibilities remain separate from recorded steps, and internal steps still require instrumentation.
+public function handle(): void
+{
+    Current::step('Validate order', fn () => $this->validateOrder());
+    Current::step('Reserve inventory', fn () => $this->reserveInventory());
+    Current::step('Charge payment', fn () => $this->chargePayment());
+}
+```
 
-Install a Composer package alongside Horizon, combine filters, and click any job—successful, failed, or in progress—to inspect its steps and attempts. On failure, connect the captured error and stack trace to the matching step and source location. Show observed execution separately from possible source paths; mark unavailable history and unresolved locations explicitly. How much can be discovered automatically, and where explicit step instrumentation is needed, remains to be evaluated.
+The callback keeps its normal return value and exception behavior. Current records each named step's timing and outcome. Arrows represent recorded start order, not inferred dependencies.
 
-Horizon continues to execute and manage jobs. Current adds visibility and a protected failed-job Retry action delegated to Horizon. A successful first release makes a real job investigation easier; commercial demand is not a prerequisite.
+New supported object dispatches capture bounded, redacted job properties and standard metadata. You can disable automatic snapshots or define explicit `currentArguments()` and `currentMetadata()` exports. See [capture configuration](docs/INSTALLATION.md#what-appears-automatically).
 
-Future possibilities include broader webhook adapters and optional live dashboard updates through existing Laravel broadcasting infrastructure. These are separate extensions, not first-release requirements.
+## Follow activity across your application
 
-Broadcasts opens an activity dashboard with Submissions and Authorization failures in its sidebar. Both activity dashboards have 1-hour, 24-hour and 7-day periods, five-second refresh, observed volume/failure/duration trends and investigation links.
+Webhook and broadcast collection are **opt-in**, with explicit route, destination, event, and channel allowlists. Payload exports require additional configuration. Current observes your existing integrations; it does not replace webhook signature validation, delivery engines, or broadcaster authorization.
 
-Optional **Broadcasts** inspection covers approved queued and immediate Reverb submissions, with enqueue/worker/submission timelines, failure context, job/webhook links, and optional redacted payload/metadata/channel snapshots. Failed, slow and missing-completion views help focus investigations. Optional authorization-route failure capture, two-submission comparison and a local Debug with AI prompt support further diagnosis. It distinguishes broadcaster acceptance from client receipt. See [Reverb setup](docs/INSTALLATION.md#optional-reverb-broadcast-observation).
 
-The **Schedule** page lists registered Laravel tasks, frequencies, timezones, next expression-based times and execution options. It loads console schedule definitions without running tasks or their condition callbacks. Command arguments and shell contents are omitted; this is not scheduler health or execution history.
 
-**Queues** shows the configured Horizon architecture for the active environment: one table per supervisor, configured worker limits/balancing, and source-declared job assignments. Literal job properties, constructor routing and direct static dispatch chains are inspected without executing application code. Default routes are labeled, while dynamic/inherited routing stays unresolved. Current worker allocation is secondary; the page does not depend on captured job history.
+[Set up incoming and outgoing webhooks](docs/INSTALLATION.md#4-enable-optional-integrations) · [Set up Reverb or Pusher](docs/INSTALLATION.md#optional-reverb-broadcast-observation)
+
+## Know what the evidence means
+
+- History starts when collection is enabled; there is no historical backfill. Retention defaults to seven days.
+- Missing telemetry is unknown. Worker completion and HTTP success do not prove downstream business success or client receipt.
+- Queue architecture uses configuration and bounded static inspection. Dynamic routing can remain unresolved.
+- Schedule lists describe registered tasks and expression-based next times, not scheduler execution health.
+- Redaction happens before persistence, but cannot identify every sensitive business field. Review your capture policy and dashboard access.
+
+Current remains an early beta. Isolated integration and compatibility tests have passed; production load and broad real-world usage are not yet established. Current is an independent project, not an official Laravel product.
+
+## Documentation and contributing
+
+- [Installation and configuration](docs/INSTALLATION.md)
+- [Compatibility and verification](docs/COMPATIBILITY.md)
+- [Contributing and running tests](CONTRIBUTING.md)
+- [Security reporting](SECURITY.md)
+- Architecture, research, and development plan
+
+Bug reports with a minimal, sanitized reproduction are especially useful. Keep credentials, real payloads, and customer information out of public issues.
+
+Released under the [MIT license](LICENSE).
