@@ -1,3 +1,6 @@
+@if(request()->header('X-Current-Refresh') === '1')
+@yield('content')
+@else
 <!doctype html>
 <html lang="en">
 <head>
@@ -83,3 +86,5 @@
 <template id="lens-icon-check">@include('current::icon', ['iconName' => 'check'])</template>
 </body>
 </html>
+
+@endif

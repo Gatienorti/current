@@ -17,7 +17,9 @@
         ['Authorization failures', $number('authorization', 'total')],
     ];
 @endphp
+@if(request()->header('X-Current-Refresh') !== '1')
 <div class="page-heading"><h1>{{ $webhooks ? 'Webhook dashboard' : 'Broadcast dashboard' }}</h1><nav class="filter-actions" aria-label="Dashboard period">@foreach(['1h' => 'Last hour', '24h' => 'Last 24 hours', '7d' => 'Last 7 days'] as $value => $label)<a class="button {{ $range === $value ? 'primary' : 'secondary' }} small" @if($range === $value) aria-current="page" @endif href="{{ route('current.'.$area.'.dashboard', ['range' => $value]) }}">{{ $label }}</a>@endforeach</nav></div>
+@endif
 <div data-live-region="activity-dashboard">
 <div class="horizon-stats-grid">@foreach($cards as [$label, $value])<div class="horizon-stat"><div class="stat-label">{{ $label }}</div><div class="horizon-stat-value">{{ $value }}</div><div class="stat-caption">Retained observations in selected period</div></div>@endforeach</div>
 <div class="dashboard-grid">

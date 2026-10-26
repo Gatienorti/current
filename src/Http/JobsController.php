@@ -60,6 +60,7 @@ final class JobsController
 
             return redirect()->route('current.monitoring', $parameters);
         }
+        $refresh = $request->header('X-Current-Refresh') === '1';
         $now = microtime(true);
         $base = $this->store->table('jobs')->where('expires_at', '>', $now);
         $query = $this->store->jobsWithObservationState([
@@ -117,9 +118,9 @@ final class JobsController
                 : collect(),
             'jobs' => $jobs, 'total' => $total, 'filters' => $filters, 'tags' => $tags,
             'detailContext' => $request->getRequestUri(),
-            'queues' => (clone $base)->distinct()->orderBy('queue')->pluck('queue'),
-            'classes' => (clone $base)->distinct()->orderBy('job_class')->limit(100)->pluck('job_class'),
-            'exceptions' => (clone $base)->whereNotNull('exception_class')->distinct()->limit(100)->pluck('exception_class'),
+            'queues' => $refresh || $section === 'dashboard' ? collect() : (clone $base)->distinct()->orderBy('queue')->pluck('queue'),
+            'classes' => $refresh || $section === 'dashboard' ? collect() : (clone $base)->distinct()->orderBy('job_class')->limit(100)->pluck('job_class'),
+            'exceptions' => $refresh || $section === 'dashboard' ? collect() : (clone $base)->whereNotNull('exception_class')->distinct()->limit(100)->pluck('exception_class'),
             'coverage' => $this->store->table('meta')->pluck('value', 'key'),
             'health' => $this->health(),
             'horizon' => $section === 'dashboard' ? app(HorizonAdapter::class)->dashboard() : null,

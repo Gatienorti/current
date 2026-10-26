@@ -1,7 +1,9 @@
 @extends('current::layout')
 @section('title', 'Schedule')
 @section('content')
+@if(request()->header('X-Current-Refresh') !== '1')
 <div class="page-heading"><div><h1>Schedule</h1></div></div>
+@endif
 <section class="panel schedule-panel" data-live-region="schedule">
     <div class="panel-heading"><h2>Scheduled tasks @if($available)<span class="count">{{ $tasks->total() }}</span>@endif</h2></div>
     @if(!$available)

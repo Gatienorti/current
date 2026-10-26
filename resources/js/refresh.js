@@ -1,7 +1,7 @@
 (() => {
     document.addEventListener('DOMContentLoaded', () => {
         const toggle = document.querySelector('[data-auto-refresh]');
-        const regions = () => [...document.querySelectorAll('[data-live-region]')];
+        const regions = () => [...document.querySelectorAll('[data-live-region]')].filter(region => !region.parentElement.closest('[data-live-region]'));
         if (!toggle || !regions().length) return;
         const picker = document.querySelector('[data-refresh-picker]');
         const choices = [...picker.querySelectorAll('[data-refresh-choice]')];
@@ -41,10 +41,10 @@
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 15000);
             try {
-                const response = await fetch(url.href, { credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: controller.signal, headers: { Accept: 'text/html' } });
-                if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) throw new Error('Refresh unavailable');
+                const response = await fetch(url.href, { credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: controller.signal, headers: { Accept: 'text/html', 'X-Current-Refresh': '1' } });
+                if (!response.ok || response.headers.get('X-Current-Refresh') !== '1' || !response.headers.get('content-type')?.includes('text/html')) throw new Error('Refresh unavailable');
                 const next = new DOMParser().parseFromString(await response.text(), 'text/html');
-                const replacements = new Map([...next.querySelectorAll('[data-live-region]')].map(region => [region.dataset.liveRegion, region]));
+                const replacements = new Map([...next.querySelectorAll('[data-live-region]')].filter(region => !region.parentElement.closest('[data-live-region]')).map(region => [region.dataset.liveRegion, region]));
                 const current = regions();
                 if (!current.every(region => replacements.has(region.dataset.liveRegion))) throw new Error('Page unavailable');
                 if (!enabled || document.hidden || interacting() || window.location.pathname + window.location.search !== url.pathname + url.search) return;

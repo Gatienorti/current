@@ -1,6 +1,7 @@
 @extends('current::layout')
 @section('title', 'Broadcasts')
 @section('content')
+@if(request()->header('X-Current-Refresh') !== '1')
 <div class="page-heading"><div><h1>Broadcasts</h1></div><span class="soft-badge">PROOF OF CONCEPT</span></div>
 @if(!config('current.broadcasts.enabled'))<p class="observation-notice">Broadcast observation is available. Enable CURRENT_BROADCASTS_ENABLED and configure approved event names and channel patterns to collect submissions. Server health has not been checked.</p>
 @elseif(!config('current.broadcasts.events') || !config('current.broadcasts.channels'))<p class="observation-notice">Configure approved event names and channel patterns to start collection.</p>@endif
@@ -16,6 +17,7 @@
 <div class="filter-actions"><button class="button primary">Apply filters</button><a class="text-link" href="{{ route('current.broadcasts') }}">Reset</a></div>
 <details class="additional-filters" @if(!empty($filters['channel'])) open @endif><summary>@include('current::icon', ['iconName' => 'chevron-right', 'iconClass' => 'more-filters-chevron'])More filters <span class="subtle">Approved channel pattern</span></summary><div class="additional-filter-fields"><label>Channel pattern<input name="channel" placeholder="Exact configured pattern" value="{{ $filters['channel'] ?? '' }}"></label></div></details>
 </form>@if($errors->any())<p class="validation-error">{{ $errors->first() }}</p>@endif</section>
+@endif
 <div data-live-region="broadcasts"><section class="panel"><div class="panel-heading"><h2>Submissions</h2><span class="subtle">Latest first · UTC</span></div>
 <div class="table-wrap"><table><thead><tr><th>Event</th><th>Approved channel patterns</th><th>Outcome</th><th>Duration</th><th>Started · UTC</th></tr></thead><tbody>
 @forelse($broadcasts as $broadcast)

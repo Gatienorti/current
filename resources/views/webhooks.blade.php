@@ -1,6 +1,7 @@
 @extends('current::layout')
 @section('title', 'Incoming webhooks')
 @section('content')
+@if(request()->header('X-Current-Refresh') !== '1')
 <div class="page-heading"><div><h1>Incoming webhooks</h1></div><span class="soft-badge">PROOF OF CONCEPT</span></div>
 @if(!config('current.webhooks.enabled'))<p class="observation-notice">Collection is disabled. Enable CURRENT_WEBHOOKS_ENABLED and opt in individual routes with current.webhook middleware.</p>@endif
 <section class="panel filters-panel compact-filters webhook-filters"><form class="filters" method="get" data-job-filters>
@@ -12,6 +13,7 @@
 <summary>@include('current::icon', ['iconName' => 'chevron-right', 'iconClass' => 'more-filters-chevron'])More filters <span class="subtle">Event ID, event type, HTTP status</span></summary>
 <div class="additional-filter-fields"><label>Event ID<input name="event_id" value="{{ $filters['event_id'] ?? '' }}" placeholder="Exact event ID"></label><label>Event type<input name="event_type" value="{{ $filters['event_type'] ?? '' }}" placeholder="Exact event type"></label><label>HTTP status<input name="status" type="number" min="100" max="599" value="{{ $filters['status'] ?? '' }}" placeholder="Any status"></label></div>
 </details></form>@if($errors->any())<p class="validation-error">{{ $errors->first() }}</p>@endif</section>
+@endif
 <div data-live-region="webhooks">
 <section class="panel"><div class="panel-heading"><h2>Receipts</h2><span class="subtle">Latest received first · UTC</span></div>
 <div class="table-wrap"><table><thead><tr><th>Provider / route</th><th>Receipts</th><th>Latest HTTP response</th><th>Signature</th><th>Duration</th><th>Received · UTC</th></tr></thead><tbody>

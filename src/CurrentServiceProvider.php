@@ -42,6 +42,9 @@ final class CurrentServiceProvider extends ServiceProvider
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         $this->loadViewsFrom(__DIR__.'/../resources/views', 'current');
         $this->app['view']->composer('current::layout', function ($view) {
+            if (request()->header('X-Current-Refresh') === '1') {
+                return;
+            }
             $view->with('currentVersion', \Composer\InstalledVersions::isInstalled('gatienorti/current')
                 ? (\Composer\InstalledVersions::getPrettyVersion('gatienorti/current') ?? 'Development')
                 : 'Development');
@@ -55,7 +58,7 @@ final class CurrentServiceProvider extends ServiceProvider
             $view->with('lensCssVersion', filemtime(__DIR__.'/../resources/css/lens.css'));
         });
         $this->publishes([__DIR__.'/../config/current.php' => config_path('current.php')], 'current-config');
-        Route::prefix(config('current.path'))->name('current.')->middleware(config('current.middleware'))->group(function () {
+        Route::prefix(config('current.path'))->name('current.')->middleware(array_merge(config('current.middleware'), [Http\RefreshResponse::class]))->group(function () {
             Route::get('/', [Http\JobsController::class, 'index'])->name('index');
             foreach (['dashboard', 'recent', 'pending', 'processing', 'completed', 'failed', 'silenced'] as $section) {
                 $path = in_array($section, ['dashboard', 'silenced'], true) ? '/'.$section : '/jobs/'.$section;

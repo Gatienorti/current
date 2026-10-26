@@ -1,7 +1,9 @@
 @extends('current::layout')
 @section('title', $title)
 @section('content')
+@if(request()->header('X-Current-Refresh') !== '1')
 <div class="page-heading"><div><h1>{{ $title }}</h1></div></div>
+@endif
 <section class="panel" data-live-region="horizon-section">
 @if($section === 'metrics')
 <nav class="metric-tabs" aria-label="Metric categories">
