@@ -115,7 +115,7 @@ jobs:
           docker run -d --name current-async-sql-test -p 3306:3306 -v "$CURRENT_ASYNC_TLS_DIR:/tls:ro" -e MYSQL_ROOT_PASSWORD=current-test-only -e MYSQL_DATABASE=current_async_test "$SQL_IMAGE" --ssl-ca=/tls/ca.pem --ssl-cert=/tls/server.pem --ssl-key=/tls/server-key.pem --require-secure-transport=ON
           if [[ "$SQL_IMAGE" == mariadb:* ]]; then client=mariadb; else client=mysql; fi
           for attempt in $(seq 1 40); do
-            if docker exec current-async-sql-test "$client" -uroot -pcurrent-test-only -e "ALTER USER 'root'@'%' REQUIRE X509"; then break; fi
+            if docker exec current-async-sql-test "$client" -uroot -pcurrent-test-only -e "ALTER USER 'root'@'%' REQUIRE X509" && docker exec current-async-sql-test "$client" --protocol=TCP -h127.0.0.1 -uroot -pcurrent-test-only --ssl-ca=/tls/ca.pem --ssl-cert=/tls/client.pem --ssl-key=/tls/client-key.pem -e "SELECT 1"; then break; fi
             if [ "$attempt" = 40 ]; then exit 1; fi
             sleep 2
           done
