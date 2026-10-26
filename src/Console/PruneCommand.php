@@ -25,6 +25,18 @@ final class PruneCommand extends Command
         }
         $this->info("Removed {$count} expired jobs and their attempts/steps.");
 
+        foreach (['async_receipts' => 'id', 'async_versions' => 'entity'] as $table => $key) {
+            if (! $store->connection()->getSchemaBuilder()->hasTable('lens_'.$table)) {
+                continue;
+            }
+            do {
+                $keys = $store->table($table)->where('expires_at', '<=', microtime(true))->limit(500)->pluck($key);
+                if ($keys->isNotEmpty()) {
+                    $store->table($table)->whereIn($key, $keys)->delete();
+                }
+            } while ($keys->isNotEmpty());
+        }
+
         $receipts = 0;
         while ($removed = app(WebhookRecorder::class)->prune()) {
             $receipts += $removed;

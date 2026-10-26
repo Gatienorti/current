@@ -12,3 +12,5 @@
 /phpunit.xml export-ignore
 /AGENTS.md export-ignore
 /PLAN.md export-ignore
+
+/experiments export-ignore

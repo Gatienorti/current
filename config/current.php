@@ -4,6 +4,16 @@ use Current\Http\Authorize;
 
 return [
     'enabled' => env('CURRENT_ENABLED', true),
+    'telemetry' => [
+        'driver' => env('CURRENT_TELEMETRY_DRIVER', 'sync'), // sync or redis (opt-in SQLite collector).
+        'redis_connection' => env('CURRENT_TELEMETRY_REDIS_CONNECTION', 'default'),
+        'namespace' => env('CURRENT_TELEMETRY_NAMESPACE', 'current'),
+        'binary' => env('CURRENT_COLLECTOR_BINARY', storage_path('current/current-collector')),
+        'max_pending' => 2000,
+        'max_event_bytes' => 131072,
+        'max_age_seconds' => 3600,
+        'lag_warning_seconds' => 10,
+    ],
     'broadcasts' => [
         'visible' => null, // null: detect Reverb or the selected Pusher driver; true/false: explicit navigation override.
         'enabled' => env('CURRENT_BROADCASTS_ENABLED', false),

@@ -6,12 +6,15 @@ use App\Jobs\WarmVehicleBasicCache;
 use App\Services\VinLookupService;
 use Current\Current;
 use Current\Prototype\Jobs\PaymentJob;
+use Current\Recorder;
 use Illuminate\Auth\GenericUser;
 use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Queue\Events\JobQueued;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
+use Laravel\Horizon\Events\JobPushed;
 use Laravel\Horizon\Horizon;
 use Laravel\Horizon\Jobs\RetryFailedJob;
 use Mockery;
@@ -30,6 +33,38 @@ final class IntegrationTest extends TestCase
         $this->assertSame(2, $this->store()->table('tags')->count());
         $this->assertFalse($this->store()->table('tags')->where('tag', 'like', 'private:%')->exists());
         $this->get('/current/jobs/'.$job->id)->assertOk()->assertSee('Validate order')->assertSee('POSSIBLE OPERATIONS', false);
+    }
+
+    public function test_late_enqueue_observation_reuses_an_already_completed_worker_cycle(): void
+    {
+        $pushed = null;
+        $queued = null;
+        $events = app('events');
+        $events->forget(JobPushed::class);
+        $events->listen(JobPushed::class, function ($event) use (&$pushed) {
+            $pushed = $event;
+        });
+        $events->listen(JobQueued::class, function ($event) use (&$queued) {
+            $queued = $event;
+        });
+
+        dispatch(new PaymentJob('success'));
+        $this->work();
+        $before = $this->store()->table('jobs')->first();
+        $this->assertSame('start_only', $before->coverage);
+        $this->assertSame('completed', $before->status);
+
+        app(Recorder::class)->pushed($pushed);
+        app(Recorder::class)->queued($queued);
+
+        $after = $this->store()->table('jobs')->sole();
+        $this->assertSame($before->id, $after->id);
+        $this->assertSame('observed_enqueue', $after->coverage);
+        $this->assertSame('completed', $after->status);
+        $this->assertSame(1, $after->attempt_count);
+        $this->assertSame('captured', $after->arguments_state);
+        $this->assertSame(4, $this->store()->table('steps')->count());
+        $this->assertSame($after->id, $this->store()->table('attempts')->sole()->job_id);
     }
 
     public function test_failure_highlights_step_and_sanitizes_before_storage(): void

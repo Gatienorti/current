@@ -2,6 +2,8 @@
 
 namespace Current\Tests;
 
+use Current\Http\Authorize;
+use HorizonLens\Lens;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schema;
@@ -10,10 +12,10 @@ final class InstallTest extends TestCase
 {
     public function test_existing_config_class_names_resolve_after_the_current_namespace_is_loaded(): void
     {
-        $this->assertTrue(class_exists(\Current\Http\Authorize::class));
+        $this->assertTrue(class_exists(Authorize::class));
         $this->assertTrue(class_exists('HorizonLens\\Http\\Authorize'));
-        $this->assertSame(\Current\Http\Authorize::class, (new \ReflectionClass('HorizonLens\\Http\\Authorize'))->getName());
-        $this->assertSame('preserved', \HorizonLens\Lens::step('Upgrade check', fn () => 'preserved'));
+        $this->assertSame(Authorize::class, (new \ReflectionClass('HorizonLens\\Http\\Authorize'))->getName());
+        $this->assertSame('preserved', Lens::step('Upgrade check', fn () => 'preserved'));
     }
 
     public function test_installer_is_repeatable_and_only_migrates_its_own_connection(): void
@@ -35,7 +37,7 @@ final class InstallTest extends TestCase
             $this->assertSame('keep', app('db')->connection('current')->table('lens_meta')->where('key', 'installation-proof')->value('value'));
             $this->assertStringContainsString('custom-current', file_get_contents($directory.'/current.php'));
             $this->assertFalse(Schema::connection('app')->hasTable('migrations'));
-            $this->assertSame(11, app('db')->connection('current')->table('migrations')->count());
+            $this->assertSame(12, app('db')->connection('current')->table('migrations')->count());
             $this->assertSame(0, Artisan::call('current:prune'));
             $this->assertSame(0, Artisan::call('lens:prune'));
             $events = app(Schedule::class)->events();

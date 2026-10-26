@@ -399,6 +399,10 @@ Broadcast totals separate submission failures from HTTP authorization failures. 
 Capture status and coverage appear at the bottom. Disabled capture can still have retained history; zero observations do not establish inactivity or health. Storage failures display Unavailable instead of zero. Client receipt, subscriber counts and Reverb server health are not inferred. High-volume database performance and non-SQLite aggregate behavior have not been established by these checks.
 
 
+## Optional asynchronous job telemetry
+
+Synchronous recording remains the default. For the opt-in Redis transport and Go collector, follow [async setup, recovery and supported environments](ASYNC-TELEMETRY.md). It supports file-backed SQLite on local Linux storage and explicit MySQL 8.4/MariaDB 11.4 InnoDB connections, subject to the documented connection limits. Horizon continues to execute jobs.
+
 ## Renaming an earlier prototype installation
 
 The package now uses `gatienorti/current`, the `Current\` PHP namespace, `Current\CurrentServiceProvider`, `current.*` route/view/config names, and `CURRENT_*` environment settings. The existing `Current\Current::step` API stays unchanged.

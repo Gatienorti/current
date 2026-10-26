@@ -2,6 +2,7 @@
 
 namespace Current;
 
+use Composer\InstalledVersions;
 use Illuminate\Broadcasting\BroadcastManager;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Http\Events\RequestHandled;
@@ -45,8 +46,8 @@ final class CurrentServiceProvider extends ServiceProvider
             if (request()->header('X-Current-Refresh') === '1') {
                 return;
             }
-            $view->with('currentVersion', \Composer\InstalledVersions::isInstalled('gatienorti/current')
-                ? (\Composer\InstalledVersions::getPrettyVersion('gatienorti/current') ?? 'Development')
+            $view->with('currentVersion', InstalledVersions::isInstalled('gatienorti/current')
+                ? (InstalledVersions::getPrettyVersion('gatienorti/current') ?? 'Development')
                 : 'Development');
             $view->with('broadcastsVisible', Broadcasts\BroadcastIntegration::visible());
             $view->with('currentMark', file_get_contents(__DIR__.'/../resources/brand/current-mark.svg'));
@@ -128,7 +129,7 @@ final class CurrentServiceProvider extends ServiceProvider
                 }
             });
         }
-        $this->commands([Console\PruneCommand::class, Console\InstallCommand::class]);
+        $this->commands([Console\PruneCommand::class, Console\CollectCommand::class, Console\InstallCollectorCommand::class, Console\TelemetryStatusCommand::class, Console\InstallCommand::class]);
         $this->app->afterResolving(Schedule::class, fn (Schedule $schedule) => $schedule->command('current:prune')->hourly());
     }
 }

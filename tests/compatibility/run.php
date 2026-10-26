@@ -30,7 +30,7 @@ foreach ($names as $name) {
     $row = $matrix[$name];
     $directory = sys_get_temp_dir().'/current-'.$name.'-'.bin2hex(random_bytes(4));
     mkdir($directory, 0700, true);
-    foreach (['bootstrap.php', 'phpunit.xml', 'tests', 'prototype', 'database'] as $entry) {
+    foreach (['bootstrap.php', 'phpunit.xml', 'tests', 'prototype', 'database', 'collector'] as $entry) {
         $source = $root.'/'.$entry;
         $files = is_dir($source)
             ? new RecursiveIteratorIterator(new RecursiveDirectoryIterator($source, FilesystemIterator::SKIP_DOTS))
@@ -45,6 +45,9 @@ foreach ($names as $name) {
                 mkdir(dirname($target), 0700, true);
             }
             copy($file->getPathname(), $target);
+            if ($relative === 'collector/current-collector') {
+                chmod($target, 0755);
+            }
         }
     }
     foreach (['bootstrap/cache', 'storage/data', 'storage/logs', 'storage/framework/views', 'storage/framework/cache', 'storage/framework/sessions'] as $path) {
@@ -62,6 +65,7 @@ foreach ($names as $name) {
     ];
     file_put_contents($directory.'/composer.json', json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n");
     $environment = getenv();
+    $environment['CURRENT_REQUIRE_COLLECTOR_TESTS'] = is_executable($root.'/collector/current-collector') ? '1' : '0';
     $environment['LENS_VENDOR_AUTOLOAD'] = $directory.'/vendor/autoload.php';
     $environment['APP_PACKAGES_CACHE'] = $directory.'/prototype/bootstrap/cache/packages.php';
     $environment['APP_SERVICES_CACHE'] = $directory.'/prototype/bootstrap/cache/services.php';

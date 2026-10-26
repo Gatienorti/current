@@ -17,12 +17,25 @@ use WeakMap;
 
 final class Recorder
 {
+    private ?Telemetry\AsyncRecorder $asyncRecorder = null;
+
+    private function async(): ?Telemetry\AsyncRecorder
+    {
+        return config('current.telemetry.driver', 'sync') === 'redis'
+            ? ($this->asyncRecorder ??= app(Telemetry\AsyncRecorder::class))
+            : null;
+    }
+
     private WeakMap $executions;
 
     private ?array $current = null;
 
     public function currentExecution(): ?array
     {
+        if ($async = $this->async()) {
+            return $async->currentExecution();
+        }
+
         return $this->current;
     }
 
@@ -45,21 +58,44 @@ final class Recorder
 
     public function pushed(JobPushed $event): void
     {
+        if ($async = $this->async()) {
+            $async->pushed($event);
+
+            return;
+        }
+
         if (! $this->enabled($event->connectionName)) {
             return;
         }
         $this->guard(function () use ($event) {
             $payload = $event->payload->decoded;
             if (! empty($payload['uuid'])) {
-                $this->store->transaction(fn () => $this->store->newJob(
-                    $payload['uuid'], $event->connectionName, $event->queue, $payload
-                ));
+                $this->store->transaction(function () use ($payload, $event) {
+                    // Redis makes the job visible before the producer receives
+                    // JobPushed. A worker may already have captured its attempt.
+                    $cycle = $this->store->findCycle($payload['uuid'], $event->connectionName);
+                    if ($cycle && $cycle->coverage === 'start_only') {
+                        $this->store->table('jobs')->where('id', $cycle->id)->update([
+                            'coverage' => 'observed_enqueue',
+                        ]);
+
+                        return;
+                    }
+
+                    $this->store->newJob($payload['uuid'], $event->connectionName, $event->queue, $payload);
+                });
             }
         });
     }
 
     public function processing(JobProcessing $event): void
     {
+        if ($async = $this->async()) {
+            $async->processing($event);
+
+            return;
+        }
+
         $this->current = null;
         $this->stack = [];
         $this->sequence = 0;
@@ -91,6 +127,12 @@ final class Recorder
 
     public function queued(JobQueued $event): void
     {
+        if ($async = $this->async()) {
+            $async->queued($event);
+
+            return;
+        }
+
         if (! $this->enabled($event->connectionName)) {
             return;
         }
@@ -114,6 +156,12 @@ final class Recorder
 
     public function exception(JobExceptionOccurred|JobFailed $event): void
     {
+        if ($async = $this->async()) {
+            $async->exception($event);
+
+            return;
+        }
+
         if (! isset($this->executions[$event->job])) {
             return;
         }
@@ -127,6 +175,12 @@ final class Recorder
 
     public function attempted(JobAttempted $event): void
     {
+        if ($async = $this->async()) {
+            $async->attempted($event);
+
+            return;
+        }
+
         $job = $event->job;
         $status = match (true) {
             $job->hasFailed() => 'failed',
@@ -141,6 +195,12 @@ final class Recorder
 
     public function timedOut(JobTimedOut $event): void
     {
+        if ($async = $this->async()) {
+            $async->timedOut($event);
+
+            return;
+        }
+
         if ($event->job) {
             $this->finish($event->job, $event->job->hasFailed() ? 'failed' : 'timed_out');
         }
@@ -171,6 +231,10 @@ final class Recorder
 
     public function step(string $label, callable $callback): mixed
     {
+        if ($async = $this->async()) {
+            return $async->step($label, $callback);
+        }
+
         $step = null;
         if ($this->current && ++$this->sequence <= config('current.max_steps', 100)) {
             $step = $this->guard(function () use ($label) {

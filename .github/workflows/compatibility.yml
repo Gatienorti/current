@@ -51,6 +51,73 @@ jobs:
           extensions: mbstring, dom, pdo_sqlite, sqlite3, redis, pcntl
           tools: composer:v2
           coverage: none
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+      - name: Build and test optional collector
+        working-directory: collector
+        run: |
+          go test -race ./...
+          go build -o current-collector .
       - run: composer validate --no-check-publish
       - name: Resolve and test isolated consumer
         run: php tests/compatibility/run.php "${{ matrix.row }}"
+  async-databases:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: mysql:8.4
+            driver: mysql
+          - image: mariadb:11.4
+            driver: mariadb
+          - image: mariadb:11.4
+            driver: mysql
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      LENS_REDIS_HOST: 127.0.0.1
+      CURRENT_REQUIRE_COLLECTOR_TESTS: '1'
+      CURRENT_ASYNC_DB_HOST: 127.0.0.1
+      CURRENT_ASYNC_DB_DRIVER: ${{ matrix.driver }}
+      CURRENT_ASYNC_DB_PASSWORD: current-test-only
+      CURRENT_ASYNC_TLS_DIR: /tmp/current-telemetry-tls
+      CURRENT_ASYNC_TLS_WRONG_HOST: current-wrongname
+      CURRENT_ASYNC_SOAK_SECONDS: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, dom, pdo_sqlite, pdo_mysql, redis, pcntl
+          tools: composer:v2
+          coverage: none
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+      - run: go build -o current-collector .
+        working-directory: collector
+      - run: composer install --no-interaction --prefer-dist
+      - name: Start TLS-enforced disposable SQL server
+        env:
+          SQL_IMAGE: ${{ matrix.image }}
+        run: |
+          bash tests/telemetry/create-tls-fixtures.sh "$CURRENT_ASYNC_TLS_DIR"
+          echo '127.0.0.1 current-wrongname' | sudo tee -a /etc/hosts
+          docker run -d --name current-async-sql-test -p 3306:3306 -v "$CURRENT_ASYNC_TLS_DIR:/tls:ro" -e MYSQL_ROOT_PASSWORD=current-test-only -e MYSQL_DATABASE=current_async_test "$SQL_IMAGE" --ssl-ca=/tls/ca.pem --ssl-cert=/tls/server.pem --ssl-key=/tls/server-key.pem --require-secure-transport=ON
+          if [[ "$SQL_IMAGE" == mariadb:* ]]; then client=mariadb; else client=mysql; fi
+          for attempt in $(seq 1 40); do
+            if docker exec current-async-sql-test "$client" -uroot -pcurrent-test-only -e "ALTER USER 'root'@'%' REQUIRE X509"; then break; fi
+            if [ "$attempt" = 40 ]; then exit 1; fi
+            sleep 2
+          done
+      - name: Prepare disposable test storage
+        run: mkdir -p prototype/bootstrap/cache prototype/storage/data prototype/storage/logs prototype/storage/framework/{views,cache,sessions}
+      - run: vendor/bin/phpunit -c phpunit.xml --filter AsyncTelemetryTest
