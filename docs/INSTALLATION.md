@@ -2,9 +2,17 @@
 
 Current runs alongside an existing Horizon installation. Laravel 11.44+, 12 and 13 are declared; see [tested combinations](COMPATIBILITY.md). Horizon continues to execute jobs. No frontend build or additional service is required for the dashboard.
 
-## 1. Install the unpublished beta checkout
+## 1. Install the development beta
 
-The package is not published. Its Composer identifier remains `horizon-lens/horizon-lens` until a distribution vendor/name is selected; do not assume it exists on Packagist. Add this checkout as a Composer path repository to a **disposable application** first:
+The source is public at [Gatienorti/current](https://github.com/Gatienorti/current), but the package is not on Packagist yet. Its Composer identifier remains `horizon-lens/horizon-lens`; the GitHub repository name and Composer package name are independent. Install the development branch in a **disposable application** first:
+
+```sh
+composer config repositories.current vcs https://github.com/Gatienorti/current
+composer require horizon-lens/horizon-lens:dev-main
+php artisan current:install
+```
+
+Alternatively, contributors can use a local checkout as a Composer path repository:
 
 ```json
 {

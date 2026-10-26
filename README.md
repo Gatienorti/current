@@ -26,10 +26,10 @@ Light, dark, and system appearance are included. Live data refreshes every five 
 
 ## Get started
 
-Current is preparing its first public beta and is **not on Packagist yet**. For now, follow the [installation guide](docs/INSTALLATION.md) to add a local Composer checkout to a development application:
+Current is preparing its first public beta and is **not on Packagist yet**. Install the development branch from GitHub in a development application, following the [installation guide](docs/INSTALLATION.md):
 
 ```sh
-# After adding the path repository described in the installation guide:
+composer config repositories.current vcs https://github.com/Gatienorti/current
 composer require horizon-lens/horizon-lens:dev-main
 php artisan current:install
 ```
