@@ -54,7 +54,8 @@ final class NativeTerminateTest extends TestCase
         config()->set('current.native.state_directory', $directory);
         try {
             $this->assertSame(1, Artisan::call('current:terminate', ['--all' => true, '--instance' => 'first']));
-            $this->assertSame(1, Artisan::call('current:terminate', ['--wait' => '301']));
+            $this->assertSame(1, Artisan::call('current:terminate', ['--wait' => '86431']));
+            $this->assertSame(0, Artisan::call('current:terminate', ['--all' => true, '--wait' => '3000']));
             file_put_contents($directory.'/first.json', '{broken');
             $this->assertSame(1, Artisan::call('current:terminate', ['--all' => true]));
             $this->assertStringContainsString('could not be confirmed', Artisan::output());

@@ -120,4 +120,12 @@ final class NativeDoctorTest extends TestCase
             $this->assertSame('error', array_column($report['checks'], 'status', 'id')['state_directory']);
         } finally { chmod($this->directory, 0700); }
     }
+
+    public function test_disabled_laravel_alarm_is_an_explicit_warning_with_finite_shutdown_grace(): void
+    {
+        config()->set('current.native.pools.orders.timeout', 0);
+        $report = app(Readiness::class)->inspect();
+        $this->assertTrue($report['ready']);
+        $this->assertSame('warning', array_column($report['checks'], 'status', 'id')['worker_timeout']);
+    }
 }

@@ -8,6 +8,9 @@ use Illuminate\Support\Str;
 /** PHP owns application configuration; Go receives validated commands, never PHP/.env parsing. */
 final class Plan
 {
+    public const MAX_TIMEOUT_SECONDS = 86400;
+    public const MAX_GRACE_SECONDS = 86430;
+
     public function pools(): array
     {
         $configured = $this->configuredPools();
@@ -46,7 +49,7 @@ final class Plan
             if (count(array_unique($queues)) !== count($queues)) { throw new InvalidArgumentException('Duplicate queue in native pool.'); }
             $values = [];
             foreach (['workers' => [1, 1, 256], 'min_workers' => [1, 1, 256], 'max_workers' => [$pool['workers'] ?? 1, 1, 256],
-                'timeout' => [60, 1, 299], 'memory' => [128, 16, 65536], 'tries' => [3, 0, 100], 'sleep' => [1, 0, 60],
+                'timeout' => [60, 0, self::MAX_TIMEOUT_SECONDS], 'memory' => [128, 16, 65536], 'tries' => [3, 0, 100], 'sleep' => [1, 0, 60],
                 'balance_cooldown' => [5, 1, 60], 'balance_shift' => [1, 1, 32], 'jobs_per_worker' => [10, 1, 10000], 'target_clear_seconds' => [60, 1, 3600],
                 'nice' => [0, -20, 19], 'max_jobs' => [0, 0, 1000000], 'max_time' => [0, 0, 86400], 'rest' => [0, 0, 60]] as $key => [$default, $min, $max]) {
                 $value = $pool[$key] ?? $default;
@@ -70,7 +73,7 @@ final class Plan
             $retry = config('queue.connections.'.$connection.'.retry_after', 60);
             $blocking = config('queue.connections.'.$connection.'.block_for');
             if ($values['workers'] < $values['min_workers'] || $values['workers'] > $values['max_workers']
-                || ! is_int($grace) || $grace <= $values['timeout'] || $grace > 300
+                || ! is_int($grace) || $grace <= $values['timeout'] || $grace > self::MAX_GRACE_SECONDS
                 || ! is_int($retry) || $retry <= $values['timeout']
                 || ($blocking !== null && (! is_int($blocking) || $blocking < 1 || $blocking >= $grace))) {
                 throw new InvalidArgumentException('Native worker range invalid, or timeout must be below grace/retry_after with finite Redis blocking.');

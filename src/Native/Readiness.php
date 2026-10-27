@@ -23,6 +23,9 @@ final class Readiness
             app(Plan::class)->runtime();
             $add('configuration', 'pass', 'Native pool, worker budget, timeout and retry_after settings validate.');
         } catch (Throwable) { $pools = []; $add('configuration', 'error', 'Native configuration is invalid. Run current:supervise --check after selecting native mode; review pools, current-redis drivers, instance, state path and timeout limits.'); }
+        if (array_filter($pools, fn ($pool) => $pool['timeout'] === 0)) {
+            $add('worker_timeout', 'warning', 'A pool disables the Laravel worker alarm. Review job deadlines and retry_after; shutdown grace is still finite.');
+        }
         $redisNames = [];
         $captured = $pools && ! array_filter($pools, fn ($pool) => ! in_array($pool['connection'], (array) config('current.queue_connections', []), true));
         $add('capture_connections', $captured ? 'pass' : 'error', 'Every validated native queue connection must be included in current.queue_connections.');

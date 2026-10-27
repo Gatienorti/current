@@ -248,3 +248,38 @@ func TestHealthWriteFailureStopsOwnedWorkers(t *testing.T) {
 	}
 	lock.Close()
 }
+
+func TestLongGraceConfigurationAndPromptCooperativeShutdown(t *testing.T) {
+	c := fixtureConfig(t)
+	c.Pools = c.Pools[:1]
+	c.GraceSeconds = 2530
+	if err := c.validate(); err != nil {
+		t.Fatal(err)
+	}
+	c.GraceSeconds = maxGraceSeconds + 1
+	if c.validate() == nil {
+		t.Fatal("unbounded grace accepted")
+	}
+	c.GraceSeconds = 2530
+	pids := filepath.Join(t.TempDir(), "pids")
+	t.Setenv("SUPERVISOR_TEST_PIDS", pids)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- runConfig(ctx, c) }()
+	ids := waitPIDs(t, pids, 1)
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		// Only this test's owned child; prevent a long configured grace leaking it.
+		_ = syscall.Kill(ids[0], syscall.SIGKILL)
+		t.Fatal("cooperative exit waited for the configured long deadline")
+	}
+	if syscall.Kill(ids[0], 0) == nil {
+		t.Fatal("child survived long-grace shutdown")
+	}
+}

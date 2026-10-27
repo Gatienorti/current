@@ -29,7 +29,7 @@ final class ListenCommand extends Command
             }
             if ($environment = $this->option('env')) { $command[] = '--env='.$environment; }
             $grace = config('current.native.grace_seconds', 90);
-            if (! is_int($grace) || $grace < 1 || $grace > 300) { throw new \RuntimeException('Configure a valid native grace period before watching.'); }
+            if (! is_int($grace) || $grace < 1 || $grace > \Current\Native\Plan::MAX_GRACE_SECONDS) { throw new \RuntimeException('Configure a valid native grace period before watching.'); }
             $this->trap([SIGINT, SIGTERM, SIGQUIT], fn () => $listener->stop());
             $this->info('Watching application source with bounded polling.');
 

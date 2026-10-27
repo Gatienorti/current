@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Redis;
 final class FixtureJob implements ShouldQueue
 {
     use Queueable;
+    public ?int $timeout = null;
     public function __construct(public string $id, public int $micros = 5000, public string $scenario = 'ok') {}
     public function currentArguments(): array { return ['scenario' => $this->scenario, 'token' => 'fixture-secret']; }
     public function currentMetadata(): array { return ['fixture' => true]; }

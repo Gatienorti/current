@@ -77,6 +77,13 @@ final class HorizonMigration
                 if (! is_string($option->queue) || strlen($option->queue) > 4096 || ! is_int($option->minProcesses)) { throw new \InvalidArgumentException; }
                 $balance = match ($option->balance) { false, 'off', '' => 'fixed', 'simple' => 'simple', 'auto' => 'auto', default => throw new \InvalidArgumentException };
                 $queues = explode(',', $option->queue);
+                $configuredMaximum = $option->maxProcesses;
+                // Supervisor::scale promotes maxProcesses to the number of process pools.
+                // Preview that existing Horizon behavior; native group caps stay explicit.
+                $effectiveMaximum = max($configuredMaximum, $balance === 'fixed' ? 1 : count($queues));
+                if ($effectiveMaximum !== $configuredMaximum) {
+                    $report = $this->issue($report, 'warning', 'horizon_queue_floor', 'Supervisor '.$name.': Horizon raises its effective maximum from '.$configuredMaximum.' to '.$effectiveMaximum.' for one process pool per queue. The preview uses that same explicit maximum; source configuration is unchanged.');
+                }
                 $minimum = $balance === 'fixed' ? $option->minProcesses : count($queues) * $option->minProcesses;
                 // Horizon starts at the midpoint and rounds each balanced queue share down.
                 // Native cannot start below its per-queue minimum; report that boundary explicitly.
@@ -90,14 +97,17 @@ final class HorizonMigration
                     $backoff = array_map('intval', explode(',', $backoff));
                 }
                 $pool = ['connection' => $option->connection, 'queues' => $queues, 'balance' => $balance,
-                    'workers' => $workers, 'min_workers' => $option->minProcesses, 'max_workers' => $option->maxProcesses,
+                    'workers' => $workers, 'min_workers' => $option->minProcesses, 'max_workers' => $effectiveMaximum,
                     'timeout' => $option->timeout, 'memory' => $option->memory, 'tries' => $option->maxTries,
                     'sleep' => $option->sleep, 'backoff' => $backoff, 'max_jobs' => $option->maxJobs, 'max_time' => $option->maxTime,
                     'force' => $option->force, 'nice' => $option->nice, 'rest' => $option->rest,
                     'balance_cooldown' => $option->balanceCooldown, 'balance_shift' => $option->balanceMaxShift];
-                if ($pool['timeout'] < 1 || $pool['timeout'] > 299) {
-                    $report = $this->issue($report, 'error', 'timeout', 'Supervisor '.$name.' has timeout '.$pool['timeout'].'s, outside the native 1–299 second limit. It has not been shortened; keep this workload on Horizon until that requirement is supported or explicitly changed.');
+                if ($pool['timeout'] < 0 || $pool['timeout'] > Plan::MAX_TIMEOUT_SECONDS) {
+                    $report = $this->issue($report, 'error', 'timeout', 'Supervisor '.$name.' has a timeout outside the native 0–86400 second range. It has not been shortened. Zero disables the Laravel worker alarm and requires operator review.');
                 }
+                if ($pool['timeout'] === 0) { $report = $this->issue($report, 'warning', 'unlimited_timeout', 'Supervisor '.$name.' disables the Laravel worker timeout. Review job deadlines and retry_after; shutdown grace remains finite.'); }
+                $retryAfter = config('queue.connections.'.$pool['connection'].'.retry_after', 60);
+                if (! is_int($retryAfter) || $retryAfter <= $pool['timeout']) { $report = $this->issue($report, 'error', 'retry_after', 'Supervisor '.$name.' needs its queue retry_after to exceed the worker timeout. Application queue settings were not changed.'); }
                 if ($minimum > $pool['max_workers']) {
                     $report = $this->issue($report, 'error', 'worker_range', 'Supervisor '.$name.' requires at least '.$minimum.' workers for its queue minima but has maximum '.$pool['max_workers'].'. Review the queue count and worker budget; no allocation is silently increased.');
                 }
@@ -106,9 +116,10 @@ final class HorizonMigration
                 if (! in_array($driver, ['redis', 'current-redis'], true)) { throw new \InvalidArgumentException; }
                 $report['queue_changes'][$pool['connection']] = ['from' => $driver, 'to' => 'current-redis'];
                 $native['pools'][$name] = $pool;
-                $budget += $option->maxProcesses;
+                $budget += $effectiveMaximum;
                 if (! is_int($pool['timeout'])) { throw new \InvalidArgumentException; }
-                $native['grace_seconds'] = max($native['grace_seconds'], min(300, $pool['timeout'] + 30));
+                $reservationGrace = is_int($retryAfter) ? $retryAfter + 30 : 0;
+                $native['grace_seconds'] = max($native['grace_seconds'], min(Plan::MAX_GRACE_SECONDS, max($pool['timeout'] + 30, $reservationGrace)));
             }
             $native['worker_limit'] = $budget;
             if (! $native['pools']) { throw new \InvalidArgumentException; }
@@ -125,7 +136,7 @@ final class HorizonMigration
             } finally { config()->set($saved); }
             $report['config'] = ['native' => $native, 'queue_connections' => array_keys($report['queue_changes'])];
             $report['valid'] = true;
-            $report = $this->issue($report, 'warning', 'semantics', 'Review initial worker counts, per-queue minima and the derived grace/budget. Transient balancing, metric windows, retention and retry identities differ from Horizon.');
+            $report = $this->issue($report, 'warning', 'semantics', 'Review initial worker counts, queue minima and the derived grace/budget. Grace accounts for pool deadlines and configured reservations within the finite supported cap; review job-level overrides too. Transient balancing, metric windows, retention and retry identities differ from Horizon.');
             $report = $this->issue($report, 'warning', 'manual', 'Retention, monitored tags, silencing, wait alerts and notification routes need explicit Current configuration; they are not imported. Merge queue_connections with existing capture connections.');
         } catch (Throwable) {
             $report = $this->issue($report, 'error', 'validation', 'The selected supervisors cannot satisfy the native pool, worker budget, retry_after or timeout limits. Review the source settings with the native setup guide.');

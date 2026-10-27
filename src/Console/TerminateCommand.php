@@ -10,7 +10,7 @@ use Throwable;
 /** Deployment shutdown reads existing ownership; it must not validate new worker plans. */
 final class TerminateCommand extends Command
 {
-    protected $signature = 'current:terminate {--instance= : One local instance; defaults to configured instance} {--all : All instances in this application state directory} {--wait=0 : Wait up to this many seconds for confirmed shutdown (0-300)}';
+    protected $signature = 'current:terminate {--instance= : One local instance; defaults to configured instance} {--all : All instances in this application state directory} {--wait=0 : Wait up to this many seconds for confirmed shutdown (0-86430)}';
     protected $description = 'Request graceful shutdown of existing local Current supervisors.';
 
     public function handle(Supervisor $supervisor): int
@@ -19,8 +19,8 @@ final class TerminateCommand extends Command
         try {
             if (! ExecutionBackend::native()) { throw new \RuntimeException('Select the native execution backend first.'); }
             $wait = filter_var($this->option('wait'), FILTER_VALIDATE_INT);
-            if ($wait === false || $wait < 0 || $wait > 300 || ($this->option('all') && $this->option('instance') !== null)) {
-                throw new \RuntimeException('Choose one instance or --all, with --wait between 0 and 300 seconds.');
+            if ($wait === false || $wait < 0 || $wait > \Current\Native\Plan::MAX_GRACE_SECONDS || ($this->option('all') && $this->option('instance') !== null)) {
+                throw new \RuntimeException('Choose one instance or --all, with --wait between 0 and 86430 seconds.');
             }
             $directory = config('current.native.state_directory');
             if (! is_string($directory) || ! str_starts_with($directory, '/') || str_contains($directory, "\0") || is_link($directory)

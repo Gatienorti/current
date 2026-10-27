@@ -92,7 +92,7 @@ final class NativeMigrationTest extends TestCase
         config()->set('horizon.environments', ['testing' => []]);
         foreach ([
             ['timeout' => 10], // Above the actual queue retry_after.
-            ['maxProcesses' => 257], ['maxProcesses' => 2], // Budget/range cannot meet three queue minima.
+            ['maxProcesses' => 257], ['minProcesses' => 3, 'maxProcesses' => 4],
             ['minProcesses' => 'one'], ['balance' => 'unrecognized'],
             ['queue' => ['duplicate', 'duplicate']], ['backoff' => ['not-a-number']],
             ['workersName' => 'custom-worker'], ['directory' => '/private/other-app'],
@@ -153,5 +153,46 @@ final class NativeMigrationTest extends TestCase
         $this->assertTrue($report['valid']);
         $this->assertSame(2, $report['config']['native']['pools']['pair']['workers']);
         $this->assertContains('startup_minimum', array_column($report['issues'], 'code'));
+    }
+
+    public function test_queue_floor_matches_actual_horizon_scale_without_launching_processes(): void
+    {
+        $reference = (new \ReflectionClass(\Laravel\Horizon\Supervisor::class))->newInstanceWithoutConstructor();
+        $reference->options = new \Laravel\Horizon\SupervisorOptions('oracle', 'redis', 'one,two', balance: 'auto', maxProcesses: 1, minProcesses: 1);
+        $reference->processPools = collect(array_map(fn ($queue) => new class($queue) {
+            public function __construct(private string $name) {}
+            public function queue(): string { return $this->name; }
+            public function scale($count): void {} // Observe the controller without spawning workers.
+        }, ['one', 'two']));
+        $reference->scale(1);
+        $this->assertSame(2, $reference->options->maxProcesses);
+        config()->set('horizon.defaults', []);
+        config()->set('horizon.environments', ['testing' => ['routes' => ['connection' => 'redis', 'queue' => ['one', 'two'], 'balance' => 'auto', 'maxProcesses' => 1, 'timeout' => 2]]]);
+        $before = config()->all();
+        $report = app(HorizonMigration::class)->preview();
+        $this->assertTrue($report['valid']);
+        $this->assertSame($reference->options->maxProcesses, $report['config']['native']['pools']['routes']['max_workers']);
+        $this->assertSame(2, $report['config']['native']['worker_limit']);
+        $this->assertContains('horizon_queue_floor', array_column($report['issues'], 'code'));
+        $this->assertSame($before, config()->all());
+    }
+
+    public function test_long_timeouts_and_disabled_alarm_are_preserved_with_finite_grace(): void
+    {
+        config()->set('queue.connections.redis.retry_after', 2700);
+        config()->set('horizon.defaults.orders.timeout', 2500);
+        $before = config()->all();
+        $report = app(HorizonMigration::class)->preview();
+        $this->assertTrue($report['valid']);
+        $this->assertSame(2500, $report['config']['native']['pools']['orders']['timeout']);
+        $this->assertSame(2730, $report['config']['native']['grace_seconds']);
+        $this->assertSame($before, config()->all());
+        config()->set('horizon.defaults.orders.timeout', 0);
+        $report = app(HorizonMigration::class)->preview();
+        $this->assertTrue($report['valid']);
+        $this->assertSame(0, $report['config']['native']['pools']['orders']['timeout']);
+        $this->assertContains('unlimited_timeout', array_column($report['issues'], 'code'));
+        config()->set('horizon.defaults.orders.timeout', Plan::MAX_TIMEOUT_SECONDS + 1);
+        $this->assertFalse(app(HorizonMigration::class)->preview()['valid']);
     }
 }

@@ -77,6 +77,32 @@ final class NativeProvisioningTest extends TestCase
         }
     }
 
+    public function test_long_worker_deadlines_require_longer_grace_and_redis_reservation(): void
+    {
+        config()->set('current.native.defaults', []);
+        config()->set('current.native.pools', ['exports' => ['connection' => 'redis', 'queues' => ['exports'], 'workers' => 1, 'timeout' => 2500]]);
+        config()->set('current.native.grace_seconds', 2530);
+        config()->set('queue.connections.redis.retry_after', 2700);
+        $this->assertContains('--timeout=2500', app(Plan::class)->runtime()['pools'][0]['command']);
+        $this->assertSame(2530, app(Plan::class)->runtime()['grace_seconds']);
+        foreach ([['timeout' => 2500, 'grace' => 2500, 'retry' => 2700],
+            ['timeout' => 2500, 'grace' => 2530, 'retry' => 2500],
+            ['timeout' => Plan::MAX_TIMEOUT_SECONDS + 1, 'grace' => Plan::MAX_GRACE_SECONDS, 'retry' => 90000],
+            ['timeout' => 2500, 'grace' => Plan::MAX_GRACE_SECONDS + 1, 'retry' => 2700]] as $invalid) {
+            config()->set('current.native.pools.exports.timeout', $invalid['timeout']);
+            config()->set('current.native.grace_seconds', $invalid['grace']);
+            config()->set('queue.connections.redis.retry_after', $invalid['retry']);
+            $this->assertSame(1, Artisan::call('current:supervise', ['--check' => true]));
+        }
+        config()->set('current.native.pools.exports.timeout', 0);
+        config()->set('current.native.grace_seconds', 10);
+        $this->assertContains('--timeout=0', app(Plan::class)->runtime()['pools'][0]['command']);
+        config()->set('current.native.pools.exports.timeout', Plan::MAX_TIMEOUT_SECONDS);
+        config()->set('current.native.grace_seconds', Plan::MAX_GRACE_SECONDS);
+        config()->set('queue.connections.redis.retry_after', 90000);
+        $this->assertSame(Plan::MAX_TIMEOUT_SECONDS, app(Plan::class)->pools()[0]['timeout']);
+    }
+
     public function test_explicit_launcher_environment_is_forwarded_to_every_worker(): void
     {
         $this->assertSame(0, Artisan::call('current:supervise', ['--check' => true, '--env' => 'staging']));

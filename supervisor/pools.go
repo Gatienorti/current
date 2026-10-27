@@ -19,6 +19,8 @@ import (
 	"time"
 )
 
+const maxGraceSeconds = 86430
+
 type Pool struct {
 	Connection string   `json:"connection,omitempty"`
 	Queues     []string `json:"queues,omitempty"`
@@ -75,7 +77,7 @@ func (c Config) workerLimit() int {
 	return c.WorkerLimit
 }
 func (c Config) validate() error {
-	if c.WorkerLimit < 0 || c.WorkerLimit > 256 || c.Version != 1 || !validName.MatchString(c.Instance) || !filepath.IsAbs(c.StateDirectory) || strings.ContainsRune(c.StateDirectory, 0) || c.GraceSeconds < 1 || c.GraceSeconds > 300 || len(c.Pools) == 0 || len(c.Pools) > 32 {
+	if c.WorkerLimit < 0 || c.WorkerLimit > 256 || c.Version != 1 || !validName.MatchString(c.Instance) || !filepath.IsAbs(c.StateDirectory) || strings.ContainsRune(c.StateDirectory, 0) || c.GraceSeconds < 1 || c.GraceSeconds > maxGraceSeconds || len(c.Pools) == 0 || len(c.Pools) > 32 {
 		return errors.New("invalid supervisor configuration")
 	}
 	names := map[string]bool{}
