@@ -99,7 +99,8 @@ final class Autoscaler
                 };
                 $active[] = $pool;
             }
-            $targets = Allocation::targets($active, $weights, $budget);
+            $allocator = ($members[0]['balance_policy'] ?? 'horizon') === 'horizon' ? HorizonAllocation::class : Allocation::class;
+            $targets = $allocator::targets($active, $weights, $budget);
             $changes = [];
             foreach ($active as $pool) {
                 $current = $live->get($pool['name'])['workers'];

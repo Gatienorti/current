@@ -81,10 +81,17 @@ final class Maintenance
                 }
                 $claim = json_decode($store->table('meta')->where('key', 'retry:'.$job->id)->value('value') ?? '{}', true);
                 if (($claim['state'] ?? '') === 'requested') { throw new MaintenanceException('A retry is unconfirmed; resolve it before forgetting this history.'); }
+                $identityClaim = $store->table('native_retry_claims')->where('identity_hash', DispatchIdentity::fingerprint($job->external_id, $job->connection, $job->dispatch_id))
+                    ->where('expires_at', '>', microtime(true))->value('value');
+                if ((json_decode($identityClaim ?? '{}', true)['state'] ?? '') === 'requested') {
+                    throw new MaintenanceException('A retry is unconfirmed; resolve it before forgetting this history.');
+                }
                 if (! $historyOnly) {
+                    $failed = app('queue.failer')->find($current->external_id);
+                    if (is_string($failed->payload ?? null)) { $current->failed_payload_hash = hash('sha256', $failed->payload); }
                     if (! app(Retry::class)->available($current)) { throw new MaintenanceException('Laravel no longer retains this exact failed dispatch; use --history-only to retain its current failed payload.'); }
                     $payloadDeletionAttempted = true;
-                    if (! app('queue.failer')->forget($current->external_id)) { throw new MaintenanceException('Failed-payload removal was not confirmed.'); }
+                    if (! FailedPayloads::forgetExact(app('queue.failer'), $current->external_id, $failed)) { throw new MaintenanceException('Exact failed-payload removal was not confirmed; custom failed providers require --history-only.'); }
                 }
                 $this->deleteCapturedJob($store, $job->id);
                 // Keep a bounded retry claim until the action marker expires, blocking old requests.

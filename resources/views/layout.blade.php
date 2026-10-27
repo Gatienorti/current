@@ -11,6 +11,7 @@
     <script defer src="{{ route('current.steps', ['v' => $lensStepsVersion]) }}"></script>
     <script defer src="{{ route('current.filters', ['v' => $lensFiltersVersion]) }}"></script>
     <script defer src="{{ route('current.refresh', ['v' => $lensRefreshVersion]) }}"></script>
+    <script defer src="{{ route('current.batch-retry', ['v' => $batchRetryVersion]) }}"></script>
     <script defer src="{{ route('current.map', ['v' => $lensMapVersion]) }}"></script>
     <link rel="stylesheet" href="{{ route('current.css', ['v' => $lensCssVersion]) }}">
 </head>

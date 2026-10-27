@@ -18,6 +18,9 @@ return [
         'registry' => ['enabled' => true, 'redis_connection' => 'default', 'namespace' => 'current'],
         'waits' => [], // Opt-in connection:queue => estimated clearance threshold in seconds.
         'wait_cooldown' => 300, // Shared notification-event cooldown, 60–86400 seconds.
+        'notifications' => ['enabled' => false, 'mail' => null, 'slack' => null, 'slack_channel' => null, 'sms' => null],
+        'watch' => ['app', 'bootstrap', 'config', 'database', 'routes', 'composer.json', 'composer.lock', '.env'],
+        'tag_retention_days' => [], // Exact approved tag => days, capped by max_retention_days; new job histories only.
         'metrics' => ['enabled' => true, 'retention_hours' => 24],
         'silenced' => [], // Explicit job class names.
         'silenced_tags' => [], // Explicit tag values.

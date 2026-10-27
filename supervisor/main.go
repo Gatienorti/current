@@ -23,10 +23,19 @@ func worker(ctx context.Context, command []string, grace time.Duration, slot int
 }
 
 func managedWorker(ctx context.Context, command []string, grace time.Duration, slot int, directory string, maxStarts int, observe func(string, int, int)) (result error) {
-	starts := 0
-	report := func(state string, pid int) {
+	return managedWorkerIdentity(ctx, command, grace, slot, directory, maxStarts, func(state string, pid, starts int, identity *ProcessIdentity) {
 		if observe != nil {
 			observe(state, pid, starts)
+		}
+	})
+}
+
+func managedWorkerIdentity(ctx context.Context, command []string, grace time.Duration, slot int, directory string, maxStarts int, observe func(string, int, int, *ProcessIdentity)) (result error) {
+	starts := 0
+	var identity *ProcessIdentity
+	report := func(state string, pid int) {
+		if observe != nil {
+			observe(state, pid, starts, identity)
 		}
 	}
 	defer func() {
@@ -49,14 +58,27 @@ func managedWorker(ctx context.Context, command []string, grace time.Duration, s
 		if maxStarts > 0 && len(recent) >= maxStarts {
 			return fmt.Errorf("slot %d: restart budget exhausted", slot)
 		}
-		cmd := exec.Command(command[0], command[1:]...)
-		cmd.Dir = directory
-		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-		// Isolate each worker's process group; parent death also signals the direct worker.
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGTERM}
+		// A fresh, private per-spawn identity lets manual cleanup reject reused PIDs.
+		token, err := processToken()
+		if err != nil {
+			return err
+		}
 		started := time.Now()
-		if err := cmd.Start(); err != nil {
+		cmd, pidfd, err := startManagedProcess(command, directory, token)
+		if err != nil {
 			return fmt.Errorf("slot %d: %w", slot, err)
+		}
+		identity = nil
+		if pidfd >= 0 {
+			// The descriptor supplied at spawn must still describe a live child
+			// after /proc is read. Bind the proof to the token we generated, never
+			// adopt the identity of a process that has already reused its PID.
+			proof, err := processIdentity(cmd.Process.Pid)
+			exited, pollErr := processFDExited(pidfd)
+			if err == nil && pollErr == nil && !exited && proof.Token == token {
+				identity = proof
+			}
+			syscall.Close(pidfd)
 		}
 		starts++
 		report("running", cmd.Process.Pid)
@@ -109,6 +131,32 @@ func managedWorker(ctx context.Context, command []string, grace time.Duration, s
 	}
 }
 
+func startManagedProcess(command []string, directory, token string) (*exec.Cmd, int, error) {
+	pidfd := -1
+	build := func(proof bool) *exec.Cmd {
+		cmd := exec.Command(command[0], command[1:]...)
+		cmd.Env = append(os.Environ(), processTokenKey+"="+token)
+		cmd.Dir = directory
+		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGTERM}
+		if proof {
+			cmd.SysProcAttr.PidFD = &pidfd
+		}
+		return cmd
+	}
+	cmd := build(true)
+	err := cmd.Start()
+	if err != nil && (errors.Is(err, syscall.ENOSYS) || errors.Is(err, syscall.EINVAL) || errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.EOPNOTSUPP)) {
+		// Go preserves a caller-supplied PidFD even when its own capability
+		// check fails. Retry the ordinary supported worker path, with no proof.
+		// Start errors mean no successfully executing child was returned.
+		pidfd = -1
+		cmd = build(false)
+		err = cmd.Start()
+	}
+	return cmd, pidfd, err
+}
+
 func supervise(ctx context.Context, command []string, workers int, grace time.Duration) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -154,6 +202,13 @@ func watchParent(ctx context.Context, expected int, stop context.CancelFunc) {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "-purge" {
+		if err := purgeCLI(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "-runtime-sample" {
 		if err := runtimeSampleCLI(os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, "runtime observation unavailable")

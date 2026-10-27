@@ -15,7 +15,8 @@
         const snapshots = new Map();
         let enabled = seconds !== 0, timer, inFlight = false, failures = 0, lastUpdated;
         const interacting = () => Boolean(
-            document.querySelector('[data-job-filters] :focus, .filter-dropdown.is-open, .map-panning, .range-picker[open], [data-refresh-picker][open], [data-debug-dialog][open]')
+            document.body.hasAttribute('data-current-batch-active')
+            || document.querySelector('[data-job-filters] :focus, .filter-dropdown.is-open, .map-panning, .range-picker[open], [data-refresh-picker][open], [data-debug-dialog][open]')
             || window.getSelection()?.toString()
             || [...document.querySelectorAll('[data-live-region] details[open]')].some(details =>
                 !details.matches('[data-payload-panel], [data-json-root]') && !details.parentElement.closest('details:not([open])') && details.getClientRects().length > 0)

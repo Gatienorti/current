@@ -15,4 +15,5 @@ return static function (): void {
     $column = $schema->hasColumn('lens_jobs', 'cleared_at'); $actions = $schema->hasTable('lens_job_actions');
     if ($column !== $actions) { throw new RuntimeException('Preview maintenance migration is partial; restore its backup before retrying.'); }
     if (! $column) { (require $migrations.'2026_10_28_000016_add_native_maintenance.php')->up(); }
+    if (! $schema->hasTable('lens_native_retry_claims')) { (require $migrations.'2026_10_28_000017_add_native_retry_claims.php')->up(); }
 };

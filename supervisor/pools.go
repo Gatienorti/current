@@ -135,9 +135,10 @@ func (c Config) validate() error {
 }
 
 type SlotHealth struct {
-	State  string `json:"state"`
-	PID    int    `json:"pid"`
-	Starts int    `json:"starts"`
+	State    string           `json:"state"`
+	PID      int              `json:"pid"`
+	Starts   int              `json:"starts"`
+	Identity *ProcessIdentity `json:"identity,omitempty"`
 }
 type PoolHealth struct {
 	Connection string       `json:"connection,omitempty"`
@@ -167,10 +168,13 @@ type healthState struct {
 	value Health
 }
 
-func (h *healthState) slot(pool, slot int, state string, pid, starts int) {
+func (h *healthState) slot(pool, slot int, state string, pid, starts int, identity *ProcessIdentity) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.value.Pools[pool].Slots[slot] = SlotHealth{state, pid, starts}
+	if pid == 0 {
+		identity = nil
+	}
+	h.value.Pools[pool].Slots[slot] = SlotHealth{State: state, PID: pid, Starts: starts, Identity: identity}
 }
 func (h *healthState) phase(state string) { h.mu.Lock(); defer h.mu.Unlock(); h.value.State = state }
 func healthPath(c Config) string          { return filepath.Join(c.StateDirectory, c.Instance+".json") }

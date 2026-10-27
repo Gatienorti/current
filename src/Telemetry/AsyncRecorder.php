@@ -37,7 +37,7 @@ final class AsyncRecorder
     private function base(array $p, string $connection, string $queue, string $coverage): array
     {
         $dispatchId = Support\DispatchIdentity::fromPayload($p);
-        $cycle = $this->transport->cycle($p['uuid'], $connection, $dispatchId);
+        $cycle = $this->transport->cycle($p['uuid'], $connection, $dispatchId, $p);
         $now = $cycle['first_observed_at'];
         $id = $cycle['id'];
 

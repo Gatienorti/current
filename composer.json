@@ -39,7 +39,10 @@
         "test:compatibility": "php tests/compatibility/run.php"
     },
     "suggest": {
-        "laravel/horizon": "Required for the default Horizon execution backend (^5.30)."
+        "laravel/horizon": "Required for the default Horizon execution backend (^5.30).",
+        "illuminate/notifications": "Optional native queue wait notifications; match your Laravel major version.",
+        "laravel/slack-notification-channel": "Optional native queue wait alerts through Slack (^3.0).",
+        "laravel/vonage-notification-channel": "Optional native queue wait alerts through Vonage (^3.0)."
     },
     "conflict": {
         "laravel/horizon": "<5.30 || >=6.0"

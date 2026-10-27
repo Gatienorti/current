@@ -41,14 +41,14 @@ final class PruneCommand extends Command
             }, 3);
         } while ($removed > 0);
 
-        foreach (['async_receipts' => 'id', 'async_versions' => 'entity', 'async_aliases' => 'id'] as $table => $key) {
+        foreach (['async_receipts' => 'id', 'async_versions' => 'entity', 'async_aliases' => 'id', 'native_retry_claims' => 'identity_hash'] as $table => $key) {
             if (! $store->connection()->getSchemaBuilder()->hasTable('lens_'.$table)) {
                 continue;
             }
             do {
                 $keys = $store->table($table)->where('expires_at', '<=', microtime(true))->limit(500)->pluck($key);
                 if ($keys->isNotEmpty()) {
-                    $store->table($table)->whereIn($key, $keys)->delete();
+                    $store->table($table)->whereIn($key, $keys)->where('expires_at', '<=', microtime(true))->delete();
                 }
             } while ($keys->isNotEmpty());
         }

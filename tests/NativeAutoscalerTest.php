@@ -83,17 +83,21 @@ final class NativeAutoscalerTest extends TestCase
         if (! function_exists('pcntl_fork')) { $this->markTestSkipped('Requires Unix sockets and pcntl.'); }
         config()->set('current.execution_backend', 'native');
         config()->set('queue.connections.redis.driver', 'current-redis');
-        foreach (['size', 'log', 'time', 'missing-time', 'unavailable', 'paused'] as $case) {
+        foreach (['size', 'log', 'time', 'horizon-size', 'horizon-time', 'missing-time', 'unavailable', 'paused'] as $case) {
             $directory = sys_get_temp_dir().'/current-group-'.bin2hex(random_bytes(6)); mkdir($directory, 0700);
-            $strategy = $case === 'missing-time' ? 'time' : (in_array($case, ['paused', 'unavailable'], true) ? 'size' : $case);
+            $strategy = str_starts_with($case, 'horizon-') ? substr($case, 8) : ($case === 'missing-time' ? 'time' : (in_array($case, ['paused', 'unavailable'], true) ? 'size' : $case));
             config()->set('current.native', ['state_directory' => $directory, 'instance' => 'test', 'worker_limit' => 20, 'grace_seconds' => 10,
                 'pools' => ['shared' => ['queues' => ['hot', 'cold'], 'workers' => 10, 'min_workers' => 1, 'max_workers' => 10,
-                    'timeout' => 2, 'balance' => 'auto', 'auto_scale_strategy' => $strategy, 'balance_shift' => 3]]]);
-            if ($case === 'time') {
+                    'timeout' => 2, 'balance' => 'auto', 'auto_scale_strategy' => $strategy, 'balance_shift' => 3,
+                    'balance_policy' => str_starts_with($case, 'horizon-') ? 'horizon' : 'bounded']]]);
+            if (in_array($case, ['time', 'horizon-time'], true)) {
+                // Each policy compares the same fresh runtime evidence, rather
+                // than averaging prior iterations' real callback durations.
+                $this->store()->table('attempts')->update(['finished_at' => null]);
                 foreach (['hot' => 0.1, 'cold' => 10] as $q => $duration) {
                     dispatch((new \Current\Prototype\Jobs\PaymentJob('success'))->onQueue($q));
                     \Illuminate\Support\Facades\Artisan::call('queue:work', ['connection' => 'redis', '--queue' => $q, '--once' => true]);
-                    $id = $this->store()->table('jobs')->where('queue', $q)->value('id'); $end = microtime(true) - 1;
+                    $id = $this->store()->table('jobs')->where('queue', $q)->orderByDesc('first_observed_at')->value('id'); $end = microtime(true) - 1;
                     $this->store()->table('attempts')->where('job_id', $id)->update(['started_at' => $end - $duration, 'finished_at' => $end]);
                 }
             }
@@ -129,9 +133,10 @@ final class NativeAutoscalerTest extends TestCase
                 $this->assertSame(0, pcntl_wexitstatus($status));
                 $requests = json_decode(file_get_contents($directory.'/requests.json'), true);
                 $expected = match ($case) {
-                    'size' => [['cold', 2], ['hot', 8]],
+                    'size', 'horizon-size' => [['cold', 2], ['hot', 8]],
                     'log' => [['cold', 3], ['hot', 7]],
                     'time' => [['hot', 2], ['cold', 8]],
+                    'horizon-time' => [['hot', 3], ['cold', 7]],
                     default => [],
                 };
                 $this->assertSame(array_map(fn ($r) => [$names[$r[0]], $r[1]], $expected), array_map(fn ($r) => [$r['pool'], $r['workers']], $requests), $case);

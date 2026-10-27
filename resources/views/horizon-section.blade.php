@@ -25,7 +25,7 @@
     @endforeach
 </nav>
 @endif
-<div class="panel-heading"><h2>{{ $section === 'metrics' ? ($metricKind === 'jobs' ? 'Job metrics' : 'Queue metrics') : $title }}</h2><span class="subtle">{{ \Current\ExecutionBackend::native() && $section === 'metrics' ? 'Captured attempts · past hour' : 'Read only · existing repository' }}</span></div>
+<div class="panel-heading"><h2>{{ $section === 'metrics' ? ($metricKind === 'jobs' ? 'Job metrics' : 'Queue metrics') : $title }}</h2>@if(\Current\ExecutionBackend::native() && $section === 'metrics')<span class="subtle">Captured attempts · past hour</span>@endif</div>
 @if(!$available)
     <div class="empty-state"><div class="empty-symbol">@include('current::icon', ['iconName' => 'info'])</div><h3>{{ $title === 'Batches' ? 'Batch storage is unavailable' : (\Current\ExecutionBackend::native() ? 'Metrics are unavailable' : 'Horizon data is unavailable') }}</h3><p>{{ $title === 'Batches' ? 'The configured Laravel batch repository could not be read. This lab may not have a batch table yet.' : 'The source could not be read. This is a coverage gap, not evidence that no jobs exist.' }}</p></div>
 @else

@@ -130,7 +130,7 @@ final class Transport
         return $this->client = $r;
     }
 
-    public function cycle(string $uuid, string $connection, ?string $dispatchId = null): array
+    public function cycle(string $uuid, string $connection, ?string $dispatchId = null, array $payload = []): array
     {
         $s = $this->settings();
         $r = $this->clientForSettings($s);
@@ -143,7 +143,7 @@ final class Transport
             }
         }
         // The collector resolves retained history; dispatch never reads history SQL.
-        $expires = $now + max(1, min((int) config('current.retention_days', 7), (int) config('current.max_retention_days', 30))) * 86400;
+        $expires = $now + \Current\Support\JobRetention::seconds($payload);
         $candidate = json_encode(['id' => (string) Str::ulid(), 'first_observed_at' => $now, 'expires_at' => $expires], JSON_THROW_ON_ERROR);
         $value = $r->eval("local old=redis.call('GET',KEYS[1]); if old and cjson.decode(old).expires_at > tonumber(ARGV[1]) then return old end redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); return ARGV[2]", [$key, $now, $candidate, max(60, min((int) ceil($expires - $now) + $s['max_age'], 2 * $s['max_age']))], 1);
 

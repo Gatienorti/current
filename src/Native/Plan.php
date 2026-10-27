@@ -20,13 +20,15 @@ final class Plan
             if (! is_string($name) || ! preg_match('/^[a-z][a-z0-9_-]{0,63}$/D', $name) || ! is_array($pool)) {
                 throw new InvalidArgumentException('Invalid native pool name or configuration.');
             }
-            if (array_diff(array_keys($pool), ['connection', 'queues', 'workers', 'min_workers', 'max_workers', 'timeout', 'memory', 'tries', 'sleep', 'backoff', 'max_jobs', 'max_time', 'rest', 'force', 'nice', 'balance', 'balance_cooldown', 'balance_shift', 'jobs_per_worker', 'target_clear_seconds', 'auto_scale_strategy'])) {
+            if (array_diff(array_keys($pool), ['connection', 'queues', 'workers', 'min_workers', 'max_workers', 'timeout', 'memory', 'tries', 'sleep', 'backoff', 'max_jobs', 'max_time', 'rest', 'force', 'nice', 'balance', 'balance_cooldown', 'balance_shift', 'jobs_per_worker', 'target_clear_seconds', 'auto_scale_strategy', 'balance_policy'])) {
                 throw new InvalidArgumentException('Unknown native pool option.');
             }
             $balance = $pool['balance'] ?? 'fixed';
             if (! in_array($balance, ['fixed', 'size', 'time', 'simple', 'auto'], true)) { throw new InvalidArgumentException('Native balance must be fixed, size, time, simple or auto.'); }
             $strategy = $pool['auto_scale_strategy'] ?? 'time';
             if (! in_array($strategy, ['size', 'time', 'log'], true)) { throw new InvalidArgumentException('Invalid native auto_scale_strategy.'); }
+            $policy = $pool['balance_policy'] ?? 'horizon';
+            if (! in_array($policy, ['horizon', 'bounded'], true)) { throw new InvalidArgumentException('Invalid native balance_policy.'); }
             $connection = $pool['connection'] ?? 'redis';
             if (! is_string($connection) || ! preg_match('/^[a-zA-Z0-9_-]{1,64}$/D', $connection)
                 || config('queue.connections.'.$connection.'.driver') !== 'current-redis') {
@@ -77,7 +79,7 @@ final class Plan
                 throw new InvalidArgumentException('Balanced pools require at least min_workers for every queue.');
             }
             $total += $values['workers'];
-            $pools[] = array_merge(['name' => $name, 'connection' => $connection, 'queues' => $queues, 'balance' => $balance, 'auto_scale_strategy' => $strategy], $values);
+            $pools[] = array_merge(['name' => $name, 'connection' => $connection, 'queues' => $queues, 'balance' => $balance, 'auto_scale_strategy' => $strategy, 'balance_policy' => $policy], $values);
         }
         if ($total > $limit) { throw new InvalidArgumentException('Native allocation exceeds the instance worker_limit.'); }
         return $pools;

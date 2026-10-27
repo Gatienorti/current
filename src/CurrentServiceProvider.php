@@ -38,6 +38,7 @@ final class CurrentServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->app['events']->listen(Events\QueueWaitExceeded::class, Native\WaitNotifications::class);
         $this->app->afterResolving('queue', function ($manager) {
             $manager->addConnector('current-redis', fn () => new Native\RedisConnector($this->app['redis']));
         });
@@ -61,6 +62,7 @@ final class CurrentServiceProvider extends ServiceProvider
             $view->with('lensMapVersion', filemtime(__DIR__.'/../resources/js/map.js'));
             $view->with('lensStepsVersion', filemtime(__DIR__.'/../resources/js/steps.js'));
             $view->with('lensRefreshVersion', filemtime(__DIR__.'/../resources/js/refresh.js'));
+            $view->with('batchRetryVersion', filemtime(__DIR__.'/../resources/js/batch-retry.js'));
             $view->with('lensCssVersion', filemtime(__DIR__.'/../resources/css/lens.css'));
         });
         $this->publishes([__DIR__.'/../config/current.php' => config_path('current.php')], 'current-config');
@@ -100,6 +102,7 @@ final class CurrentServiceProvider extends ServiceProvider
             Route::get('/assets/steps.js', fn () => response(file_get_contents(__DIR__.'/../resources/js/steps.js'), 200, ['Content-Type' => 'text/javascript', 'Cache-Control' => 'public, max-age=3600']))->name('steps');
             Route::get('/assets/map.js', fn () => response(file_get_contents(__DIR__.'/../resources/js/map.js'), 200, ['Content-Type' => 'text/javascript', 'Cache-Control' => 'public, max-age=3600']))->name('map');
             Route::get('/assets/refresh.js', fn () => response(file_get_contents(__DIR__.'/../resources/js/refresh.js'), 200, ['Content-Type' => 'text/javascript', 'Cache-Control' => 'public, max-age=3600']))->name('refresh');
+            Route::get('/assets/batch-retry.js', fn () => response(file_get_contents(__DIR__.'/../resources/js/batch-retry.js'), 200, ['Content-Type' => 'text/javascript', 'Cache-Control' => 'public, max-age=3600']))->name('batch-retry');
             Route::post('/jobs/{id}/retry', Http\RetryController::class)->name('retry')->where('id', '[A-Z0-9]{26}');
             Route::get('/jobs/{id}', [Http\JobsController::class, 'show'])->name('show')->where('id', '[A-Z0-9]{26}');
         });
@@ -138,7 +141,7 @@ final class CurrentServiceProvider extends ServiceProvider
                 }
             });
         }
-        $this->commands([Console\ClearCommand::class, Console\ForgetCommand::class, Console\ClearMetricsCommand::class, Console\TerminateCommand::class, Console\RuntimeSnapshotCommand::class, Console\MonitorCommand::class, Console\SnapshotCommand::class, Console\SuperviseCommand::class, Console\PruneCommand::class, Console\CollectCommand::class, Console\CollectorConfigCommand::class, Console\InstallCollectorCommand::class, Console\TelemetryStatusCommand::class, Console\InstallCommand::class]);
+        $this->commands([Console\ListenCommand::class, Console\PurgeCommand::class, Console\ClearCommand::class, Console\ForgetCommand::class, Console\ClearMetricsCommand::class, Console\TerminateCommand::class, Console\RuntimeSnapshotCommand::class, Console\MonitorCommand::class, Console\SnapshotCommand::class, Console\SuperviseCommand::class, Console\PruneCommand::class, Console\CollectCommand::class, Console\CollectorConfigCommand::class, Console\InstallCollectorCommand::class, Console\TelemetryStatusCommand::class, Console\InstallCommand::class]);
         $this->app->afterResolving(Schedule::class, function (Schedule $schedule) {
             $schedule->command('current:prune')->hourly();
             $schedule->command('current:monitor')->everyMinute()->withoutOverlapping(2)
