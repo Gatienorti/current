@@ -16,7 +16,7 @@ final class NativeAccessTest extends TestCase
         $this->get('/current/monitoring')->assertForbidden();
         Gate::define('viewCurrent', fn ($user) => $user->is_admin);
         $this->app->bind(HorizonAdapter::class, fn () => throw new \RuntimeException('Native UI must not resolve Horizon'));
-        $this->get('/current')->assertOk()->assertSee('Worker status unavailable')->assertDontSee('Jobs Per Minute');
+        $this->get('/current')->assertOk()->assertSee('Worker status unavailable')->assertSee('Jobs Per Minute')->assertSee('Captured completed attempts / minute');
         $this->get('/current/monitoring')->assertOk();
         $this->app['auth']->forgetGuards();
         $this->get('/current')->assertForbidden();

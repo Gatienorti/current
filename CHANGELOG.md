@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Native dashboards now include all eight operational summary cards, guarded source states and valid split-pool controls. Queue inventory live counts refresh automatically.
+- Completion rates retain jobs with unavailable duration data; runtime averages and missing metric windows remain explicitly unavailable. Workload estimates distinguish consuming capacity from draining processes.
 - Native wait alerts can route to opt-in Laravel mail, Slack and Vonage notifications while preserving custom event listeners and shared cooldowns.
 - Native batch retries can include verified Laravel failures absent from Current history. One user action continues bounded chunks, with pause and explicit recovery after uncertain requests. Durable dispatch claims survive captured-history pruning; exact database payload cleanup preserves concurrently replaced failures.
 - `current:listen` watches application source and drains workers before restart. `current:purge` uses recorded process identity and Linux pidfds to clean up proven orphan workers while preserving active instances.

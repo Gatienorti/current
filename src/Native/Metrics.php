@@ -86,7 +86,7 @@ final class Metrics
         for ($bucket = $start; $bucket < $end; $bucket += 300) {
             $row = $metrics->get($bucket); $available = $windows->has($bucket) && $bucket + 300 > $reset;
             $series[] = ['at' => $bucket, 'partial' => $reset > $bucket && $reset < $bucket + 300, 'available' => $available, 'completed' => $available ? (int) ($row->completed ?? 0) : null,
-                'failed' => $available ? (int) ($row->failed ?? 0) : null, 'duration' => $row?->runtime_ms === null ? null : (float) $row->runtime_ms,
+                'failed' => $available ? (int) ($row->failed ?? 0) : null, 'duration' => ! $available || $row?->runtime_ms === null ? null : (float) $row->runtime_ms,
                 'duration_samples' => $available ? (int) ($row->duration_samples ?? 0) : null];
         }
         return $series;

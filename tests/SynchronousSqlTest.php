@@ -85,6 +85,58 @@ final class SynchronousSqlTest extends TestCase
         $this->assertSame(1, $this->store()->table('jobs')->count());
     }
 
+    public function test_native_dashboard_and_metric_lists_preserve_counts_runtime_and_reset_on_sql_server(): void
+    {
+        config()->set('current.execution_backend', 'native');
+        $now = (float) time();
+        $sample = function (string $queue, ?string $status, float $finished, float $duration = .25, bool $expired = false) use ($now): void {
+            $id = $this->store()->newJob((string) Str::uuid(), 'redis', $queue, ['data' => ['commandName' => 'DashboardSqlFixture']]);
+            $this->store()->table('jobs')->where('id', $id)->update(['first_observed_at' => $finished, 'observed_at' => $finished,
+                'status' => $status ?? 'pending', 'expires_at' => $expired ? $now - 1 : $now + 86400]);
+            if ($status !== null) {
+                $this->store()->table('attempts')->insert(['id' => (string) Str::ulid(), 'job_id' => $id, 'reported_attempt' => 1,
+                    'worker_id' => 'server-dashboard-fixture', 'status' => $status, 'started_at' => $finished - $duration, 'finished_at' => $finished]);
+            }
+        };
+        $sample('slow', 'completed', $now - 40, 5);
+        $sample('busy', 'completed', $now - 20, .5);
+        $sample('busy', 'completed', $now - 10, -.5);
+        $sample('invalid', 'completed', $now - 5, -.1);
+        $sample('failed', 'failed', $now - 2);
+        $sample('pending', null, $now - 1);
+        $sample('expired', 'completed', $now - 1, 20, true);
+        $sample('old', 'completed', $now - 4001, 100);
+        $local = ['available' => false];
+        $registry = ['available' => true, 'invalid' => 0, 'instances' => []];
+        $workload = ['available' => true, 'partial' => false, 'rows' => []];
+        $dashboard = app(\Current\Native\Dashboard::class);
+        $before = $dashboard->snapshot($local, $registry, $workload, $now);
+        $this->assertTrue($before['counts']['available']);
+        $this->assertSame(['recent' => 6, 'failed' => 1], $before['counts']['data']);
+        $this->assertTrue($before['metrics']['available']);
+        $this->assertSame(4.0, $before['metrics']['data']['rate']);
+        $this->assertSame('slow', $before['metrics']['data']['max_runtime']['queue']);
+        $this->assertEqualsWithDelta(5000, $before['metrics']['data']['max_runtime']['runtime_ms'], .01);
+        $this->assertSame(['connection' => 'redis', 'queue' => 'busy', 'completed' => 2], $before['metrics']['data']['max_throughput']);
+        $page = app(\Current\Native\Sections::class)->page('metrics', 'queues');
+        $this->assertTrue($page['available']);
+        $rows = collect($page['rows'])->keyBy(fn ($row) => $row['cells'][0]);
+        $this->assertSame(2, $rows['redis / busy']['cells'][1]);
+        $this->assertSame('500.0 ms', $rows['redis / busy']['cells'][2]);
+        $this->assertSame(1, $rows['redis / invalid']['cells'][1]);
+        $this->assertSame('—', $rows['redis / invalid']['cells'][2]);
+        app(\Current\Native\Metrics::class)->reset($now - 30);
+        $after = $dashboard->snapshot($local, $registry, $workload, $now);
+        $this->assertTrue($after['metrics']['available']);
+        $this->assertSame($before['counts'], $after['counts']);
+        $this->assertSame(6.0, $after['metrics']['data']['rate']);
+        $this->assertSame('busy', $after['metrics']['data']['max_runtime']['queue']);
+        $this->assertSame(2, $after['metrics']['data']['max_throughput']['completed']);
+        $resetPage = app(\Current\Native\Sections::class)->page('metrics', 'queues');
+        $this->assertTrue($resetPage['available']);
+        $this->assertCount(2, $resetPage['rows']);
+    }
+
     public function test_native_forget_prevents_synchronous_history_recreation_on_sql_server(): void
     {
         config()->set('current.execution_backend', 'native');

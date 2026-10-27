@@ -473,8 +473,8 @@ select:disabled { opacity: 1; cursor: default; background: var(--surface-recesse
 .horizon-stat .stat-caption { font-size: 10px; }
 .horizon-status-dot { flex-shrink: 0; width: 9px; height: 9px; background: var(--muted); border-radius: 50%; }
 .status-running .horizon-status-dot { background: var(--green); box-shadow: 0 0 0 4px var(--green-bg); }
-.status-inactive .horizon-status-dot { background: var(--red); box-shadow: 0 0 0 4px var(--red-bg); }
-.status-paused .horizon-status-dot { background: var(--amber); box-shadow: 0 0 0 4px var(--amber-bg); }
+.status-inactive .horizon-status-dot, .status-failed .horizon-status-dot { background: var(--red); box-shadow: 0 0 0 4px var(--red-bg); }
+.status-paused .horizon-status-dot, .status-pausing .horizon-status-dot, .status-starting .horizon-status-dot, .status-stopping .horizon-status-dot, .status-degraded .horizon-status-dot { background: var(--amber); box-shadow: 0 0 0 4px var(--amber-bg); }
 .split-queue td { background: var(--surface-raised); color: var(--muted); font-size: 11px; }
 @media(max-width: 1050px) {
     .horizon-stat { padding: 16px; }

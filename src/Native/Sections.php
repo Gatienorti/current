@@ -43,11 +43,11 @@ final class Sections
                 $fields = $metricKind === 'jobs' ? ['j.job_class'] : ['j.connection', 'j.queue'];
                 $data = app(Store::class)->table('attempts as a')->join('lens_jobs as j', 'j.id', '=', 'a.job_id')
                     ->where('j.expires_at', '>', microtime(true))->where('a.status', 'completed')->where('a.finished_at', '>=', $since)->where('a.finished_at', '<=', $now)
-                    ->whereColumn('a.finished_at', '>=', 'a.started_at')->select($fields)
-                    ->selectRaw('COUNT(*) as completions, AVG((a.finished_at - a.started_at) * 1000) as runtime')
+                    ->select($fields)
+                    ->selectRaw('COUNT(*) as completions, AVG(CASE WHEN a.started_at IS NOT NULL AND a.finished_at >= a.started_at THEN (a.finished_at - a.started_at) * 1000 END) as runtime')
                     ->groupBy($fields)->orderByDesc('completions')->limit(100)->get();
                 $rows = $data->map(fn ($r) => ['cells' => [$metricKind === 'jobs' ? mb_substr($r->job_class, 0, 240) : $r->connection.' / '.$r->queue,
-                    (int) $r->completions, number_format($r->runtime, 1).' ms', number_format($r->completions / $minutes, 2)],
+                    (int) $r->completions, $r->runtime === null ? '—' : number_format($r->runtime, 1).' ms', number_format($r->completions / $minutes, 2)],
                     'link' => route('current.metrics.'.$metricKind.'.history', $metricKind === 'jobs' ? ['job_class' => $r->job_class] : ['connection' => $r->connection, 'queue' => $r->queue]), 'link_label' => 'View history'])->all();
             }
             return $page + ['rows' => $rows, 'available' => true, 'section' => $section, 'metricKind' => $metricKind];

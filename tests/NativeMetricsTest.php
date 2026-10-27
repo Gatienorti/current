@@ -93,4 +93,22 @@ final class NativeMetricsTest extends TestCase
         $this->assertEquals($before, $this->store()->table('native_metrics')->orderBy('metric_key')->orderBy('bucket')->get()->toArray());
     }
 
+    public function test_missing_window_marker_hides_remaining_metric_values_uniformly(): void
+    {
+        $now = intdiv(time(), 300) * 300 + 20;
+        $job = $this->sample('completed', $now - 30);
+        $metrics = app(Metrics::class);
+        $metrics->snapshot($now);
+        $bucket = intdiv($now - 30, 300) * 300;
+        $before = collect($metrics->series('jobs', [$job->job_class], 1, $now))->firstWhere('at', $bucket);
+        $this->assertTrue($before['available']);
+        $this->assertSame(1, $before['completed']);
+        $this->assertNotNull($before['duration']);
+        // Bounded pruning may remove the marker before this group's row.
+        $this->store()->table('native_metrics')->where('bucket', $bucket)->where('kind', 'window')->delete();
+        $after = collect($metrics->series('jobs', [$job->job_class], 1, $now))->firstWhere('at', $bucket);
+        $this->assertFalse($after['available']);
+        foreach (['completed', 'failed', 'duration', 'duration_samples'] as $field) { $this->assertNull($after[$field]); }
+    }
+
 }
