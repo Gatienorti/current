@@ -41,7 +41,15 @@ func (s *storage) Query(q string, args ...interface{}) (*sql.Rows, error) {
 func (s *storage) Exec(q string, args ...interface{}) (sql.Result, error) {
 	return s.conn.ExecContext(context.Background(), q, args...)
 }
-func (s *storage) Begin() (*sql.Tx, error) { return s.conn.BeginTx(context.Background(), nil) }
+func (s *storage) Begin() (*sql.Tx, error) {
+	var options *sql.TxOptions
+	if mysqlMode {
+		// Missing maintenance rows need InnoDB gap locks. Never inherit a
+		// server's READ COMMITTED default and race a concurrent forget/clear.
+		options = &sql.TxOptions{Isolation: sql.LevelRepeatableRead}
+	}
+	return s.conn.BeginTx(context.Background(), options)
+}
 func (s *storage) Close() {
 	if s.conn != nil {
 		s.conn.Close()
@@ -118,7 +126,7 @@ func openStorage(s Settings) (_ *storage, err error) {
 		if out.conn.QueryRowContext(context.Background(), "SELECT GET_LOCK(?,0)", key).Scan(&owned) != nil || owned != 1 {
 			return nil, errors.New("a collector already owns this database")
 		}
-		for _, t := range []string{"lens_jobs", "lens_attempts", "lens_steps", "lens_tags", "lens_meta", "lens_async_receipts", "lens_async_versions"} {
+		for _, t := range []string{"lens_jobs", "lens_attempts", "lens_steps", "lens_tags", "lens_meta", "lens_async_receipts", "lens_async_versions", "lens_async_aliases", "lens_job_actions"} {
 			var engine string
 			if out.conn.QueryRowContext(context.Background(), "SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?", t).Scan(&engine) != nil || engine != "InnoDB" {
 				return nil, errors.New("Current tables must exist and use InnoDB; run migrations")

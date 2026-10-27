@@ -36,18 +36,19 @@ final class AsyncRecorder
 
     private function base(array $p, string $connection, string $queue, string $coverage): array
     {
-        $cycle = $this->transport->cycle($p['uuid'], $connection);
+        $dispatchId = Support\DispatchIdentity::fromPayload($p);
+        $cycle = $this->transport->cycle($p['uuid'], $connection, $dispatchId);
         $now = $cycle['first_observed_at'];
         $id = $cycle['id'];
 
-        return ['id' => $id, 'external_id' => mb_substr($p['uuid'], 0, 100), 'connection' => mb_substr($connection, 0, 100), 'queue' => mb_substr($queue, 0, 100),
+        return array_merge($dispatchId ? ['dispatch_id' => $dispatchId] : [], ['id' => $id, 'external_id' => mb_substr($p['uuid'], 0, 100), 'connection' => mb_substr($connection, 0, 100), 'queue' => mb_substr($queue, 0, 100),
             'job_class' => mb_substr((string) data_get($p, 'data.commandName', 'Unknown command'), 0, 240), 'status' => 'pending', 'coverage' => $coverage,
             'first_observed_at' => $now, 'observed_at' => $now, 'expires_at' => $cycle['expires_at'],
             'silenced' => is_bool($p['silenced'] ?? null) ? (int) $p['silenced'] : null, 'retry_of' => isset($p['retry_of']) ? mb_substr((string) $p['retry_of'], 0, 100) : null,
             'display_name' => is_string($p['displayName'] ?? null) ? mb_substr($p['displayName'], 0, 240) : null, 'max_tries' => is_int($p['maxTries'] ?? null) && $p['maxTries'] >= 0 ? $p['maxTries'] : null,
             'timeout' => is_int($p['timeout'] ?? null) && $p['timeout'] >= 0 ? $p['timeout'] : null, 'backoff' => is_string($p['backoff'] ?? null) || is_int($p['backoff'] ?? null) ? mb_substr((string) $p['backoff'], 0, 240) : null,
             'retry_until' => is_numeric($p['retryUntil'] ?? null) ? (float) $p['retryUntil'] : null, 'payload_created_at' => is_numeric($p['createdAt'] ?? null) ? (float) $p['createdAt'] : null,
-            'batch_id' => is_string(data_get($p, 'data.batchId')) ? mb_substr($p['data']['batchId'], 0, 100) : null];
+            'batch_id' => is_string(data_get($p, 'data.batchId')) ? mb_substr($p['data']['batchId'], 0, 100) : null]);
     }
 
     private function enabled($connection): bool
@@ -55,16 +56,13 @@ final class AsyncRecorder
         return config('current.enabled') && in_array($connection, config('current.queue_connections', []), true);
     }
 
-    public function pushed($event): void
+    public function enqueued(array $p, string $connection, string $queue): void
     {
-        $this->guard(function () use ($event) {
-            if (! $this->enabled($event->connectionName)) {
-                return;
-            }$p = $event->payload->decoded;
-            if (empty($p['uuid'])) {
+        $this->guard(function () use ($p, $connection, $queue) {
+            if (! $this->enabled($connection) || empty($p['uuid'])) {
                 return;
             }
-            $row = $this->base($p, $event->connectionName, $event->queue, 'observed_enqueue');
+            $row = $this->base($p, $connection, $queue, 'observed_enqueue');
             $this->emit(['job' => $row, 'enqueue' => $row, 'tags' => $this->sanitizer->tags($p['tags'] ?? [])]);
         });
     }
@@ -78,7 +76,8 @@ final class AsyncRecorder
             if (empty($p['uuid'])) {
                 return;
             }
-            $row = $this->base($p, $event->connectionName, $event->queue, 'observed_enqueue');
+            $queue = $event->queue ?? config('queue.connections.'.$event->connectionName.'.queue', 'default');
+            $row = $this->base($p, $event->connectionName, $queue, 'observed_enqueue');
             $details = is_object($event->job) ? app(Support\JobContext::class)->capture($event->job, $p) : [];
             if (in_array($details['arguments_state'] ?? '', ['captured', 'limited']) || in_array($details['metadata_state'] ?? '', ['captured', 'limited'])) {
                 $details['context_captured_at'] = microtime(true);

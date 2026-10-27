@@ -17,6 +17,10 @@ final class InstallCommand extends Command
 
             return self::FAILURE;
         }
+        if (! \Current\ExecutionBackend::native() && ! class_exists(\Laravel\Horizon\Horizon::class)) {
+            $this->error('Install laravel/horizon for the Horizon backend, or explicitly configure CURRENT_EXECUTION_BACKEND=native.');
+            return self::FAILURE;
+        }
         $connection = config('current.connection');
         $database = config("database.connections.{$connection}");
         if (! is_array($database)) {
@@ -44,7 +48,10 @@ final class InstallCommand extends Command
             }
         }
         if (! is_file(config_path('current.php'))) {
-            copy(__DIR__.'/../../config/current.php', config_path('current.php'));
+            if (! @copy(__DIR__.'/../../config/current.php', config_path('current.php'))) {
+                $this->error('Could not publish config/current.php. Prepare a writable config directory or publish the configuration before deployment.');
+                return self::FAILURE;
+            }
             $this->info('Published config/current.php.');
         }
         $exit = $this->call('migrate', [
@@ -56,7 +63,7 @@ final class InstallCommand extends Command
             return $exit;
         }
         $this->info('Current is ready at /'.trim(config('current.path'), '/').'.');
-        $this->line('Access requires an authenticated user allowed by your Horizon gate.');
+        $this->line(\Current\ExecutionBackend::native() ? 'Access requires an authenticated user and an explicit viewCurrent gate.' : 'Access requires an authenticated user allowed by your Horizon gate.');
         $this->line('Run Laravel’s scheduler for hourly pruning; restart long-lived queue workers after installation.');
         $this->line('Job data is redacted before storage. Review config/current.php for capture and tag settings.');
 

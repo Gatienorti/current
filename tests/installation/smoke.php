@@ -56,7 +56,7 @@ config()->set([
 ]);
 check(Artisan::call('current:install') === 0, 'installer through discovered provider');
 check(Artisan::call('current:install') === 0, 'repeat installation');
-check(app(Store::class)->connection()->table('migrations')->count() === 11, 'all eleven package migrations');
+check(app(Store::class)->connection()->table('migrations')->count() === 16, 'all sixteen package migrations');
 check(! config('current.webhooks.enabled') && ! config('current.webhooks.outgoing.enabled') && ! config('current.broadcasts.enabled'), 'optional collectors default off');
 check(! class_exists(ReverbServiceProvider::class), 'jobs-only install needs no Reverb');
 check(config('current.path') === 'current', 'canonical Current path');

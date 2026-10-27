@@ -15,6 +15,9 @@ $app->make(Kernel::class)->bootstrap();
 if (Artisan::call('migrate', ['--force' => true]) !== 0) {
     throw new RuntimeException(Artisan::output());
 }
+if (Artisan::call('current:install', ['--force' => true]) !== 0) {
+    throw new RuntimeException(Artisan::output());
+}
 $fixtures = Fixtures::seed();
 $work = function (string $queue) {
     $exit = Artisan::call('queue:work', ['connection' => 'redis', '--queue' => $queue, '--once' => true, '--sleep' => 0]);

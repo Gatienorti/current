@@ -173,6 +173,9 @@ h1 { margin: 0 0 8px; font-size: 31px; font-weight: 650; line-height: 1.2; lette
 .panel { margin-bottom: 22px; overflow: hidden; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 58px; padding: 17px 21px; border-bottom: 1px solid var(--line); }
 .panel-heading h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 14px; font-weight: 600; }
+.batch-search { justify-content: flex-start; align-items: flex-end; flex-wrap: wrap; }
+.batch-search-field { flex: 1 1 220px; max-width: 420px; }
+.batch-search-field label { font-size: 12px; color: var(--muted); }
 .subtle { color: var(--muted); font-size: 11px; font-weight: 400; }
 .filter-icon { color: var(--accent-text); font-size: 19px; line-height: 1; }
 .filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; gap: 15px 14px; padding: 19px 21px; }
@@ -519,7 +522,7 @@ select:disabled { opacity: 1; cursor: default; background: var(--surface-recesse
 .metric-tab.active { border-bottom-color: var(--accent); color: var(--accent-text); }
 
 /* Attempt selection, observed steps and one focused inspector. */
-.status-unknown, .status-unfinished { color: var(--muted); background: var(--surface-raised); border-color: var(--line-strong); }
+.status-unknown, .status-unfinished, .status-cleared { color: var(--muted); background: var(--surface-raised); border-color: var(--line-strong); }
 .history-indicator { display: block; margin-top: 7px; color: var(--amber, var(--accent-text)); font-size: 10px; line-height: 1.5; }
 .observation-notice { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; margin-bottom: 22px; padding: 14px 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-raised); color: var(--muted); font-size: 12px; line-height: 1.7; }
 .observation-notice .history-indicator { margin: 0; font-size: 12px; font-weight: 600; }

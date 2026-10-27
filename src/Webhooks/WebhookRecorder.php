@@ -96,10 +96,14 @@ final class WebhookRecorder
             return;
         }
         $this->guard(function () use ($request, $event) {
-            $uuid = $event->payload()['uuid'] ?? null;
-            $job = $uuid ? $this->store->findCycle($uuid, $event->connectionName) : null;
-            if ($job && $this->store->table('webhook_jobs')->where('receipt_id', $request->attributes->get('current.webhook.id'))->count() < 100) {
-                $this->store->table('webhook_jobs')->insertOrIgnore(['receipt_id' => $request->attributes->get('current.webhook.id'), 'job_id' => $job->id]);
+            $payload = $event->payload();
+            $uuid = $payload['uuid'] ?? null;
+            $dispatch = \Current\Support\DispatchIdentity::fromPayload($payload);
+            $jobId = $uuid ? (config('current.telemetry.driver') === 'redis'
+                ? app(\Current\Telemetry\Transport::class)->cycle($uuid, $event->connectionName, $dispatch)['id']
+                : $this->store->findCycle($uuid, $event->connectionName, $dispatch)?->id) : null;
+            if ($jobId && $this->store->table('webhook_jobs')->where('receipt_id', $request->attributes->get('current.webhook.id'))->count() < 100) {
+                $this->store->table('webhook_jobs')->insertOrIgnore(['receipt_id' => $request->attributes->get('current.webhook.id'), 'job_id' => $jobId]);
             }
         });
     }

@@ -30,7 +30,7 @@ foreach ($names as $name) {
     $row = $matrix[$name];
     $directory = sys_get_temp_dir().'/current-'.$name.'-'.bin2hex(random_bytes(4));
     mkdir($directory, 0700, true);
-    foreach (['bootstrap.php', 'phpunit.xml', 'tests', 'prototype', 'database', 'collector'] as $entry) {
+    foreach (['bootstrap.php', 'phpunit.xml', 'tests', 'prototype', 'database', 'collector', 'supervisor'] as $entry) {
         $source = $root.'/'.$entry;
         $files = is_dir($source)
             ? new RecursiveIteratorIterator(new RecursiveDirectoryIterator($source, FilesystemIterator::SKIP_DOTS))
@@ -45,7 +45,7 @@ foreach ($names as $name) {
                 mkdir(dirname($target), 0700, true);
             }
             copy($file->getPathname(), $target);
-            if ($relative === 'collector/current-collector') {
+            if (in_array($relative, ['collector/current-collector', 'supervisor/current-supervisor'], true)) {
                 chmod($target, 0755);
             }
         }

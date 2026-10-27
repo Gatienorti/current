@@ -1,6 +1,6 @@
 @switch($field)
     @case('status')
-        <div class="filter-field"><label for="filter-status">Status</label><select id="filter-status" name="status" data-filter-dropdown><option value="">Any status</option>@foreach(['pending','processing','completed','failed','unknown'] as $value)<option @selected(($filters['status'] ?? '') === $value) value="{{ $value }}">{{ ucfirst($value) }}</option>@endforeach</select></div>
+        <div class="filter-field"><label for="filter-status">Status</label><select id="filter-status" name="status" data-filter-dropdown><option value="">Any status</option>@foreach(['pending','processing','completed','failed','unknown','cleared'] as $value)<option @selected(($filters['status'] ?? '') === $value) value="{{ $value }}">{{ ucfirst($value) }}</option>@endforeach</select></div>
         @break
     @case('history')
         <div class="filter-field"><label for="filter-history">History</label><select id="filter-history" name="history" data-filter-dropdown><option value="">Any history</option>@foreach(['unfinished' => 'Unfinished attempts', 'overlapping' => 'Multiple open attempts', 'partial' => 'Enqueue not observed'] as $value => $label)<option @selected(($filters['history'] ?? '') === $value) value="{{ $value }}">{{ $label }}</option>@endforeach</select></div>

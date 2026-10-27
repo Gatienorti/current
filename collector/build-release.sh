@@ -12,6 +12,8 @@ CGO_ENABLED=1 go build -trimpath -ldflags "-s -w -linkmode external -extldflags 
 # Preserve this project's and linked modules' license notices with each download.
 notice="dist/LICENSES-linux-$arch.txt"
 cat LICENSE > "$notice"
+printf '\n\nGo standard library/runtime\n' >> "$notice"
+cat "$(go env GOROOT)/LICENSE" >> "$notice"
 go mod download
 go list -m -f '{{if not .Main}}{{.Path}} {{.Version}} {{.Dir}}{{end}}' all | while read -r module module_version directory; do
   [ -n "$directory" ] || continue

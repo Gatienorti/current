@@ -20,6 +20,7 @@ import (
 )
 
 type Settings struct {
+	Protocol int         `json:"protocol"`
 	SQL      SQLSettings `json:"sql"`
 	Address  string      `json:"address"`
 	Username string      `json:"username"`
@@ -41,7 +42,7 @@ var version = "dev"
 
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == "--version" {
-		json.NewEncoder(os.Stdout).Encode(map[string]interface{}{"name": "current-collector", "version": version, "protocol": 1, "os": runtime.GOOS, "arch": runtime.GOARCH})
+		json.NewEncoder(os.Stdout).Encode(map[string]interface{}{"name": "current-collector", "version": version, "protocol": 1, "identity_protocol": 2, "maintenance_protocol": 1, "laravel_bootstrap": bootstrapCapability(), "os": runtime.GOOS, "arch": runtime.GOARCH})
 		return
 	}
 	if e := run(); e != nil {
@@ -50,27 +51,34 @@ func main() {
 	}
 }
 func run() error {
-	if len(os.Args) != 2 {
-		return errors.New("usage: current-collector <private-config-file>")
-	}
-	var f *os.File
-	var e error
-	if os.Args[1] == "-" {
-		f = os.Stdin
-	} else {
-		f, e = os.Open(os.Args[1])
-	}
-	if e != nil {
-		return errors.New("configuration unavailable")
-	}
-	var s Settings
-	e = json.NewDecoder(io.LimitReader(f, 65536)).Decode(&s)
-	f.Close()
-	if e != nil || s.Prefix == "" || s.Address == "" || s.MaxAge < 60 || s.MaxAge > 86400 || s.MaxBytes < 4096 || s.MaxBytes > 262144 {
-		return errors.New("invalid collector configuration")
-	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
+	var s Settings
+	var e error
+	if len(os.Args) >= 2 && os.Args[1] == "--laravel" {
+		s, e = loadLaravelSettings(ctx, os.Args[2:])
+	} else {
+		if len(os.Args) != 2 {
+			return errors.New("usage: current-collector <private-config-file|-> or --laravel <php> <artisan> [--once]")
+		}
+		var f *os.File
+		if os.Args[1] == "-" {
+			f = os.Stdin
+		} else {
+			f, e = os.Open(os.Args[1])
+		}
+		if e != nil {
+			return errors.New("configuration unavailable")
+		}
+		e = json.NewDecoder(io.LimitReader(f, 65536)).Decode(&s)
+		f.Close()
+	}
+	if e != nil {
+		return errors.New("collector configuration unavailable or invalid")
+	}
+	if s.Protocol < 0 || s.Protocol > 2 || s.Prefix == "" || s.Address == "" || s.MaxAge < 60 || s.MaxAge > 86400 || s.MaxBytes < 4096 || s.MaxBytes > 262144 {
+		return errors.New("invalid collector configuration")
+	}
 	opts := &redis.Options{Addr: s.Address, Username: s.Username, Password: s.Password, DB: s.Database, DialTimeout: time.Second, ReadTimeout: time.Second, WriteTimeout: time.Second, MaxRetries: -1}
 	if s.TLS {
 		opts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
@@ -78,6 +86,10 @@ func run() error {
 	r := redis.NewClient(opts)
 	defer r.Close()
 	stream, health, owner := s.Prefix+"events", s.Prefix+"health", s.Prefix+"owner"
+	streams := []string{stream}
+	if s.Protocol == 2 {
+		streams = append(streams, s.Prefix+"events:v2")
+	}
 	var secret [16]byte
 	if _, e = rand.Read(secret[:]); e != nil {
 		return errors.New("ownership token unavailable")
@@ -96,7 +108,7 @@ func run() error {
 	if e = loadColumns(db); e != nil {
 		return errors.New("Current tables unavailable; run migrations")
 	}
-	for _, t := range []string{"lens_async_receipts", "lens_async_versions"} {
+	for _, t := range []string{"lens_async_receipts", "lens_async_versions", "lens_async_aliases", "lens_job_actions"} {
 		if _, e = db.Exec("SELECT 1 FROM " + t + " LIMIT 1"); e != nil {
 			return errors.New("async tables unavailable; run migrations")
 		}
@@ -114,32 +126,43 @@ func run() error {
 			if err != nil || ok != 1 {
 				return stopOrError(ctx, "collector ownership lost; restart after Redis recovers")
 			}
-			r.HSet(ctx, health, "heartbeat_at", float64(time.Now().UnixMilli())/1000)
+			r.HSet(ctx, health, "heartbeat_at", float64(time.Now().UnixMilli())/1000, "protocol", s.Protocol, "owner_token", token, "maintenance_protocol", 1)
 			nextHeartbeat = time.Now().Add(3 * time.Second)
 		}
 		if time.Now().After(nextPrune) {
-			for _, t := range []string{"lens_async_receipts", "lens_async_versions"} {
+			for _, t := range []string{"lens_async_receipts", "lens_async_versions", "lens_async_aliases"} {
 				db.Exec(pruneSQL(t), float64(time.Now().Unix()))
 			}
+			_ = pruneMaintenance(db, float64(time.Now().Unix()))
 			nextPrune = time.Now().Add(time.Minute)
 		}
-		// Stream expiry/server restart may remove the group; MKSTREAM/BUSYGROUP are safe.
-		if e = r.XGroupCreateMkStream(ctx, stream, "collector", "0").Err(); e != nil && !isBusyGroup(e) {
-			return stopOrError(ctx, "Redis consumer group unavailable")
-		}
-		msgs, _, err := r.XAutoClaim(ctx, &redis.XAutoClaimArgs{Stream: stream, Group: "collector", Consumer: token, MinIdle: 0, Start: "0-0", Count: 100}).Result()
-		if err != nil {
-			return stopOrError(ctx, "Redis pending read failed")
-		}
-		if len(msgs) == 0 {
-			blocks, err := r.XReadGroup(ctx, &redis.XReadGroupArgs{Group: "collector", Consumer: token, Streams: []string{stream, ">"}, Count: 100, Block: -1}).Result()
-			if err != nil && err != redis.Nil {
-				return stopOrError(ctx, "Redis stream read failed")
+		// Drain the legacy backlog first so its canonical IDs exist before v2
+		// observations are reconciled. Stop old producers during an upgrade.
+		var msgs []redis.XMessage
+		for _, candidate := range streams {
+			stream = candidate
+			if e = r.XGroupCreateMkStream(ctx, stream, "collector", "0").Err(); e != nil && !isBusyGroup(e) {
+				return stopOrError(ctx, "Redis consumer group unavailable")
 			}
-			if len(blocks) > 0 {
-				msgs = blocks[0].Messages
+			var err error
+			msgs, _, err = r.XAutoClaim(ctx, &redis.XAutoClaimArgs{Stream: stream, Group: "collector", Consumer: token, MinIdle: 0, Start: "0-0", Count: 100}).Result()
+			if err != nil {
+				return stopOrError(ctx, "Redis pending read failed")
+			}
+			if len(msgs) == 0 {
+				blocks, err := r.XReadGroup(ctx, &redis.XReadGroupArgs{Group: "collector", Consumer: token, Streams: []string{stream, ">"}, Count: 100, Block: -1}).Result()
+				if err != nil && err != redis.Nil {
+					return stopOrError(ctx, "Redis stream read failed")
+				}
+				if len(blocks) > 0 {
+					msgs = blocks[0].Messages
+				}
+			}
+			if len(msgs) > 0 {
+				break
 			}
 		}
+
 		if len(msgs) == 0 {
 			if s.Once {
 				break
@@ -162,6 +185,7 @@ func run() error {
 			pause(ctx)
 			continue
 		}
+		actions := map[string]*JobAction{}
 		var ids []interface{}
 		var newest float64
 		bad, expired := 0, 0
@@ -179,7 +203,19 @@ func run() error {
 				ids = append(ids, m.ID)
 				continue
 			}
-			if err = project(tx, v); err != nil {
+			if err = project(tx, v, actions); err != nil {
+				// A tombstoned or mismatched identity is not a database outage.
+				// Commit its receipt/alias and discard only this envelope.
+				if errors.Is(err, expiredIdentity) || errors.Is(err, conflictingIdentity) {
+					if errors.Is(err, expiredIdentity) {
+						expired++
+					} else {
+						bad++
+					}
+					err = nil
+					ids = append(ids, m.ID)
+					continue
+				}
 				break
 			}
 			ids = append(ids, m.ID)

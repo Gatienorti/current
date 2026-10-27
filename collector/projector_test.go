@@ -15,11 +15,11 @@ func fixture(t *testing.T) *sql.DB {
 		t.Fatal(e)
 	}
 	t.Cleanup(func() { db.Close() })
-	schema := `CREATE TABLE lens_jobs(id TEXT PRIMARY KEY,external_id TEXT,connection TEXT,queue TEXT,job_class TEXT,status TEXT,coverage TEXT,first_observed_at REAL,observed_at REAL,expires_at REAL,attempt_count INTEGER DEFAULT 0,exception_class TEXT,silenced INTEGER);
+	schema := `CREATE TABLE lens_jobs(id TEXT PRIMARY KEY,external_id TEXT,connection TEXT,queue TEXT,job_class TEXT,status TEXT,coverage TEXT,first_observed_at REAL,observed_at REAL,expires_at REAL,attempt_count INTEGER DEFAULT 0,exception_class TEXT,silenced INTEGER,dispatch_id TEXT,cleared_at REAL);
  CREATE TABLE lens_attempts(id TEXT PRIMARY KEY,job_id TEXT,worker_id TEXT,reported_attempt INTEGER,status TEXT,started_at REAL,finished_at REAL,exception_class TEXT);
  CREATE TABLE lens_steps(id TEXT PRIMARY KEY,attempt_id TEXT,parent_id TEXT,sequence INTEGER,label TEXT,status TEXT,started_at REAL,finished_at REAL);
  CREATE TABLE lens_tags(job_id TEXT,tag TEXT,PRIMARY KEY(job_id,tag));CREATE TABLE lens_meta(key TEXT PRIMARY KEY,value TEXT);
- CREATE TABLE lens_async_receipts(id TEXT PRIMARY KEY,expires_at REAL);CREATE TABLE lens_async_versions(entity TEXT PRIMARY KEY,revision INTEGER,expires_at REAL);`
+ CREATE TABLE lens_job_actions(identity_hash TEXT PRIMARY KEY,kind TEXT,job_id TEXT,observed_at REAL,expires_at REAL);CREATE TABLE lens_async_aliases(id TEXT PRIMARY KEY,canonical_id TEXT,identity_hash TEXT,first_observed_at REAL,job_expires_at REAL,expires_at REAL);CREATE TABLE lens_webhook_deliveries(id TEXT PRIMARY KEY,job_id TEXT);CREATE TABLE lens_broadcasts(id TEXT PRIMARY KEY,job_id TEXT);CREATE TABLE lens_async_receipts(id TEXT PRIMARY KEY,expires_at REAL);CREATE TABLE lens_async_versions(entity TEXT PRIMARY KEY,revision INTEGER,expires_at REAL);`
 	if _, e = db.Exec(schema); e != nil {
 		t.Fatal(e)
 	}

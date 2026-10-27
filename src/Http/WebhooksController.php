@@ -39,7 +39,7 @@ final class WebhooksController
             $query->where('signature', 'invalid');
         } elseif ($outcome === 'job_failed') {
             $failedJobs = $store->table('jobs')->select('id')->where('expires_at', '>', microtime(true))->whereRaw($store->outcomeSql()." = 'failed'");
-            $query->whereIn('id', $store->table('webhook_jobs')->select('receipt_id')->whereIn('job_id', $failedJobs));
+            $query->whereIn('id', app(\Current\Telemetry\JobReferences::class)->matching($store->table('webhook_jobs')->select('receipt_id'), $failedJobs));
         }
         foreach (['from' => '>=', 'to' => '<'] as $key => $operator) {
             if (! empty($filters[$key])) {
@@ -59,10 +59,10 @@ final class WebhooksController
         $groupQuery = app(ReceiptGroups::class)->receipts($receipt);
         $receiptCount = (clone $groupQuery)->count();
         $groupReceipts = (clone $groupQuery)->orderByDesc('received_at')->orderByDesc('id')->limit(100)->get()->reverse()->values();
-        $groupJobLinks = $store->table('webhook_jobs')->join('lens_jobs', 'lens_jobs.id', '=', 'lens_webhook_jobs.job_id')
+        $groupJobLinks = $store->table('webhook_jobs')->leftJoin('lens_async_aliases as aliases', 'aliases.id', '=', 'lens_webhook_jobs.job_id')->join('lens_jobs', 'lens_jobs.id', '=', $store->connection()->raw('COALESCE(aliases.canonical_id,lens_webhook_jobs.job_id)'))
             ->whereIn('receipt_id', $groupReceipts->pluck('id'))->where('lens_jobs.expires_at', '>', microtime(true))
-            ->select('receipt_id', 'job_id', 'job_class')->get()->groupBy('receipt_id');
-        $jobIds = $store->table('webhook_jobs')->where('receipt_id', $id)->pluck('job_id');
+            ->select('receipt_id', 'job_class')->selectRaw('lens_jobs.id AS job_id')->distinct()->get()->groupBy('receipt_id');
+        $jobIds = app(\Current\Telemetry\JobReferences::class)->normalize($store->table('webhook_jobs')->where('receipt_id', $id)->get())->pluck('job_id')->unique();
         $jobs = $store->jobsWithObservationState()->whereIn('id', $jobIds)->where('expires_at', '>', microtime(true))->get();
 
         $webhookDeliveries = app(WebhookRelations::class)->deliveries($jobIds);

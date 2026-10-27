@@ -116,7 +116,7 @@ func versioned(tx *sql.Tx, t string, row map[string]interface{}, revision int, e
 	_, e = tx.Exec(sqlFor("INSERT INTO lens_async_versions VALUES (?,?,?) ON CONFLICT(entity) DO UPDATE SET revision=?, expires_at=?", "INSERT INTO lens_async_versions VALUES (?,?,?) ON DUPLICATE KEY UPDATE revision=?, expires_at=?"), t+":"+id, revision, expires, revision, expires)
 	return e
 }
-func project(tx *sql.Tx, v Event) error {
+func project(tx *sql.Tx, v Event, actionCaches ...map[string]*JobAction) error {
 	if v.ID == "" || len(v.Job) == 0 {
 		return fmt.Errorf("invalid event")
 	}
@@ -128,8 +128,45 @@ func project(tx *sql.Tx, v Event) error {
 	if n == 0 {
 		return nil
 	}
+	cache := map[string]*JobAction{}
+	if len(actionCaches) > 0 {
+		cache = actionCaches[0]
+	}
+	action, e := jobAction(tx, v, cache)
+	if e != nil {
+		return e
+	}
+	if action != nil && action.Kind == "forgotten" {
+		return nil
+	}
+	if v.Version == 2 {
+		v, e = canonicalIdentity(tx, v)
+		if e != nil {
+			return e
+		}
+	}
+	if action != nil && action.Kind == "cleared" {
+		clone := func(row map[string]interface{}) map[string]interface{} {
+			copy := map[string]interface{}{}
+			for k, value := range row {
+				copy[k] = value
+			}
+			return copy
+		}
+		v.Job = clone(v.Job)
+		v.Job["cleared_at"] = action.Observed
+		if len(v.Enqueue) > 0 {
+			v.Enqueue = clone(v.Enqueue)
+			v.Enqueue["cleared_at"] = action.Observed
+		}
+	}
 	if e = write(tx, "lens_jobs", v.Job, false); e != nil {
 		return e
+	}
+	if action != nil && action.Kind == "cleared" {
+		if _, e = tx.Exec("UPDATE lens_jobs SET cleared_at=? WHERE id=?", action.Observed, v.Job["id"]); e != nil {
+			return e
+		}
 	}
 	if len(v.Enqueue) > 0 {
 		// Enqueue enriches a start-only row but cannot regress an already completed job.

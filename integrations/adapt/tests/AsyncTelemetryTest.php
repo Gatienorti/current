@@ -29,6 +29,7 @@ final class AsyncTelemetryTest extends TestCase
             $this->markTestSkipped('Build the optional Go collector.');
         }
         $this->assertSame(0, Artisan::call('migrate', ['--force' => true]), Artisan::output());
+        $this->assertSame(0, Artisan::call('current:install', ['--force' => true]), Artisan::output());
         $fixtures = Fixtures::seed();
         config()->set(['current.telemetry.driver' => 'redis', 'current.telemetry.binary' => $binary]);
         $transport = app(Transport::class);

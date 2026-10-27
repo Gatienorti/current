@@ -58,22 +58,29 @@ final class Recorder
 
     public function pushed(JobPushed $event): void
     {
+        $this->enqueued($event->payload->decoded, $event->connectionName, $event->queue);
+    }
+
+    /** Record a confirmed enqueue; adapters must call only after the queue accepts it. */
+    public function enqueued(array $payload, string $connection, string $queue): void
+    {
         if ($async = $this->async()) {
-            $async->pushed($event);
+            $async->enqueued($payload, $connection, $queue);
 
             return;
         }
 
-        if (! $this->enabled($event->connectionName)) {
+        if (! $this->enabled($connection)) {
             return;
         }
-        $this->guard(function () use ($event) {
-            $payload = $event->payload->decoded;
+        $this->guard(function () use ($payload, $connection, $queue) {
             if (! empty($payload['uuid'])) {
-                $this->store->transaction(function () use ($payload, $event) {
+                $this->store->cycleTransaction($payload['uuid'], $connection, function () use ($payload, $connection, $queue) {
                     // Redis makes the job visible before the producer receives
                     // JobPushed. A worker may already have captured its attempt.
-                    $cycle = $this->store->findCycle($payload['uuid'], $event->connectionName);
+                    $action = $this->store->jobAction($payload['uuid'], $connection, Support\DispatchIdentity::fromPayload($payload));
+                    if ($action?->kind === 'forgotten') { return; }
+                    $cycle = $this->store->findCycle($payload['uuid'], $connection, Support\DispatchIdentity::fromPayload($payload));
                     if ($cycle && $cycle->coverage === 'start_only') {
                         $this->store->table('jobs')->where('id', $cycle->id)->update([
                             'coverage' => 'observed_enqueue',
@@ -82,7 +89,11 @@ final class Recorder
                         return;
                     }
 
-                    $this->store->newJob($payload['uuid'], $event->connectionName, $event->queue, $payload);
+                    if ($cycle && Support\DispatchIdentity::fromPayload($payload)) {
+                        return;
+                    }
+
+                    $this->store->newJob($payload['uuid'], $connection, $queue, $payload, 'observed_enqueue', $action?->kind === 'cleared' ? (float) $action->observed_at : null);
                 });
             }
         });
@@ -105,21 +116,24 @@ final class Recorder
         $this->guard(function () use ($event) {
             $job = $event->job;
             $outline = app(SourceOutline::class)->capture(data_get($job->payload(), 'data.commandName', ''));
-            $context = $this->store->transaction(function () use ($event, $job, $outline) {
-                $cycle = $this->store->findCycle($job->uuid(), $event->connectionName);
-                $jobId = $cycle?->id ?? $this->store->newJob($job->uuid(), $event->connectionName, $job->getQueue(), $job->payload(), 'start_only');
+            $context = $this->store->cycleTransaction($job->uuid(), $event->connectionName, function () use ($event, $job, $outline) {
+                $action = $this->store->jobAction($job->uuid(), $event->connectionName, Support\DispatchIdentity::fromPayload($job->payload()));
+                if ($action?->kind === 'forgotten') { return null; }
+                $cycle = $this->store->findCycle($job->uuid(), $event->connectionName, Support\DispatchIdentity::fromPayload($job->payload()));
+                $jobId = $cycle?->id ?? $this->store->newJob($job->uuid(), $event->connectionName, $job->getQueue(), $job->payload(), 'start_only', $action?->kind === 'cleared' ? (float) $action->observed_at : null);
                 $attemptId = (string) Str::ulid();
                 $this->store->table('attempts')->insert(array_merge([
                     'id' => $attemptId, 'job_id' => $jobId, 'worker_id' => $this->workerId,
                     'reported_attempt' => $job->attempts(), 'status' => 'processing', 'started_at' => microtime(true),
                 ], $outline));
                 $this->store->table('jobs')->where('id', $jobId)->update([
-                    'status' => $this->store->connection()->raw($this->store->outcomeSql()), 'observed_at' => microtime(true),
+                    'status' => $this->store->latestOutcome($jobId), 'observed_at' => microtime(true),
                     'attempt_count' => $this->store->connection()->raw('attempt_count + 1'),
                 ]);
 
                 return ['job_id' => $jobId, 'attempt_id' => $attemptId];
             });
+            if ($context === null) { return; }
             $this->executions[$job] = $context;
             $this->current = $context;
         });
@@ -147,7 +161,7 @@ final class Recorder
             }
             $details['delay_seconds'] = is_int($event->delay) && $event->delay >= 0 ? $event->delay : ($event->delay === null ? 0 : null);
             $this->store->transaction(function () use ($payload, $event, $details) {
-                if ($cycle = $this->store->findCycle($payload['uuid'], $event->connectionName)) {
+                if ($cycle = $this->store->findCycle($payload['uuid'], $event->connectionName, Support\DispatchIdentity::fromPayload($payload))) {
                     $this->store->table('jobs')->where('id', $cycle->id)->update($details);
                 }
             });
@@ -212,13 +226,13 @@ final class Recorder
             return;
         }
         $context = $this->executions[$job];
-        $this->guard(function () use ($context, $status) {
-            $this->store->transaction(function () use ($context, $status) {
+        $this->guard(function () use ($context, $status, $job) {
+            $this->store->cycleTransaction($job->uuid(), $job->getConnectionName(), function () use ($context, $status) {
                 $this->store->table('attempts')->where('id', $context['attempt_id'])->whereNull('finished_at')->update([
                     'status' => $status, 'finished_at' => microtime(true),
                 ]);
                 $this->store->table('jobs')->where('id', $context['job_id'])->update([
-                    'status' => $this->store->connection()->raw($this->store->outcomeSql()), 'observed_at' => microtime(true),
+                    'status' => $this->store->latestOutcome($context['job_id']), 'observed_at' => microtime(true),
                 ]);
             });
         });

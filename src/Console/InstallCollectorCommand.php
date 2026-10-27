@@ -41,7 +41,7 @@ final class InstallCollectorCommand extends Command
             $arch = match (php_uname('m')) {
                 'x86_64' => 'amd64', 'aarch64', 'arm64' => 'arm64', default => null
             };
-            if (! $check->isSuccessful() || ($info['name'] ?? null) !== 'current-collector' || ($info['protocol'] ?? null) !== 1 || ($info['os'] ?? null) !== 'linux' || ($info['arch'] ?? null) !== $arch) {
+            if (! $check->isSuccessful() || ($info['name'] ?? null) !== 'current-collector' || ($info['protocol'] ?? null) !== 1 || ($info['identity_protocol'] ?? null) !== 2 || ($info['maintenance_protocol'] ?? null) !== 1 || ($info['os'] ?? null) !== 'linux' || ($info['arch'] ?? null) !== $arch) {
                 throw new \RuntimeException('Collector platform or protocol is incompatible.');
             }
             if (! rename($temporary, $target)) {

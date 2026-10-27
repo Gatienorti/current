@@ -33,6 +33,7 @@ final class AdaptApplicationTest extends TestCase
     {
         parent::setUp();
         $this->assertSame(0, Artisan::call('migrate', ['--force' => true]), Artisan::output());
+        $this->assertSame(0, Artisan::call('current:install', ['--force' => true]), Artisan::output());
         $this->fixtures = Fixtures::seed();
     }
 

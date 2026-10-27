@@ -35,6 +35,7 @@ final class BroadcastIntegrationTest extends TestCase
     {
         parent::setUp();
         $this->assertSame(0, Artisan::call('migrate', ['--force' => true]), Artisan::output());
+        $this->assertSame(0, Artisan::call('current:install', ['--force' => true]), Artisan::output());
         $fixtures = Fixtures::seed();
         $this->actingAs($fixtures['users']['operator']);
         $socket = stream_socket_server('tcp://127.0.0.1:0');

@@ -2,8 +2,8 @@
 
 namespace Current\Telemetry;
 
-use Current\Store;
 use Illuminate\Support\Str;
+use Illuminate\Support\Arr;
 use RuntimeException;
 
 /** Dedicated, bounded connection; never mutates the application's Redis client. */
@@ -11,10 +11,30 @@ final class Transport
 {
     private ?\Redis $client = null;
 
+    private ?array $settingsInput = null;
+
+    private ?array $validatedSettings = null;
+
     public function settings(): array
     {
-        $sql = config('database.connections.'.config('current.connection'));
-        $redis = config('database.redis.'.config('current.telemetry.redis_connection'));
+        // Two root reads avoid repeated dotted config lookups on every publication.
+        // Keep one snapshot, and compare values so runtime config changes cannot use
+        // stale validation or publish through the previous Redis namespace/client.
+        $config = app('config');
+        $current = $config->get('current', []);
+        $database = $config->get('database', []);
+        $telemetry = $current['telemetry'] ?? [];
+        $sql = Arr::get($database, 'connections.'.($current['connection'] ?? ''));
+        $redis = Arr::get($database, 'redis.'.($telemetry['redis_connection'] ?? ''));
+        $prefix = Arr::get($database, 'redis.options.prefix', '');
+        $input = [$sql, $redis, $telemetry, $prefix];
+        if ($input !== $this->settingsInput) {
+            $this->disconnect();
+        } elseif ($this->validatedSettings !== null && empty($sql['options'])) {
+            return $this->validatedSettings;
+        }
+        // PDO TLS options include mutable filesystem inputs. Revalidate those on
+        // each access, preserving certificate readability and verification checks.
         $driver = $sql['driver'] ?? '';
         if (! in_array($driver, ['sqlite', 'mysql', 'mariadb'], true) || empty($sql['database']) || ! empty($sql['prefix'])) {
             throw new RuntimeException('Async telemetry requires SQLite, MySQL or MariaDB without a table prefix.');
@@ -35,22 +55,26 @@ final class Transport
         if (! is_string($host) || str_contains($host, '://') || str_contains($host, '/')) {
             throw new RuntimeException('Configure the Redis hostname and optional scheme=tls separately.');
         }
-        $namespace = config('current.telemetry.namespace');
+        $namespace = $telemetry['namespace'] ?? null;
         if (! is_string($namespace) || ! preg_match('/^[a-zA-Z0-9_-]{1,60}$/D', $namespace)) {
             throw new RuntimeException('Invalid telemetry namespace.');
         }
 
-        return [
+        $settings = [
+            'protocol' => 2,
             'sql' => ['driver' => $driver, 'host' => $sql['host'] ?? '', 'port' => (int) ($sql['port'] ?? 3306), 'socket' => $sql['unix_socket'] ?? '', 'database' => $sql['database'], 'username' => $sql['username'] ?? '', 'password' => $sql['password'] ?? '', 'tls' => $this->sqlTls($sql['options'] ?? [])],
             'address' => $host.':'.($redis['port'] ?? 6379), 'host' => $host,
             'port' => (int) ($redis['port'] ?? 6379), 'database' => (int) ($redis['database'] ?? 0),
             'username' => $redis['username'] ?? '', 'password' => $redis['password'] ?? '',
             'tls' => ($redis['scheme'] ?? 'tcp') === 'tls',
-            'prefix' => '{current:'.$namespace.':'.substr(hash('sha256', (string) config('database.redis.options.prefix', '')), 0, 16).'}:', 'file' => $sql['database'],
-            'max_age' => max(60, min(86400, (int) config('current.telemetry.max_age_seconds', 3600))),
-            'max_bytes' => max(4096, min(262144, (int) config('current.telemetry.max_event_bytes', 131072))),
-            'max_pending' => max(1, min(20000, (int) config('current.telemetry.max_pending', 2000))),
+            'prefix' => '{current:'.$namespace.':'.substr(hash('sha256', (string) $prefix), 0, 16).'}:', 'file' => $sql['database'],
+            'max_age' => max(60, min(86400, (int) ($telemetry['max_age_seconds'] ?? 3600))),
+            'max_bytes' => max(4096, min(262144, (int) ($telemetry['max_event_bytes'] ?? 131072))),
+            'max_pending' => max(1, min(20000, (int) ($telemetry['max_pending'] ?? 2000))),
         ];
+        $this->settingsInput = $input;
+
+        return $this->validatedSettings = $settings;
     }
 
     private function sqlTls(array $options): array
@@ -87,10 +111,14 @@ final class Transport
 
     public function client(): \Redis
     {
+        return $this->clientForSettings($this->settings());
+    }
+
+    private function clientForSettings(array $s): \Redis
+    {
         if ($this->client) {
             return $this->client;
         }
-        $s = $this->settings();
         $r = new \Redis;
         $r->connect(($s['tls'] ? 'tls://' : '').$s['host'], $s['port'], 0.2, null, 0, 0.2);
         if ($s['password'] !== '') {
@@ -102,10 +130,11 @@ final class Transport
         return $this->client = $r;
     }
 
-    public function cycle(string $uuid, string $connection): array
+    public function cycle(string $uuid, string $connection, ?string $dispatchId = null): array
     {
-        $r = $this->client();
-        $key = 'cycle:'.hash('sha256', $connection.'|'.$uuid);
+        $s = $this->settings();
+        $r = $this->clientForSettings($s);
+        $key = 'cycle:v2:'.hash('sha256', $dispatchId === null ? $connection.'|'.$uuid : json_encode([$connection, $uuid, $dispatchId], JSON_THROW_ON_ERROR));
         $now = microtime(true);
         if ($cached = $r->get($key)) {
             $row = json_decode($cached, true, flags: JSON_THROW_ON_ERROR);
@@ -113,11 +142,10 @@ final class Transport
                 return $row;
             }
         }
-        // One read on a cache miss preserves retained synchronous history when enabling async.
-        $existing = app(Store::class)->findCycle($uuid, $connection);
-        $expires = $existing?->expires_at ?? $now + max(1, min((int) config('current.retention_days', 7), (int) config('current.max_retention_days', 30))) * 86400;
-        $candidate = json_encode(['id' => $existing?->id ?? (string) Str::ulid(), 'first_observed_at' => $existing?->first_observed_at ?? $now, 'expires_at' => $expires], JSON_THROW_ON_ERROR);
-        $value = $r->eval("local old=redis.call('GET',KEYS[1]); if old and cjson.decode(old).expires_at > tonumber(ARGV[1]) then return old end redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); return ARGV[2]", [$key, $now, $candidate, max(60, min((int) ceil($expires - $now) + $this->settings()['max_age'], 2 * $this->settings()['max_age']))], 1);
+        // The collector resolves retained history; dispatch never reads history SQL.
+        $expires = $now + max(1, min((int) config('current.retention_days', 7), (int) config('current.max_retention_days', 30))) * 86400;
+        $candidate = json_encode(['id' => (string) Str::ulid(), 'first_observed_at' => $now, 'expires_at' => $expires], JSON_THROW_ON_ERROR);
+        $value = $r->eval("local old=redis.call('GET',KEYS[1]); if old and cjson.decode(old).expires_at > tonumber(ARGV[1]) then return old end redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); return ARGV[2]", [$key, $now, $candidate, max(60, min((int) ceil($expires - $now) + $s['max_age'], 2 * $s['max_age']))], 1);
 
         return json_decode($value, true, flags: JSON_THROW_ON_ERROR);
     }
@@ -125,15 +153,15 @@ final class Transport
     public function emit(array $event): void
     {
         $s = $this->settings();
-        $event['version'] = 1;
+        $event['version'] = 2;
         $event['id'] = (string) Str::ulid();
         $event['observed_at'] = microtime(true);
         $data = json_encode($event, JSON_THROW_ON_ERROR);
         if (strlen($data) > $s['max_bytes']) {
-            $this->client()->hIncrBy('health', 'rejected', 1);
+            $this->clientForSettings($s)->hIncrBy('health', 'rejected', 1);
             throw new RuntimeException('Telemetry envelope exceeds the configured bound.');
         }
-        $ok = $this->client()->eval("if redis.call('XLEN',KEYS[1])>=tonumber(ARGV[1]) then redis.call('HINCRBY',KEYS[2],'rejected',1); return 0 end redis.call('XADD',KEYS[1],'*','data',ARGV[2]); redis.call('HINCRBY',KEYS[2],'accepted',1); redis.call('EXPIRE',KEYS[1],ARGV[3]); return 1", ['events', 'health', $s['max_pending'], $data, $s['max_age'] * 2], 2);
+        $ok = $this->clientForSettings($s)->eval("if redis.call('XLEN',KEYS[1])+redis.call('XLEN',KEYS[3])>=tonumber(ARGV[1]) then redis.call('HINCRBY',KEYS[2],'rejected',1); return 0 end redis.call('XADD',KEYS[1],'*','data',ARGV[2]); redis.call('HINCRBY',KEYS[2],'accepted',1); redis.call('EXPIRE',KEYS[1],ARGV[3]); return 1", ['events:v2', 'health', 'events', $s['max_pending'], $data, $s['max_age'] * 2], 3);
         if ($ok !== 1) {
             throw new RuntimeException('Telemetry buffer full.');
         }
@@ -142,5 +170,7 @@ final class Transport
     public function disconnect(): void
     {
         $this->client = null;
+        $this->settingsInput = null;
+        $this->validatedSettings = null;
     }
 }

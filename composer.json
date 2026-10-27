@@ -8,13 +8,13 @@
         "illuminate/database": "^11.44 || ^12.0 || ^13.0",
         "illuminate/queue": "^11.44 || ^12.0 || ^13.0",
         "illuminate/support": "^11.44 || ^12.0 || ^13.0",
-        "laravel/horizon": "^5.30",
         "nikic/php-parser": "^5.7"
     },
     "require-dev": {
         "laravel/framework": "^11.44 || ^12.0 || ^13.0",
         "mockery/mockery": "^1.6",
-        "phpunit/phpunit": "^10.5 || ^11.5"
+        "phpunit/phpunit": "^10.5 || ^11.5",
+        "laravel/horizon": "^5.30"
     },
     "autoload": {
         "psr-4": {
@@ -37,5 +37,11 @@
     "scripts": {
         "test": "phpunit -c phpunit.xml",
         "test:compatibility": "php tests/compatibility/run.php"
+    },
+    "suggest": {
+        "laravel/horizon": "Required for the default Horizon execution backend (^5.30)."
+    },
+    "conflict": {
+        "laravel/horizon": "<5.30 || >=6.0"
     }
 }

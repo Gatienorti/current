@@ -11,7 +11,7 @@ var identifier = regexp.MustCompile(`^[A-Z0-9]{26}$`)
 
 func validate(v Event) error {
 	invalid := errors.New("invalid event")
-	if v.Version != 1 || !identifier.MatchString(v.ID) || v.Observed <= 0 || math.IsNaN(v.Observed) || v.Observed > float64(time.Now().Unix()+300) {
+	if (v.Version != 1 && v.Version != 2) || !identifier.MatchString(v.ID) || v.Observed <= 0 || math.IsNaN(v.Observed) || v.Observed > float64(time.Now().Unix()+300) {
 		return invalid
 	}
 	for t, row := range map[string]map[string]interface{}{"lens_jobs": v.Job, "lens_attempts": v.Attempt, "lens_steps": v.Step} {
@@ -62,6 +62,13 @@ func validate(v Event) error {
 	}
 	if len(v.Enqueue) > 0 && v.Enqueue["id"] != v.Job["id"] {
 		return invalid
+	}
+	if v.Version == 2 && len(v.Enqueue) > 0 {
+		for _, key := range []string{"external_id", "connection", "dispatch_id"} {
+			if value, present := v.Enqueue[key]; present && value != v.Job[key] {
+				return invalid
+			}
+		}
 	}
 	if len(v.Attempt) > 0 {
 		if v.Attempt["job_id"] != v.Job["id"] || v.Revision < 1 || v.Revision > 1000000 {

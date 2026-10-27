@@ -46,7 +46,12 @@ final class OutgoingWebhooksController
 
         $query = app(DeliveryGroups::class)->listing($query);
 
-        return view('current::outgoing-webhooks', ['filters' => $filters, 'deliveries' => $query->orderByDesc('started_at')->orderByDesc('id')->simplePaginate(25)->withQueryString()]);
+        $deliveries = $query->orderByDesc('started_at')->orderByDesc('id')->simplePaginate(25)->withQueryString();
+        $rows = app(\Current\Telemetry\JobReferences::class)->normalize($deliveries->getCollection());
+        $retained = $store->table('jobs')->whereIn('id', $rows->pluck('job_id')->filter())->where('expires_at', '>', microtime(true))->pluck('id');
+        foreach ($rows as $row) { if (! $retained->contains($row->job_id)) { $row->job_id = null; } }
+        $deliveries->setCollection($rows);
+        return view('current::outgoing-webhooks', compact('filters', 'deliveries'));
     }
 
     public function show(string $id, Store $store)
@@ -56,8 +61,9 @@ final class OutgoingWebhooksController
         $groupQuery = app(DeliveryGroups::class)->attempts($delivery);
         $groupSummary = (clone $groupQuery)->selectRaw('COUNT(*) as attempts, MIN(started_at) as first_started, MAX(finished_at) as last_finished, SUM(CASE WHEN finished_at IS NULL THEN 1 ELSE 0 END) as unfinished')->first();
         $deliveryAttempts = (clone $groupQuery)->orderByDesc('started_at')->orderByDesc('id')->limit(100)->get()->reverse()->values();
+        $deliveryAttempts = app(\Current\Telemetry\JobReferences::class)->normalize($deliveryAttempts);
         $retainedJobIds = $store->table('jobs')->whereIn('id', $deliveryAttempts->pluck('job_id')->filter())->where('expires_at', '>', microtime(true))->pluck('id');
-        $job = $delivery->job_id ? $store->jobsWithObservationState()->where('id', $delivery->job_id)->where('expires_at', '>', microtime(true))->first() : null;
+        $job = $delivery->job_id ? $store->jobsWithObservationState()->where('id', app(\Current\Telemetry\JobReferences::class)->canonical($delivery->job_id))->where('expires_at', '>', microtime(true))->first() : null;
 
         $webhookReceipts = $job ? app(WebhookRelations::class)->receipts($job->id) : collect();
 
