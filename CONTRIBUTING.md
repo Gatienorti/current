@@ -1,5 +1,7 @@
 # Contributing to Current
 
+The browser batch-retry state machine has dependency-free tests using Node 22: `node --test tests/frontend/*.test.cjs`. Node is needed only for these contributor checks, not for installing or running Current.
+
 Start with a small bug fix, reproduction, documentation correction, or focused usability improvement. Discuss substantial features in an issue before building them. Read [AGENTS.md](AGENTS.md) for project boundaries.
 
 ## Run the portable compatibility suite

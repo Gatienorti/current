@@ -2,6 +2,8 @@
 
 Current can now boot without Horizon and run native Laravel Redis workers under its Linux Go supervisor. Horizon remains the default backend. This work is not yet a published stable Horizon replacement. Synchronous or optional async telemetry can be selected independently.
 
+The additional notification routes, full-batch retry passes, watching, orphan cleanup, balancing policy and tag-specific retention described below are development changes after beta.2. They require a version containing migration 17 and the matching supervisor binary; the published beta.2 tag is unchanged.
+
 ## Installation
 
 Use a dedicated development/test application first. Install Current, explicitly select native execution, and define access:
@@ -105,7 +107,7 @@ Set `balance` to `simple` or `auto` to give each queue dedicated Laravel workers
 - `time`: proportional ready count × recent captured runtime; missing runtime evidence holds the group's allocation.
 - `log`: proportional `log(1 + ready jobs)`, reducing how much a very large queue dominates.
 
-Empty queues retain their minimum. Reserved and future delayed jobs do not add demand in these proportional modes. Minimums, integer rounding and caps are enforced together; this follows the purpose of Horizon's policies without promising identical rounding/transient allocations. Existing `fixed`, `size` and `time` modes preserve their shared ordered queue list and previously documented clearance behavior.
+Empty queues retain their minimum. Reserved and future delayed jobs do not add demand in these proportional modes. `balance_policy` defaults to `horizon`: known queue weights produce proportional recommendations rounded up, with the same per-queue floor and shared-cap checks used for growth. Recommendations can sum above the available budget; confirmed reductions and live capacity always constrain actual growth. Size/time recommendation tests compare directly with the installed Horizon implementation. Set `balance_policy` to `bounded` to retain beta.2's deterministic proportional rounding. Unknown runtime or queue evidence holds allocation rather than substituting zero. These policies do not promise identical transient process counts across the two engines. Existing `fixed`, `size` and `time` modes preserve their shared ordered queue list and previously documented clearance behavior.
 
 For example, `queues => ['mail', 'imports']`, `workers => 2`, `min_workers => 1`, `max_workers => 10`, `balance => 'auto'`, `auto_scale_strategy => 'size'` starts one worker per queue and shares up to ten. At most 32 expanded worker pools are supported. `current:supervise --check` shows the generated queue pool names. Pause/resume/restart accepts either one generated name or the configured parent pool name; stopping remains an instance operation.
 
@@ -117,7 +119,9 @@ Native queue architecture uses the same validated configuration as the launcher.
 
 Batch listing reads Laravel's retained repository. Explicit `tags()` values and automatic Eloquent model tags are discovered from dispatch objects, including queued listener, mail, notification and broadcast wrappers. Explicit nonempty tags take precedence over model discovery; listeners can receive their event in `tags($event)`. Discovery is bounded to 100 properties/models/tag candidates and skips uninitialized/static properties and models without a key. All discovered tags still pass through Current's tag-prefix allowlist and retained-tag limits; class/tag silencing uses those approved tags at enqueue. A tag callback failure cannot break dispatch and leaves classification unknown.
 
-Batch details show retained captured members, counters and progress. Authorized operators can retry up to 50 shown failures per request. Batch and individual retry endpoints share per-dispatch claims; missing membership, expired observations, replaced payloads and unrelated batch selections are not executable. Retrying a cancelled batch does not uncancel it. Batch cancellation and arbitrary unobserved-member retries are not provided.
+Batch details show retained captured members, counters and progress. Authorized operators can retry selected shown failures or start a full-batch retry pass. A full pass reads Laravel's retained failed IDs, including failures absent from Current history, and processes at most 50 per request. With JavaScript, one initiating action continues sequential chunks; Pause finishes the current request before stopping. Without JavaScript, the page provides explicit continuation. Unknown outcomes, malformed responses and network failures stop automatic work and preserve an explicit review/resume link. There is no automatic resend.
+
+Each eligible failure must have a matching native dispatch identity, UUID, queue connection and bounded command whose batch membership agrees with the retained Laravel batch. For encrypted jobs, the explicit retry action authenticates/decrypts using the application encrypter, then inspects the serialized data without instantiating job objects; decrypted commands are never persisted or logged. Expired executable payloads, invalid ciphertext/keys, malformed/oversized commands and unverified membership remain unavailable. The pass expires after 24 hours and excludes dispatches created at or after its starting millisecond, preventing a replay from retrying its own new failures. Batch and individual retries share identity claims that outlive captured history. Migration17 backfills retained legacy claims before pruning. Only the built-in database UUID failed provider supports verified atomic payload deletion; custom providers retain the original payload and an unconfirmed claim after enqueue. Retrying a cancelled batch does not uncancel it. Batch cancellation is not provided.
 
 Retries require `operateCurrent`, matching connection/queue and the exact retained dispatch identity. Laravel prepares the executable payload and resets its retry fields. Current records the new dispatch separately even when Laravel reuses its UUID. A durable request claim prevents automatic duplicate POST retries; an ambiguous outcome remains unconfirmed.
 
@@ -162,7 +166,22 @@ Optional thresholds emit `Current\Events\QueueWaitExceeded` through Laravel's ev
 'wait_cooldown' => 300,
 ```
 
-Register an application listener for that event and send notifications through your existing Laravel notification setup. Current does not choose recipients or send external messages by itself. The event includes the connection, ordered queue list, estimated seconds, configured threshold and observation time. A shared Redis claim suppresses repeat events during the cooldown (60–86400 seconds). Unknown/partial observations never trigger an alert; a failed or ambiguous listener is not automatically retried. This is a notification hook, not guaranteed notification delivery.
+Register an application listener for that event or explicitly enable the routes below. Nothing is sent by default. The event includes the connection, ordered queue list, estimated seconds, configured threshold and observation time. A shared Redis claim suppresses repeat events during the cooldown (60–86400 seconds). Unknown/partial observations never trigger an alert; a failed or ambiguous listener is not automatically retried. This is a notification hook, not guaranteed notification delivery.
+
+Optional built-in routing is available after beta.2:
+
+```php
+// Inside current.native:
+'notifications' => [
+    'enabled' => true,
+    'mail' => 'operations@example.com', // Or at most ten addresses.
+    'slack' => null, // Configured HTTPS webhook or Slack channel ID.
+    'slack_channel' => null, // Optional channel for legacy webhook delivery.
+    'sms' => null, // Approved Vonage recipient number.
+],
+```
+
+Use your application's existing mail configuration. Slack requires `laravel/slack-notification-channel:^3.0`; SMS requires `laravel/vonage-notification-channel:^3.0` and the host's credentials. These packages are optional; Current installs none automatically. Routing stays disabled until explicitly enabled. Sends occur synchronously from the separate scheduled monitor rather than queueing notifications into congested work. A failed route does not suppress other routes or custom event listeners, and transport errors never log recipient addresses, webhook URLs or exception messages. The existing cooldown applies even when delivery fails; provider delivery is not guaranteed. Avoid configuring a custom listener and a built-in route to send the same alert twice.
 
 Laravel's scheduler invokes `current:monitor` every minute only when native thresholds are configured. For a shared ordered queue group, the key is the connection followed by the comma-separated ordered queues, such as `redis:high,default`; the threshold applies to that group's estimate. All scheduler/web hosts must resolve reported queue connection names to the same Redis databases/prefixes as their workers.
 
@@ -198,7 +217,25 @@ Clear/forget actions retain only a dispatch fingerprint, action time and optiona
 
 The native batch list supports cursor navigation beyond the latest fifty records. Laravel database batch storage also supports literal name/ID search; `%`, `_` and `!` are treated as ordinary search characters. Retained batch detail uses the configured Laravel batch repository. Custom repositories can provide ordinary cursor navigation, but database name search is not assumed for them.
 
-Retries operate on at most fifty displayed, captured failures per request. Page through retained failures to review further selections. Current deliberately does not blindly execute every UUID in a batch: each submitted item must still match the retained native dispatch and executable failed payload. Missing/expired Current history does not grant retry permission. Application operators can use Laravel's own batch retry tooling outside Current with its normal semantics; quiesce independent retry/forget operations when using Current maintenance. The wait-notification event and per-host process-manager shutdown remain the documented integration points; no remote PID purge or notification delivery service is implied.
+Selected retries operate on at most fifty displayed failures per request. Full-batch passes use the separately verified retained executable evidence described above; missing Current history alone never grants retry permission. Application operators can use Laravel's own batch retry tooling outside Current with its normal semantics; quiesce independent retry/forget operations when using Current maintenance. Built-in database UUID payload cleanup uses an atomic, byte-sensitive comparison so a fast worker's replacement failure cannot be deleted by cleanup of the original. Custom failed providers cannot promise this operation and remain unconfirmed. No remote PID purge or hosted notification service is implied.
+
+### Tag retention
+
+All approved captured tags remain searchable without a separate monitored-tag screen. To keep selected native histories longer, configure exact approved tags:
+
+```php
+'tag_retention_days' => ['order:important' => 14],
+```
+
+Tags must also match `current.tag_prefixes`. The longest matching policy applies, without shortening the ordinary retention, and remains capped by `max_retention_days` (hard maximum 30 days). At most 1,000 exact policies are inspected. The first observation fixes expiration in both recording modes; later events and configuration edits do not slide an existing history's lifetime. This is bounded history retention rather than a second Horizon-style Redis tag index.
+
+### Development watching and orphan cleanup
+
+`php artisan current:listen` runs the native launcher and watches configured `native.watch` files/directories. Bounded PHP polling requires no Node package. Source changes drain the owned launcher before starting a replacement. Generated `bootstrap/cache` files are ignored unless explicitly selected. The watcher is for development; production still uses a process manager. Symlinks, unsupported paths, more than 20,000 entries or scans above 64 MiB fail explicitly rather than silently missing changes.
+
+`php artisan current:purge` inspects the configured local instance; `--instance=name` or `--all` selects other records in this application's private state directory. An active ownership lock is preserved. For abandoned recorded worker slots, the matching Go binary verifies boot ID, process start ticks, UID and a private random birth token, then signals through a held Linux pidfd. Default `--signal=TERM --wait=5` requests termination and waits for exit; explicit `--signal=KILL` is available for a proven unresponsive worker.
+
+Missing/old/corrupt identity, unsupported pidfds, inaccessible process information and surviving workers after the wait remain unconfirmed. No raw-PID fallback, global discovery, remote signaling or arbitrary descendant killing occurs. Install the matching binary and restart workers before relying on proof fields; beta.2 records lack them. Runtime samplers retain their separate bounded timeout and parent-death cleanup. This operation does not guarantee that unrecorded application-created subprocesses are gone.
 
 ### Process-manager setup
 
