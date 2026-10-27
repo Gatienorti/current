@@ -23,7 +23,7 @@ Use one collector per Current database/namespace. Async collection and the optio
    php artisan current:install
    ```
 
-2. Install a matching collector binary. The [Collector binaries workflow](https://github.com/Gatienorti/current/actions/workflows/collector-binaries.yml) produces static Linux `amd64` and `arm64` executables plus SHA-256 files, available as workflow artifacts. When a release containing this feature is published, the workflow also attaches them to that release. The existing `v0.1.0-beta.1` predates this feature; do not assume it has these assets.
+2. Install a matching collector binary. The [Collector binaries workflow](https://github.com/Gatienorti/current/actions/workflows/collector-binaries.yml) produces static Linux `amd64` and `arm64` executables plus SHA-256 files, available as workflow artifacts and [release assets](https://github.com/Gatienorti/current/releases). Use beta.2 or later; beta.1 predates this feature.
 
    Download the binary and its checksum file from the same trusted Current release/workflow run, then install it from your application:
 

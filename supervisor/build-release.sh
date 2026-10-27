@@ -6,7 +6,9 @@ arch=$(go env GOARCH)
 [ "$(go env GOOS)" = linux ] || { echo 'Linux build required' >&2; exit 1; }
 go test -race -count=1 ./...
 mkdir -p dist
-CGO_ENABLED=0 go build -trimpath -o "dist/current-supervisor-linux-$arch" .
+# Docker builds may run under a different owner than the mounted checkout.
+# Provenance is recorded explicitly in VERSION rather than automatic Git stamping.
+CGO_ENABLED=0 go build -buildvcs=false -trimpath -o "dist/current-supervisor-linux-$arch" .
 cp ../LICENSE dist/current-supervisor-LICENSE
 cp "$(go env GOROOT)/LICENSE" dist/current-supervisor-LICENSE-GO
 printf '%s\n' "$version" > "dist/current-supervisor-VERSION-linux-$arch"

@@ -75,7 +75,7 @@ Current remains an early beta. Isolated integration and compatibility tests have
 
 - [Installation and configuration](docs/INSTALLATION.md)
 - [Compatibility and verification](docs/COMPATIBILITY.md)
-- [Unreleased changes](CHANGELOG.md)
+- [Changelog](CHANGELOG.md)
 - [Contributing and running tests](CONTRIBUTING.md)
 - [Security reporting](SECURITY.md)
 
@@ -85,8 +85,8 @@ Released under the [MIT license](LICENSE).
 
 ### Optional async job telemetry
 
-Current keeps synchronous recording by default. An opt-in Redis transport and Go collector can batch job/attempt/step writes while retaining Horizon execution. The opt-in path supports Linux, phpredis, standalone Redis 7 and either local SQLite or MySQL 8.4/MariaDB 11.4 InnoDB connections. See [setup, collector health, recovery and switching modes](docs/ASYNC-TELEMETRY.md). Webhooks and broadcasts stay synchronous. Static Linux binaries and checksums are built by CI; the setup guide covers verified installation and TLS. This feature is not in the previously published beta.
+Current keeps synchronous recording by default. An opt-in Redis transport and Go collector can batch job/attempt/step writes. The opt-in path supports Linux, phpredis, standalone Redis 7 and either local SQLite or MySQL 8.4/MariaDB 11.4 InnoDB connections. See [setup, collector health, recovery and switching modes](docs/ASYNC-TELEMETRY.md). Webhooks and broadcasts stay synchronous. Static Linux binaries and checksums are built by CI; the setup guide covers verified installation and TLS. Available from beta.2.
 
 ## Experimental native execution
 
-An opt-in Linux Go supervisor can run Laravel workers without Horizon, while keeping Current investigation and independently selected telemetry. This is unreleased experimental work, not complete Horizon parity. See [native setup and explicit limits](docs/NATIVE-ENGINE.md). Existing Horizon applications keep their default backend.
+An opt-in Linux Go supervisor can run Laravel workers without Horizon, while keeping Current investigation and independently selected telemetry. Available from beta.2, this experimental backend has explicit differences from Horizon. See [native setup and limits](docs/NATIVE-ENGINE.md). Existing Horizon applications keep their default backend.

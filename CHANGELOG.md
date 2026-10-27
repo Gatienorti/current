@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.0-beta.2 — 2026-10-27
 
 - Optional Linux Go supervisor runs standard Laravel Redis workers without Horizon. The default Horizon backend remains supported.
 - Native execution includes environment-specific pools, worker ranges and budgets, balancing, pause/resume/restart, deployment shutdown, queue inventory, metrics and batch investigation.
@@ -17,4 +17,4 @@ Stop producers and workers before changing telemetry protocols, execution backen
 
 Native execution and async collection remain optional and experimental. Read [native setup](docs/NATIVE-ENGINE.md), [async setup](docs/ASYNC-TELEMETRY.md) and [compatibility limits](docs/COMPATIBILITY.md) before enabling them. No universal performance or production-reliability guarantee is implied.
 
-Published version tags remain immutable. These changes require a new release; they do not replace the contents of beta.1.
+Published version tags remain immutable. This release does not replace the contents of beta.1.
