@@ -90,3 +90,5 @@ Current keeps synchronous recording by default. An opt-in Redis transport and Go
 ## Experimental native execution
 
 An opt-in Linux Go supervisor can run Laravel workers without Horizon, while keeping Current investigation and independently selected telemetry. Available from beta.2, this experimental backend has explicit differences from Horizon. See [native setup and limits](docs/NATIVE-ENGINE.md). Existing Horizon applications keep their default backend.
+
+Development versions after beta.2 include a [Horizon migration preview and native setup checks](docs/NATIVE-ENGINE.md#migration-preview-and-setup-checks). Both require explicit operator review; neither switches engines automatically.

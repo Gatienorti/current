@@ -141,7 +141,7 @@ final class CurrentServiceProvider extends ServiceProvider
                 }
             });
         }
-        $this->commands([Console\ListenCommand::class, Console\PurgeCommand::class, Console\ClearCommand::class, Console\ForgetCommand::class, Console\ClearMetricsCommand::class, Console\TerminateCommand::class, Console\RuntimeSnapshotCommand::class, Console\MonitorCommand::class, Console\SnapshotCommand::class, Console\SuperviseCommand::class, Console\PruneCommand::class, Console\CollectCommand::class, Console\CollectorConfigCommand::class, Console\InstallCollectorCommand::class, Console\TelemetryStatusCommand::class, Console\InstallCommand::class]);
+        $this->commands([Console\DoctorCommand::class, Console\MigrateHorizonCommand::class, Console\ListenCommand::class, Console\PurgeCommand::class, Console\ClearCommand::class, Console\ForgetCommand::class, Console\ClearMetricsCommand::class, Console\TerminateCommand::class, Console\RuntimeSnapshotCommand::class, Console\MonitorCommand::class, Console\SnapshotCommand::class, Console\SuperviseCommand::class, Console\PruneCommand::class, Console\CollectCommand::class, Console\CollectorConfigCommand::class, Console\InstallCollectorCommand::class, Console\TelemetryStatusCommand::class, Console\InstallCommand::class]);
         $this->app->afterResolving(Schedule::class, function (Schedule $schedule) {
             $schedule->command('current:prune')->hourly();
             $schedule->command('current:monitor')->everyMinute()->withoutOverlapping(2)

@@ -4,6 +4,32 @@ Current can now boot without Horizon and run native Laravel Redis workers under 
 
 The additional notification routes, full-batch retry passes, watching, orphan cleanup, balancing policy and tag-specific retention described below are development changes after beta.2. They require a version containing migration 17 and the matching supervisor binary; the published beta.2 tag is unchanged.
 
+## Migration preview and setup checks
+
+These commands are development additions after beta.2. In an application with Horizon installed, preview the currently loaded environment:
+
+```sh
+php artisan current:migrate-horizon
+php artisan current:migrate-horizon --environment=production --json
+```
+
+The preview reads the installed Horizon provisioning contract, chooses its first matching environment pattern, and preserves its recursive default/override behavior (including queue/backoff lists). `--environment` selects from the configuration already loaded; it does not load another dotenv file. Queue order, worker limits, balancing strategy and supported worker options are translated. Canonical integer environment values are converted without overflow; unsupported/ambiguous options, invalid native constraints, excessive budgets and incompatible queue drivers block the proposal instead of being silently dropped. Disabled supervisors are identified and omitted. Exit0 means a valid translation, not a completed migration; errors exit1. `--json` emits the report without console decoration. No configuration is written, Redis is not contacted, and no workers are started or stopped.
+
+Review the generated native block and queue-driver changes. Replace the proposed `pools`, `defaults` and `environments` entries rather than recursively combining them with older native pools. Keep unrelated Current settings and merge `queue_connections` with existing approved capture connections. Paths reflect the runtime generating the preview; rerun/review them in the worker deployment. Assign a unique instance and private state path. Initial allocation is shown explicitly; transient balancing behavior is not promised identical. Retention, monitored-tag behavior, silencing, wait alerts and notification routes need their own reviewed Current settings.
+
+The command prints cutover and rollback steps. Keep producers quiescent while draining old work, delayed entries and reservations; stop Horizon through its process manager and prevent it restarting before native workers consume those queues. Do not mix the engines during cutover. Legacy Horizon payloads do not acquire native dispatch identities retroactively. Preserve the original configuration for a drain-and-stop rollback. The command does not certify that your queues are drained.
+
+After applying the reviewed configuration and running the installer separately, inspect the actual worker runtime/user:
+
+```sh
+php artisan current:doctor
+php artisan current:doctor --json
+```
+
+Checks cover Linux/extensions, native pool validation, capture connection names, standalone phpredis PING with bounded private connections, executable ELF architecture, existing private state-directory permissions, access-gate registration, required history tables/core identity columns, failed-provider limits and async collector health when selected. Exit1 means a failed read check; exit0 means those checks passed, with warnings still requiring review. An absent state directory may be reported as a warning when its parent is writable; it is not created by the command. Missing SQLite history is not created or migrated. Configured binaries are inspected without executing them.
+
+These checks do not exercise SQL write permissions, Redis mutation ACLs, a particular user's web authorization, process-manager configuration or release checksum/protocol matching. Database connections use application driver settings/timeouts; file-backed SQLite connections can perform their normal connection initialization. Use the matching trusted release/checksums and `current:collector-install` for collector verification. No jobs, test records, migrations, service controls or configuration edits are issued. Async readiness requires a healthy running collector, so run that check again after starting it separately. Horizon remains the default backend until the operator explicitly switches.
+
 ## Installation
 
 Use a dedicated development/test application first. Install Current, explicitly select native execution, and define access:

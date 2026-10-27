@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `current:migrate-horizon` previews a native configuration using installed Horizon environment/default semantics, blocks unsupported settings and prints a manual cutover/rollback checklist. It never applies changes.
+- `current:doctor` inspects native configuration, Redis connectivity, binary architecture, state permissions, access gates, history schema and optional collector health without dispatching jobs or performing repairs.
 - Native dashboards now include all eight operational summary cards, guarded source states and valid split-pool controls. Queue inventory live counts refresh automatically.
 - Shared native state is counted once when web and worker hostnames differ; distinct supervisor generations remain separate.
 - Completion rates retain jobs with unavailable duration data; runtime averages and missing metric windows remain explicitly unavailable. Workload estimates distinguish consuming capacity from draining processes.
