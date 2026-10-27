@@ -302,7 +302,9 @@ final class Recorder
             $result = $callback();
             $now = hrtime(true) / 1e9;
             if ($now >= $this->nextHeartbeatAt) {
-                $this->store->table('meta')->updateOrInsert(['key' => 'last_observed_at'], ['value' => (string) microtime(true)]);
+                // Producers/workers can publish their first heartbeat together.
+                // One atomic statement avoids a duplicate-key race opening the circuit.
+                $this->store->table('meta')->upsert([['key' => 'last_observed_at', 'value' => (string) microtime(true)]], ['key'], ['value']);
                 $this->nextHeartbeatAt = $now + 5;
             }
 

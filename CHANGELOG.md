@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Synchronous recorder heartbeats use an atomic upsert, avoiding a first-heartbeat insertion race that could pause subsequent observation without affecting job execution.
 - Native worker timeouts now preserve 0 (disabled Laravel alarm) and deadlines through 24 hours, with finite shutdown grace through 86,430 seconds. Watch/deployment commands honor the longer grace. Install the matching rebuilt supervisor.
 - Horizon migration previews account for Horizon's effective one-process-pool-per-queue maximum and report that adjustment explicitly; native instance/group caps remain enforced. Unsafe queue reservation deadlines still block migration.
 - `current:migrate-horizon` previews a native configuration using installed Horizon environment/default semantics, blocks unsupported settings and prints a manual cutover/rollback checklist. It never applies changes.

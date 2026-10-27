@@ -54,4 +54,23 @@ final class OverheadTest extends TestCase
         $this->assertGreaterThan(0, (float) $this->store()->table('meta')->where('key', 'last_observed_at')->value('value'));
         $this->assertSame(2, $this->store()->table('jobs')->count());
     }
+
+    public function test_competing_first_heartbeat_cannot_disable_subsequent_job_observation(): void
+    {
+        $db = $this->store()->connection();
+        $competed = false;
+        $db->listen(function (\Illuminate\Database\Events\QueryExecuted $query) use ($db, &$competed): void {
+            if ($competed || $query->connection !== $db || ! in_array('last_observed_at', $query->bindings, true)) { return; }
+            $competed = true;
+            // Commit another recorder's first heartbeat immediately after this
+            // recorder's first heartbeat operation. A check-then-insert races here.
+            $db->table('lens_meta')->upsert([['key' => 'last_observed_at', 'value' => (string) microtime(true)]], ['key'], ['value']);
+        });
+        dispatch(new PaymentJob('success', 'heartbeat-first'));
+        dispatch(new PaymentJob('success', 'heartbeat-next'));
+        $this->assertTrue($competed);
+        $this->assertSame(2, $this->store()->table('jobs')->count());
+        $this->assertSame(1, $this->store()->table('meta')->where('key', 'last_observed_at')->count());
+        $this->assertFileDoesNotExist(config('current.diagnostic_path'));
+    }
 }

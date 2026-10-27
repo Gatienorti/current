@@ -158,7 +158,12 @@ try {
     until(fn () => $store->table('jobs')->whereIn('status', ['completed', 'failed'])->count() === 5, 'complete history', 45);
     ensure($store->table('attempts')->count() === 9, 'exact attempt count');
     ensure($store->table('steps')->count() === 9, 'instrumented steps');
-    ensure($store->table('jobs')->where('coverage', 'observed_enqueue')->count() === 5, 'all enqueues captured');
+    $enqueueCoverage = $store->table('jobs')->where('coverage', 'observed_enqueue')->count();
+    if ($enqueueCoverage !== 5) {
+        $diagnostic = is_file($root.'/diagnostics.json') ? json_decode(file_get_contents($root.'/diagnostics.json'), true) : [];
+        ensure(false, 'all enqueues captured: '.json_encode(['driver' => config('current.telemetry.driver'),
+            'jobs' => $store->table('jobs')->select('status', 'coverage')->get(), 'recorder_error_class' => $diagnostic['error_class'] ?? null]));
+    }
     ensure($store->table('jobs')->where('arguments_state', 'captured')->count() === 5, 'arguments captured');
     ensure($store->table('jobs')->where('metadata_state', 'captured')->count() === 5, 'metadata captured');
     ensure(!str_contains(json_encode($store->table('jobs')->get()), 'fixture-secret'), 'arguments redacted before persistence');
