@@ -3,10 +3,10 @@
 @section('content')
 <div data-live-region="investigation" data-refresh-ms="5000">
 <div class="job-header">
-<div class="page-heading detail-heading"><div><h1>{{ class_basename($job->job_class) }}</h1><div class="detail-subtitle">@include('current::status', ['status' => $job->display_status])<span class="mono">{{ $job->external_id }}</span></div></div><div class="job-actions">@if($job->display_status === 'failed' && config('current.allow_retries', true))
+<div class="page-heading detail-heading"><div><h1>{{ class_basename($job->job_class) }}</h1><div class="detail-subtitle">@include('current::status', ['status' => $job->display_status])<span class="mono">{{ $job->external_id }}</span></div></div><div class="job-actions">@if($job->display_status === 'failed' && config('current.allow_retries', true) && \Current\ExecutionBackend::supports('retry') && (!\Current\ExecutionBackend::native() || (\Illuminate\Support\Facades\Gate::has('operateCurrent') && \Illuminate\Support\Facades\Gate::allows('operateCurrent'))))
 @if($retryJob)<a class="button primary" href="{{ route('current.show', ['id' => $retryJob->id, 'watch' => 1]) }}#execution-map">View retry</a>
 @elseif(!$retryRequested)<form method="POST" action="{{ route('current.retry', ['id' => $job->id]) }}" data-retry-form>@csrf<button class="button primary" type="submit">Retry job</button></form>
-@else<span class="subtle">Retry requested · check Horizon</span>
+@else<span class="subtle">Retry requested · {{ \Current\ExecutionBackend::native() ? 'check failed jobs' : 'check Horizon' }}</span>
 @endif
 @endif
 @if($debugPrompt)<button class="button secondary" type="button" data-debug-open hidden>Debug with AI</button>
@@ -25,6 +25,7 @@
 </div>
 @if(session('current_retry_notice'))<p role="status" class="observation-notice">{{ session('current_retry_notice') }}</p>
 @endif
+@if($job->cleared_at)<p class="subtle">A waiting entry for this dispatch was cleared {{ gmdate('M j, H:i:s', (int) $job->cleared_at) }} UTC. Captured attempts remain below.</p>@endif
 @if(!$watch && in_array($job->display_status, ['pending', 'processing']))<p><a class="text-link" href="{{ route('current.show', ['id' => $job->id, 'watch' => 1]) }}#execution-map">Watch live</a></p>
 @endif
 @include('current::debug-prompt')

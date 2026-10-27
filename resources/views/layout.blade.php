@@ -26,6 +26,7 @@
         <nav class="section-navigation" aria-label="{{ ucfirst($activeArea) }} navigation">
         @if($activeArea === 'jobs')
             @foreach($jobPages as $key => [$icon, $label])
+                @continue(!\Current\ExecutionBackend::supports($key))
                 <a class="nav-item {{ $activeSection === $key ? 'selected' : '' }}" @if($activeSection === $key) aria-current="page" @endif href="{{ route('current.'.$key) }}">@include('current::icon', ['iconName' => $icon]){{ $label }}</a>
             @endforeach
         @elseif($activeArea === 'webhooks')
@@ -75,6 +76,7 @@
         @if($activeArea === 'jobs')
         <nav class="mobile-job-nav" aria-label="Job pages">
             @foreach($jobPages as $key => [$icon, $label])
+                @continue(!\Current\ExecutionBackend::supports($key))
                 <a href="{{ route('current.'.$key) }}">{{ $label }}</a>
             @endforeach
         </nav>

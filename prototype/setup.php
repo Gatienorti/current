@@ -65,3 +65,5 @@ if (! Schema::connection(config('current.connection'))->hasColumn('lens_webhook_
 if (! Schema::connection(config('current.connection'))->hasTable('lens_broadcast_auth_failures')) {
     (require dirname(__DIR__).'/database/migrations/2026_10_25_000011_add_broadcast_authorization_failures.php')->up();
 }
+
+(require __DIR__.'/upgrade-history.php')();

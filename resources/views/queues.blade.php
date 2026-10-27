@@ -2,7 +2,7 @@
 @section('title', 'Queues')
 @section('content')
 <div class="page-heading"><h1>Queues</h1><span class="soft-badge">{{ $environment }}</span></div>
-@if(!$available)<p class="observation-notice">Horizon configuration is unavailable.</p>@endif
+@if(!$available)<p class="observation-notice">Queue configuration is unavailable.</p>@endif
 @if($partial)<p class="observation-notice">Some source files could not be inspected. Job assignments may be incomplete.</p>@endif
 @foreach($supervisorTables as $supervisor)
 <section class="panel supervisor-queues">

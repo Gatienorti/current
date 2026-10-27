@@ -27,7 +27,23 @@ final class Store
     {
         // History completeness is independent of the most recent execution outcome.
         // Derive this on read too, so retained records need no inferred backfill.
-        return "COALESCE((SELECT CASE a.status WHEN 'released' THEN 'pending' WHEN 'exception' THEN 'unknown' WHEN 'timed_out' THEN 'unknown' ELSE a.status END FROM lens_attempts a WHERE a.id = ".$this->latestAttemptSql()."), CASE lens_jobs.status WHEN 'incomplete' THEN 'unknown' WHEN 'conflicting' THEN 'unknown' ELSE lens_jobs.status END)";
+        return "COALESCE((SELECT CASE a.status WHEN 'released' THEN CASE WHEN lens_jobs.cleared_at IS NOT NULL AND a.finished_at <= lens_jobs.cleared_at THEN 'cleared' ELSE 'pending' END WHEN 'exception' THEN 'unknown' WHEN 'timed_out' THEN 'unknown' ELSE a.status END FROM lens_attempts a WHERE a.id = ".$this->latestAttemptSql()."), CASE lens_jobs.status WHEN 'incomplete' THEN 'unknown' WHEN 'conflicting' THEN 'unknown' WHEN 'pending' THEN CASE WHEN lens_jobs.cleared_at IS NOT NULL THEN 'cleared' ELSE 'pending' END ELSE lens_jobs.status END)";
+    }
+
+    /** Call inside the job's cycle transaction, after changing its attempt. */
+    public function latestOutcome(string $jobId): string
+    {
+        // Keep this a non-locking, job-scoped read. MariaDB can acquire shared
+        // locks on unrelated attempts when the correlated read expression above
+        // is embedded in an UPDATE, deadlocking simultaneous worker starts.
+        $status = $this->table('attempts')->where('job_id', $jobId)
+            ->orderByDesc('started_at')->orderByDesc('id')->value('status');
+
+        return match ($status) {
+            'released' => 'pending',
+            'exception', 'timed_out', null => 'unknown',
+            default => $status,
+        };
     }
 
     public function unfinishedSql(): string
@@ -49,7 +65,7 @@ final class Store
             ->selectRaw('(SELECT MIN(a.started_at) FROM lens_attempts a WHERE a.job_id = lens_jobs.id AND a.finished_at IS NULL) AS oldest_unfinished_at');
     }
 
-    public function transaction(callable $callback): mixed
+    public function transaction(callable $callback, int $attempts = 1): mixed
     {
         return $this->connection()->transaction(function () use ($callback) {
             if ($this->connection()->getDriverName() === 'sqlite') {
@@ -63,19 +79,67 @@ final class Store
             }
 
             return $callback();
-        });
+        }, $attempts);
     }
 
-    public function newJob(string $externalId, string $connection, string $queue, array $payload, string $coverage = 'observed_enqueue'): string
+    public function cycleTransaction(string $uuid, string $queueConnection, callable $callback): mixed
+    {
+        $connection = $this->connection();
+        if (! in_array($connection->getDriverName(), ['mysql', 'mariadb'], true)) {
+            return $this->transaction($callback);
+        }
+
+        // Serialize even a missing identity without locking unrelated job ranges.
+        // Acquire before beginning the transaction / establishing its snapshot.
+        $pdo = $connection->getPdo();
+        if ($connection->transactionLevel() !== 0 || $pdo->inTransaction()) {
+            throw new \RuntimeException('Current requires a separate history connection outside application transactions.');
+        }
+        $name = 'current-cycle:'.substr(hash('sha256', json_encode([
+            $connection->getDatabaseName(), $connection->getTablePrefix(), $queueConnection, $uuid,
+        ], JSON_THROW_ON_ERROR)), 0, 50);
+        $lock = $pdo->prepare('SELECT GET_LOCK(?, 1)');
+        $lock->execute([$name]);
+        if ((int) $lock->fetchColumn() !== 1) {
+            throw new \RuntimeException('Current history identity lock unavailable.');
+        }
+
+        try {
+            return $this->transaction(function () use ($connection, $pdo, $callback) {
+                // Laravel may reconnect while beginning a transaction. That new
+                // session would not own the lock; never proceed without it.
+                if ($connection->getPdo() !== $pdo) {
+                    throw new \RuntimeException('Current history lock session changed.');
+                }
+
+                return $callback();
+            });
+        } finally {
+            // Use the same physical session; no read replica or reconnect here.
+            $release = $pdo->prepare('SELECT RELEASE_LOCK(?)');
+            $release->execute([$name]);
+        }
+    }
+
+    /** Call inside the identity transaction. Lock absent keys too on InnoDB. */
+    public function jobAction(string $uuid, string $connection, ?string $dispatch): ?object
+    {
+        if ($dispatch === null) { return null; }
+        $action = $this->table('job_actions')->where('identity_hash', Support\DispatchIdentity::fingerprint($uuid, $connection, $dispatch))->lockForUpdate()->first();
+        return $action && $action->expires_at > microtime(true) ? $action : null;
+    }
+
+    public function newJob(string $externalId, string $connection, string $queue, array $payload, string $coverage = 'observed_enqueue', ?float $clearedAt = null): string
     {
         $id = (string) Str::ulid();
         $now = microtime(true);
         $retention = max(1, min((int) config('current.retention_days', 7), (int) config('current.max_retention_days', 30)));
-        $this->table('jobs')->insert([
+        $dispatchId = Support\DispatchIdentity::fromPayload($payload);
+        $this->table('jobs')->insert(array_merge($dispatchId ? ['dispatch_id' => $dispatchId] : [], [
             'id' => $id, 'external_id' => mb_substr($externalId, 0, 100),
             'connection' => mb_substr($connection, 0, 100), 'queue' => mb_substr($queue, 0, 100),
             'job_class' => mb_substr((string) data_get($payload, 'data.commandName', 'Unknown command'), 0, 240),
-            'status' => 'pending', 'coverage' => $coverage,
+            'status' => 'pending', 'coverage' => $coverage, 'cleared_at' => $clearedAt,
             'silenced' => is_bool($payload['silenced'] ?? null) ? $payload['silenced'] : null,
             'retry_of' => isset($payload['retry_of']) ? mb_substr((string) $payload['retry_of'], 0, 100) : null,
             'display_name' => is_string($payload['displayName'] ?? null) ? mb_substr($payload['displayName'], 0, 240) : null,
@@ -87,7 +151,7 @@ final class Store
             'batch_id' => is_string(data_get($payload, 'data.batchId')) ? mb_substr($payload['data']['batchId'], 0, 100) : null,
             'first_observed_at' => $now, 'observed_at' => $now,
             'expires_at' => $now + $retention * 86400,
-        ]);
+        ]));
         if (is_bool($payload['silenced'] ?? null)) {
             $this->table('meta')->insertOrIgnore(['key' => 'silenced_capture_started_at', 'value' => (string) $now]);
         }
@@ -99,9 +163,10 @@ final class Store
         return $id;
     }
 
-    public function findCycle(string $uuid, string $connection): ?object
+    public function findCycle(string $uuid, string $connection, ?string $dispatchId = null): ?object
     {
         return $this->table('jobs')->where('external_id', $uuid)->where('connection', $connection)
+            ->when($dispatchId !== null, fn ($query) => $query->where('dispatch_id', $dispatchId))
             ->where('expires_at', '>', microtime(true))->orderByDesc('first_observed_at')->orderByDesc('id')->first();
     }
 

@@ -25,6 +25,34 @@ final class PruneCommand extends Command
         }
         $this->info("Removed {$count} expired jobs and their attempts/steps.");
 
+        if ($store->connection()->getSchemaBuilder()->hasTable('lens_native_metrics')) {
+            do {
+                $removed = $store->table('native_metrics')->where('expires_at', '<=', microtime(true))->limit(500)->delete();
+            } while ($removed > 0);
+        }
+
+        do {
+            $removed = $store->transaction(function () use ($store) {
+                $now = microtime(true);
+                $rows = $store->table('job_actions')->where('expires_at', '<=', $now)->limit(500)->lockForUpdate()->get();
+                if ($rows->isEmpty()) { return 0; }
+                $store->table('meta')->whereIn('key', $rows->where('kind', 'forgotten')->pluck('job_id')->filter()->map(fn ($id) => 'retry:'.$id)->all())->delete();
+                return $store->table('job_actions')->whereIn('identity_hash', $rows->pluck('identity_hash'))->where('expires_at', '<=', $now)->delete();
+            }, 3);
+        } while ($removed > 0);
+
+        foreach (['async_receipts' => 'id', 'async_versions' => 'entity', 'async_aliases' => 'id'] as $table => $key) {
+            if (! $store->connection()->getSchemaBuilder()->hasTable('lens_'.$table)) {
+                continue;
+            }
+            do {
+                $keys = $store->table($table)->where('expires_at', '<=', microtime(true))->limit(500)->pluck($key);
+                if ($keys->isNotEmpty()) {
+                    $store->table($table)->whereIn($key, $keys)->delete();
+                }
+            } while ($keys->isNotEmpty());
+        }
+
         $receipts = 0;
         while ($removed = app(WebhookRecorder::class)->prune()) {
             $receipts += $removed;

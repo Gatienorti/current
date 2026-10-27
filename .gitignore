@@ -16,12 +16,16 @@
 *.sqlite-wal
 *.log
 
-# Local-only research and review artifacts
-/docs/screenshots/
+/supervisor/current-supervisor
+/supervisor/dist/
+
+# Local research, measurements and visual review artifacts
 /docs/benchmarks/
+/docs/screenshots/
 /docs/verification/
 /experiments/
 /.local-docs-backup/
+/tests/native/fixtures/*.json
 /PLAN.md
 /ARCHITECTURE.md
 /docs/RESEARCH.md
@@ -30,4 +34,3 @@
 /docs/DEPENDENCIES.json
 /docs/PERFORMANCE.md
 /docs/NATIVE-RELIABILITY.md
-/tests/native/fixtures/*.json

@@ -2,6 +2,7 @@
 
 namespace Current;
 
+use Composer\InstalledVersions;
 use Illuminate\Broadcasting\BroadcastManager;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Http\Events\RequestHandled;
@@ -37,16 +38,21 @@ final class CurrentServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->app->afterResolving('queue', function ($manager) {
+            $manager->addConnector('current-redis', fn () => new Native\RedisConnector($this->app['redis']));
+        });
         Broadcasts\BroadcastIntegration::configure();
         $this->callAfterResolving(BroadcastManager::class, fn ($manager) => Broadcasts\BroadcastIntegration::register($manager));
-        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        // current:install owns the dedicated history migration repository.
+        // Registering these with application migrate would run them twice against
+        // that same history store using two different migration ledgers.
         $this->loadViewsFrom(__DIR__.'/../resources/views', 'current');
         $this->app['view']->composer('current::layout', function ($view) {
             if (request()->header('X-Current-Refresh') === '1') {
                 return;
             }
-            $view->with('currentVersion', \Composer\InstalledVersions::isInstalled('gatienorti/current')
-                ? (\Composer\InstalledVersions::getPrettyVersion('gatienorti/current') ?? 'Development')
+            $view->with('currentVersion', InstalledVersions::isInstalled('gatienorti/current')
+                ? (InstalledVersions::getPrettyVersion('gatienorti/current') ?? 'Development')
                 : 'Development');
             $view->with('broadcastsVisible', Broadcasts\BroadcastIntegration::visible());
             $view->with('currentMark', file_get_contents(__DIR__.'/../resources/brand/current-mark.svg'));
@@ -58,7 +64,8 @@ final class CurrentServiceProvider extends ServiceProvider
             $view->with('lensCssVersion', filemtime(__DIR__.'/../resources/css/lens.css'));
         });
         $this->publishes([__DIR__.'/../config/current.php' => config_path('current.php')], 'current-config');
-        Route::prefix(config('current.path'))->name('current.')->middleware(array_merge(config('current.middleware'), [Http\RefreshResponse::class]))->group(function () {
+        Route::prefix(config('current.path'))->name('current.')->middleware(array_merge(config('current.middleware'), [Http\BackendCapabilities::class, Http\RefreshResponse::class]))->group(function () {
+            Route::post('/native/control', Http\NativeControlController::class)->name('native.control');
             Route::get('/', [Http\JobsController::class, 'index'])->name('index');
             foreach (['dashboard', 'recent', 'pending', 'processing', 'completed', 'failed', 'silenced'] as $section) {
                 $path = in_array($section, ['dashboard', 'silenced'], true) ? '/'.$section : '/jobs/'.$section;
@@ -67,10 +74,13 @@ final class CurrentServiceProvider extends ServiceProvider
             Route::get('/monitoring', [Http\JobsController::class, 'index'])->defaults('section', 'monitoring')->name('monitoring');
             Route::get('/queues', Http\QueuesController::class)->name('queues');
             Route::get('/schedule', Http\ScheduleController::class)->name('schedule');
+            Route::get('/batches/{id}', [Http\NativeBatchesController::class, 'show'])->where('id', '[A-Za-z0-9_-]{1,100}')->name('batches.show');
+            Route::post('/batches/{id}/retry', [Http\NativeBatchesController::class, 'retry'])->where('id', '[A-Za-z0-9_-]{1,100}')->name('batches.retry');
             foreach (['metrics', 'batches'] as $section) {
                 Route::get('/'.$section, [Http\SectionsController::class, 'horizon'])->defaults('section', $section)->name($section);
             }
             foreach (['jobs', 'queues'] as $kind) {
+                Route::get('/metrics/'.$kind.'/history', Http\NativeMetricsController::class)->defaults('metricKind', $kind)->name('metrics.'.$kind.'.history');
                 Route::get('/metrics/'.$kind, [Http\SectionsController::class, 'horizon'])->defaults('section', 'metrics')->defaults('metricKind', $kind)->name('metrics.'.$kind);
             }
             foreach (['webhooks', 'broadcasts'] as $area) {
@@ -113,7 +123,7 @@ final class CurrentServiceProvider extends ServiceProvider
         foreach ([RequestHandled::class => 'finish', JobQueued::class => 'queued'] as $event => $method) {
             $this->app['events']->listen($event, function ($event) use ($method) {
                 try {
-                    $this->app->make(Webhooks\WebhookRecorder::class)->$method($event);
+                    $this->observeQueueEvent($event, fn () => $this->app->make(Webhooks\WebhookRecorder::class)->$method($event));
                 } catch (\Throwable) {
                 }
             });
@@ -122,13 +132,31 @@ final class CurrentServiceProvider extends ServiceProvider
             $this->app['events']->listen($event, function ($event) use ($method) {
                 // Resolution failure is also isolated (for example a broken DB binding).
                 try {
-                    $this->app->make(Recorder::class)->$method($event);
+                    $this->observeQueueEvent($event, fn () => $this->app->make(Recorder::class)->$method($event));
                 } catch (\Throwable) {
                     // Recorder diagnostics handle failures after successful resolution.
                 }
             });
         }
-        $this->commands([Console\PruneCommand::class, Console\InstallCommand::class]);
-        $this->app->afterResolving(Schedule::class, fn (Schedule $schedule) => $schedule->command('current:prune')->hourly());
+        $this->commands([Console\ClearCommand::class, Console\ForgetCommand::class, Console\ClearMetricsCommand::class, Console\TerminateCommand::class, Console\RuntimeSnapshotCommand::class, Console\MonitorCommand::class, Console\SnapshotCommand::class, Console\SuperviseCommand::class, Console\PruneCommand::class, Console\CollectCommand::class, Console\CollectorConfigCommand::class, Console\InstallCollectorCommand::class, Console\TelemetryStatusCommand::class, Console\InstallCommand::class]);
+        $this->app->afterResolving(Schedule::class, function (Schedule $schedule) {
+            $schedule->command('current:prune')->hourly();
+            $schedule->command('current:monitor')->everyMinute()->withoutOverlapping(2)
+                ->when(fn () => ExecutionBackend::native() && config('current.enabled', true) && (bool) config('current.native.waits', []));
+            $schedule->command('current:snapshot')->everyFiveMinutes()->withoutOverlapping(5)
+                ->when(fn () => ExecutionBackend::native() && config('current.enabled', true) && config('current.native.metrics.enabled', true));
+        });
     }
+    private function observeQueueEvent($event, callable $observation): void
+    {
+        if ($event instanceof JobQueued && Support\DispatchIdentity::fromPayload($event->payload()) !== null) {
+            $queue = $this->app['queue']->connection($event->connectionName);
+            if ($queue instanceof Native\EnqueueObservations) {
+                $queue->observeEnqueue($observation, strlen($event->payload));
+                return;
+            }
+        }
+        $observation();
+    }
+
 }

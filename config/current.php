@@ -3,7 +3,36 @@
 use Current\Http\Authorize;
 
 return [
+    // Native mode is opt-in; configure current-redis and run current:supervise separately.
+    'execution_backend' => env('CURRENT_EXECUTION_BACKEND', 'horizon'),
+    'native' => [
+        'state_directory' => env('CURRENT_NATIVE_STATE_DIRECTORY'),
+        'instance' => env('CURRENT_NATIVE_INSTANCE'),
+        'controls' => false,
+        'binary' => env('CURRENT_SUPERVISOR_BINARY', storage_path('current/current-supervisor')),
+        'grace_seconds' => 90,
+        'worker_limit' => 256, // Total live workers across this instance, including draining workers.
+        'pools' => [], // Named pools: connection, queues, workers, min_workers, max_workers, timeout, memory, tries.
+        'defaults' => [], // Named pool defaults, merged with pools or the selected environment.
+        'environments' => [], // Optional environment patterns => named pool overrides; put '*' last.
+        'registry' => ['enabled' => true, 'redis_connection' => 'default', 'namespace' => 'current'],
+        'waits' => [], // Opt-in connection:queue => estimated clearance threshold in seconds.
+        'wait_cooldown' => 300, // Shared notification-event cooldown, 60–86400 seconds.
+        'metrics' => ['enabled' => true, 'retention_hours' => 24],
+        'silenced' => [], // Explicit job class names.
+        'silenced_tags' => [], // Explicit tag values.
+    ],
     'enabled' => env('CURRENT_ENABLED', true),
+    'telemetry' => [
+        'driver' => env('CURRENT_TELEMETRY_DRIVER', 'sync'), // sync or redis (opt-in SQLite collector).
+        'redis_connection' => env('CURRENT_TELEMETRY_REDIS_CONNECTION', 'default'),
+        'namespace' => env('CURRENT_TELEMETRY_NAMESPACE', 'current'),
+        'binary' => env('CURRENT_COLLECTOR_BINARY', storage_path('current/current-collector')),
+        'max_pending' => 2000,
+        'max_event_bytes' => 131072,
+        'max_age_seconds' => 3600,
+        'lag_warning_seconds' => 10,
+    ],
     'broadcasts' => [
         'visible' => null, // null: detect Reverb or the selected Pusher driver; true/false: explicit navigation override.
         'enabled' => env('CURRENT_BROADCASTS_ENABLED', false),

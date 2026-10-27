@@ -54,17 +54,14 @@ function bootAdaptLab(?string $state = null): Application
     $app = require $source.'/bootstrap/app.php';
     $app->setBasePath($state);
     $app->useAppPath($source.'/app');
-    if ($discovery) {
-        if (! is_dir($state.'/config')) {
-            mkdir($state.'/config', 0700, true);
-            foreach (glob($source.'/config/*.php') as $file) {
-                copy($file, $state.'/config/'.basename($file));
-            }
+    // Installer writes belong to the lab base; the application mount stays read-only.
+    if (! is_dir($state.'/config')) {
+        mkdir($state.'/config', 0700, true);
+        foreach (glob($source.'/config/*.php') as $file) {
+            copy($file, $state.'/config/'.basename($file));
         }
-        $app->useConfigPath($state.'/config');
-    } else {
-        $app->useConfigPath($source.'/config');
     }
+    $app->useConfigPath($state.'/config');
     $app->useBootstrapPath($state.'/bootstrap');
     $app->useLangPath($source.'/lang');
     $app->useStoragePath($state.'/storage');

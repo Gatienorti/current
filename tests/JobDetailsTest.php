@@ -100,6 +100,8 @@ final class JobDetailsTest extends TestCase
 
     public function test_additive_migration_keeps_existing_records_and_does_not_backfill_arguments(): void
     {
+        // Undo the newer batch index before recreating the pre-details schema.
+        (require dirname(__DIR__).'/database/migrations/2026_10_28_000014_add_native_metric_snapshots.php')->down();
         $migration = require dirname(__DIR__).'/database/migrations/2026_10_25_000003_add_job_details.php';
         $migration->down();
         $this->store()->table('jobs')->insert(['id' => '01M5SS8W9PS7F565DGR2RY4YSJ', 'external_id' => 'older-record', 'connection' => 'redis', 'queue' => 'default', 'job_class' => 'OldJob', 'status' => 'completed', 'first_observed_at' => time(), 'observed_at' => time(), 'expires_at' => time() + 3600]);

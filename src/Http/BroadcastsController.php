@@ -72,10 +72,10 @@ final class BroadcastsController
         abort_unless(BroadcastIntegration::visible(), 404);
         $broadcast = $store->table('broadcasts')->where('id', $id)->where('expires_at', '>', microtime(true))->first();
         abort_unless($broadcast, 404);
-        $job = $broadcast->job_id ? $store->jobsWithObservationState()->where('id', $broadcast->job_id)->where('expires_at', '>', microtime(true))->first() : null;
+        $job = $broadcast->job_id ? $store->jobsWithObservationState()->where('id', app(\Current\Telemetry\JobReferences::class)->canonical($broadcast->job_id))->where('expires_at', '>', microtime(true))->first() : null;
 
         $attempt = $job && $broadcast->attempt_id ? $store->table('attempts')->where('job_id', $job->id)->where('id', $broadcast->attempt_id)->first() : null;
-        $relatedBroadcasts = $job ? $store->table('broadcasts')->where('job_id', $job->id)->where('expires_at', '>', microtime(true))->orderByDesc('started_at')->orderByDesc('id')->limit(100)->get() : collect();
+        $relatedBroadcasts = $job ? app(\Current\Telemetry\JobReferences::class)->matching($store->table('broadcasts'), [$job->id])->where('expires_at', '>', microtime(true))->orderByDesc('started_at')->orderByDesc('id')->limit(100)->get() : collect();
         $relations = app(WebhookRelations::class);
         $webhookReceipts = $job ? $relations->receipts($job->id) : collect();
         $webhookDeliveries = $job ? $relations->deliveries([$job->id]) : collect();

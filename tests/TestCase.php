@@ -53,6 +53,10 @@ abstract class TestCase extends LaravelTestCase
         (require dirname(__DIR__).'/database/migrations/2026_10_25_000009_add_broadcast_context.php')->up();
         (require dirname(__DIR__).'/database/migrations/2026_10_25_000010_add_receipt_grouping.php')->up();
         (require dirname(__DIR__).'/database/migrations/2026_10_25_000011_add_broadcast_authorization_failures.php')->up();
+        (require dirname(__DIR__).'/database/migrations/2026_10_28_000013_add_dispatch_identity.php')->up();
+        (require dirname(__DIR__).'/database/migrations/2026_10_28_000014_add_native_metric_snapshots.php')->up();
+        (require dirname(__DIR__).'/database/migrations/2026_10_28_000015_add_async_identity_aliases.php')->up();
+        (require dirname(__DIR__).'/database/migrations/2026_10_28_000016_add_native_maintenance.php')->up();
         Schema::connection('app')->create('failed_jobs', function ($table) {
             $table->id();
             $table->string('uuid')->unique();
@@ -87,7 +91,9 @@ abstract class TestCase extends LaravelTestCase
     {
         $exit = Artisan::call('queue:work', [
             'connection' => 'redis', '--queue' => 'lens-demo', '--stop-when-empty' => true,
-            '--max-jobs' => $count, '--sleep' => 0, '--tries' => 3, '--timeout' => 2,
+            // This worker runs inside PHPUnit's accumulated process, not its own PHP process.
+            // Real native fixtures retain their configured worker memory budgets.
+            '--max-jobs' => $count, '--sleep' => 0, '--tries' => 3, '--timeout' => 2, '--memory' => 512,
         ]);
         $this->assertSame(0, $exit);
     }

@@ -29,7 +29,7 @@ final class JobsController
             'silenced' => ['Silenced jobs', 'Captured completions marked silenced by Horizon. Earlier silenced history is not backfilled.'],
         ];
         $filters = $request->validate([
-            'status' => ['nullable', Rule::in(['pending', 'processing', 'completed', 'failed', 'unknown', 'incomplete', 'conflicting'])],
+            'status' => ['nullable', Rule::in(['pending', 'processing', 'completed', 'failed', 'unknown', 'cleared', 'incomplete', 'conflicting'])],
             'history' => ['nullable', Rule::in(['unfinished', 'overlapping', 'partial'])],
             'queue' => ['nullable', Rule::when(is_array($request->input('queue')), ['array', 'max:50'], ['string', 'max:100'])],
             'queue.*' => 'nullable|string|max:100', 'job_class' => 'nullable|string|max:240',
@@ -106,8 +106,11 @@ final class JobsController
         $jobs = $query->orderByDesc('observed_at')->orderByDesc('id')->cursorPaginate(20)->withQueryString();
         $tags = $this->store->table('tags')->whereIn('job_id', $jobs->pluck('id'))->get()->groupBy('job_id');
 
+        $nativeDashboard = $section === 'dashboard' && \Current\ExecutionBackend::native();
+        $nativeRegistry = $nativeDashboard ? app(\Current\Native\Registry::class)->all() : null;
+        $nativeHealth = $nativeDashboard ? app(\Current\Native\Supervisor::class)->snapshot() : null;
         return view(match ($section) {
-            'dashboard' => 'current::dashboard',
+            'dashboard' => \Current\ExecutionBackend::native() ? 'current::native-dashboard' : 'current::dashboard',
             'monitoring' => 'current::monitoring',
             default => 'current::index',
         }, [
@@ -123,7 +126,10 @@ final class JobsController
             'exceptions' => $refresh || $section === 'dashboard' ? collect() : (clone $base)->whereNotNull('exception_class')->distinct()->limit(100)->pluck('exception_class'),
             'coverage' => $this->store->table('meta')->pluck('value', 'key'),
             'health' => $this->health(),
-            'horizon' => $section === 'dashboard' ? app(HorizonAdapter::class)->dashboard() : null,
+            'nativeRegistry' => $nativeRegistry,
+            'nativeHealth' => $nativeHealth,
+            'nativeWorkload' => $nativeHealth !== null ? app(\Current\Native\Workload::class)->snapshot($nativeHealth, $nativeRegistry) : null,
+            'horizon' => $section === 'dashboard' && ! \Current\ExecutionBackend::native() ? app(HorizonAdapter::class)->dashboard() : null,
             'silencedCoverage' => $section === 'silenced' ? $this->store->table('meta')->where('key', 'silenced_capture_started_at')->value('value') : null,
         ]);
     }
@@ -146,7 +152,7 @@ final class JobsController
         $steps = $attempt ? $this->store->table('steps')->where('attempt_id', $attempt->id)->orderBy('sequence')->get() : collect();
         $operations = $attempt ? json_decode($attempt->source_operations ?? '[]', true) : [];
         $frames = $attempt ? json_decode($attempt->exception_trace ?? '[]', true) : [];
-        $base = rtrim(route('horizon.index'), '/');
+        $base = \Current\ExecutionBackend::native() ? null : rtrim(route('horizon.index'), '/');
         $context = $this->returnContext($validated['return'] ?? null);
         $failedStep = $attempt?->exception_class ? $steps->filter(fn ($step) => $step->status === 'failed'
             && $step->exception_class === $attempt->exception_class
@@ -155,7 +161,7 @@ final class JobsController
         $defaultInspector = $attempt?->exception_class ? ($failedStep ? 'step-'.$failedStep->id : 'attempt-context') : ($steps->isNotEmpty() ? 'step-'.$steps->first()->id : 'attempt-context');
 
         $retryState = json_decode($this->store->table('meta')->where('key', 'retry:'.$id)->value('value') ?? '{}', true);
-        $retryJob = isset($retryState['uuid']) ? $this->store->findCycle($retryState['uuid'], $job->connection) : null;
+        $retryJob = isset($retryState['uuid']) ? $this->store->findCycle($retryState['uuid'], $job->connection, $retryState['dispatch_id'] ?? null) : null;
 
         $retryContext = app(RetryContext::class)->forJob($job);
         $argumentsSource = $retryContext['sources']['arguments'] ?? $job;
@@ -166,7 +172,7 @@ final class JobsController
 
         return view('current::show', [
             'debugPrompt' => $debugPrompt,
-            'relatedBroadcasts' => BroadcastIntegration::visible() ? $this->store->table('broadcasts')->where('job_id', $id)->where('expires_at', '>', microtime(true))->orderByDesc('started_at')->orderByDesc('id')->limit(100)->get() : collect(),
+            'relatedBroadcasts' => BroadcastIntegration::visible() ? app(\Current\Telemetry\JobReferences::class)->matching($this->store->table('broadcasts'), [$id])->where('expires_at', '>', microtime(true))->orderByDesc('started_at')->orderByDesc('id')->limit(100)->get() : collect(),
             'webhookReceipts' => app(WebhookRelations::class)->receipts($id),
             'webhookDeliveries' => app(WebhookRelations::class)->deliveries([$id]),
             'retryContext' => $retryContext, 'argumentsSource' => $argumentsSource, 'metadataSource' => $metadataSource,
@@ -180,7 +186,7 @@ final class JobsController
             'backUrl' => $context['url'], 'backLabel' => $context['label'], 'section' => $context['section'],
             'returnTo' => $context['return'],
             'jobTags' => $this->store->table('tags')->where('job_id', $id)->pluck('tag'),
-            'horizonUrl' => $base.($job->display_status === 'failed' ? '/failed/' : '/jobs/recent/').rawurlencode($job->external_id),
+            'horizonUrl' => $base === null ? null : $base.($job->display_status === 'failed' ? '/failed/' : '/jobs/recent/').rawurlencode($job->external_id),
         ]);
     }
 

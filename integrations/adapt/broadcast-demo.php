@@ -17,6 +17,7 @@ use Symfony\Component\Process\Process;
 $app = bootAdaptLab();
 $app->make(Kernel::class)->bootstrap();
 Artisan::call('migrate', ['--force' => true]);
+Artisan::call('current:install', ['--force' => true]);
 $socket = stream_socket_server('tcp://127.0.0.1:0');
 $port = (int) substr(strrchr(stream_socket_get_name($socket, false), ':'), 1);
 fclose($socket);
