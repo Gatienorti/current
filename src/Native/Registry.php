@@ -11,6 +11,18 @@ final class Registry
     private ?array $settings = null;
     private mixed $redis = null;
 
+    /** Match the local generation using each publisher host, not the reader's hostname. */
+    public static function withoutLocal(array $instances, array $local): array
+    {
+        if (! ($local['available'] ?? false)) { return $instances; }
+        return array_values(array_filter($instances, static function (array $instance) use ($local): bool {
+            if (($instance['instance'] ?? null) !== $local['instance']
+                || ! is_string($instance['host'] ?? null) || ! is_string($instance['id'] ?? null)) { return true; }
+            $candidate = hash('sha256', $instance['host']."\0".$local['instance']."\0".$local['owner']);
+            return ! hash_equals($candidate, $instance['id']);
+        }));
+    }
+
     public function tick(bool $final = false): void
     {
         if (! $final && microtime(true) < $this->nextPublish) { return; }

@@ -112,7 +112,8 @@ final class NativeDashboardTest extends TestCase
     public function test_inventory_deduplicates_current_generation_and_excludes_terminal_allocations(): void
     {
         $local = $this->inventory();
-        $copy = $local + ['id' => hash('sha256', (gethostname() ?: 'unknown-host')."\0dashboard\0".str_repeat('a', 32))];
+        $publisher = (gethostname() ?: 'unknown-host').'-worker';
+        $copy = $local + ['host' => $publisher, 'id' => hash('sha256', $publisher."\0dashboard\0".str_repeat('a', 32))];
         $remote = $this->inventory() + ['id' => str_repeat('b', 64)];
         $stopped = $this->inventory('stopped', 0) + ['id' => str_repeat('c', 64)];
         $summary = app(Dashboard::class)->snapshot($local, $this->registry([$copy, $remote, $stopped]), $this->workload());
@@ -154,4 +155,60 @@ final class NativeDashboardTest extends TestCase
         $partial = $this->workload([5]); $partial['partial'] = true;
         $this->assertFalse(app(Dashboard::class)->snapshot($this->inventory(), $this->registry(), $partial)['wait']['available']);
     }
+    public function test_shared_local_state_deduplicates_a_different_hostname_publisher_without_changing_queue_allocation(): void
+    {
+        $directory = sys_get_temp_dir().'/current-shared-state-'.bin2hex(random_bytes(6));
+        mkdir($directory, 0700);
+        $owner = str_repeat('a', 32);
+        $publisher = (gethostname() ?: 'unknown-host').'-worker';
+        $private = ['version' => 1, 'instance' => 'shared', 'owner' => $owner, 'state' => 'running',
+            'updated_at' => gmdate('Y-m-d\TH:i:s\Z'), 'pools' => [
+                ['name' => 'orders', 'connection' => 'redis', 'queues' => ['lens-demo'], 'state' => 'running',
+                    'workers' => 2, 'min_workers' => 1, 'max_workers' => 2, 'slots' => [
+                        ['state' => 'running', 'pid' => 123, 'starts' => 1], ['state' => 'running', 'pid' => 124, 'starts' => 1],
+                    ]],
+            ]];
+        file_put_contents($directory.'/shared.json', json_encode($private));
+        config()->set('current.execution_backend', 'native');
+        config()->set('current.native.state_directory', $directory);
+        config()->set('current.native.instance', 'shared');
+        config()->set('queue.connections.redis.driver', 'current-redis');
+        // Routing discovery is unrelated to generation identity; bound this fixture's source scan.
+        config()->set('current.source_roots', [$directory]);
+        config()->set('current.native.registry.enabled', true);
+        config()->set('current.native.pools', ['orders' => ['connection' => 'redis', 'queues' => ['lens-demo'], 'workers' => 2, 'max_workers' => 2, 'timeout' => 1]]);
+        Gate::define('viewCurrent', fn () => true);
+        try {
+            $health = app(\Current\Native\Supervisor::class)->snapshot();
+            $registry = app(\Current\Native\Registry::class);
+            $registry->publish($health, $publisher);
+            $response = $this->get('/current')->assertOk()->assertDontSee('Worker instances');
+            $this->assertSame(2, $response->viewData('nativeSummary')['inventory']['processes']);
+            $this->assertSame(2, $response->viewData('nativeSummary')['inventory']['allocated']);
+            $this->assertSame(1, $response->viewData('nativeSummary')['inventory']['instances']);
+            $this->assertSame(2, $response->viewData('nativeWorkload')['rows'][0]['running']);
+            $this->assertSame(2, $response->viewData('nativeWorkload')['rows'][0]['consuming']);
+            // Queues derives its current allocation from the one local health record.
+            $queues = $this->get('/current/queues')->assertOk();
+            $this->assertSame(2, $queues->viewData('supervisorTables')[0]['allocated']);
+            $this->assertSame('redis', $queues->viewData('supervisorTables')[0]['connection']);
+            // Replace a stale registry copy with fresh local evidence of that same generation.
+            $id = $registry->all()['instances'][0]['id'];
+            \Illuminate\Support\Facades\Redis::zadd('current:native-registry:index', (int) \Illuminate\Support\Facades\Redis::time()[0] - 8, $id);
+            $private['updated_at'] = gmdate('Y-m-d\TH:i:s\Z');
+            file_put_contents($directory.'/shared.json', json_encode($private));
+            $fresh = $this->get('/current')->assertOk()->assertDontSee('Worker instances');
+            $this->assertTrue($fresh->viewData('nativeSummary')['inventory']['available']);
+            $this->assertSame(2, $fresh->viewData('nativeWorkload')['rows'][0]['running']);
+            $this->assertFalse($fresh->viewData('nativeWorkload')['rows'][0]['uncertain']);
+            // A different generation on the same publisher host must remain distinct.
+            $other = $health; $other['owner'] = str_repeat('b', 32);
+            $registry->publish($other, $publisher);
+            $distinct = $this->get('/current')->assertOk()->assertSee('Worker instances');
+            $this->assertSame(4, $distinct->viewData('nativeSummary')['inventory']['processes']);
+            $this->assertSame(4, $distinct->viewData('nativeWorkload')['rows'][0]['running']);
+            foreach ($registry->all()['instances'] as $record) { $this->assertArrayNotHasKey('owner', $record); }
+        } finally { unlink($directory.'/shared.json'); rmdir($directory); }
+    }
+
 }

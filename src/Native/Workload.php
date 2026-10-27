@@ -12,8 +12,7 @@ final class Workload
         $instances = $registry['instances'];
         $partial = ($registry['invalid'] ?? 0) > 0 || (config('current.native.registry.enabled', true) && ! $registry['available']);
         if ($local['available']) {
-            $id = hash('sha256', (gethostname() ?: 'unknown-host')."\0".$local['instance']."\0".$local['owner']);
-            $instances = array_values(array_filter($instances, fn ($instance) => $instance['id'] !== $id));
+            $instances = Registry::withoutLocal($instances, $local);
             $instances[] = $local;
         }
         $groups = [];

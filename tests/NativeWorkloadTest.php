@@ -23,9 +23,10 @@ final class NativeWorkloadTest extends TestCase
         Redis::zadd('queues:lens-demo:reserved', time() + 3, 'reserved');
         $pool = ['name' => 'orders', 'connection' => 'redis', 'queues' => ['lens-demo'], 'running' => 2, 'state' => 'running'];
         $local = ['available' => true, 'instance' => 'test', 'owner' => str_repeat('a', 32), 'state' => 'running', 'pools' => [$pool]];
-        $id = hash('sha256', (gethostname() ?: 'unknown-host')."\0test\0".str_repeat('a', 32));
+        $publisher = (gethostname() ?: 'unknown-host').'-worker';
+        $id = hash('sha256', $publisher."\0test\0".str_repeat('a', 32));
         $registry = ['available' => true, 'invalid' => 0, 'instances' => [
-            ['id' => $id, 'state' => 'running', 'pools' => [$pool]],
+            ['id' => $id, 'host' => $publisher, 'instance' => 'test', 'state' => 'running', 'pools' => [$pool]],
             ['id' => str_repeat('b', 64), 'state' => 'running', 'pools' => [$pool]],
         ]];
         $rows = app(Workload::class)->snapshot($local, $registry)['rows'];

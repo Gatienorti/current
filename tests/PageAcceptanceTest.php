@@ -39,7 +39,7 @@ final class PageAcceptanceTest extends TestCase
         event(new JobProcessing('redis', $reserved));
         $jobs = $this->store()->table('jobs')->get()->keyBy(fn ($job) => json_decode($job->arguments_json, true)['scenario']);
         $this->assertSame(1, Queue::size('lens-demo'));
-        $this->assertSame(1, Queue::connection()->reservedSize('page-running'));
+        $this->assertSame(1, (int) Redis::zcard('queues:page-running:reserved'));
         foreach (['pending', 'processing', 'completed', 'failed', 'silenced'] as $section) {
             $path = $section === 'silenced' ? '/current/silenced' : '/current/jobs/'.$section;
             $page = $this->get($path)->assertOk()->assertViewHas('total', 1)->assertSee($jobs[$section]->external_id);

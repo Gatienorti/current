@@ -50,8 +50,7 @@ final class Dashboard
         $instances = $enabled ? ($registry['instances'] ?? []) : [];
         $partial = $enabled && (! ($registry['available'] ?? false) || ($registry['invalid'] ?? 0) > 0);
         if ($local['available'] ?? false) {
-            $id = hash('sha256', (gethostname() ?: 'unknown-host')."\0".$local['instance']."\0".$local['owner']);
-            $instances = array_values(array_filter($instances, fn ($instance) => $instance['id'] !== $id));
+            $instances = Registry::withoutLocal($instances, $local);
             $instances[] = $local;
         } elseif (! $enabled) { $partial = true; }
         $processes = 0; $allocated = 0; $paused = 0; $states = [];
