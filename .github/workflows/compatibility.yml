@@ -42,6 +42,7 @@ jobs:
         options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
     env:
       LENS_REDIS_HOST: 127.0.0.1
+      CURRENT_REQUIRE_SUPERVISOR_TESTS: '1'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -60,6 +61,11 @@ jobs:
         run: |
           go test -race ./...
           go build -o current-collector .
+      - name: Build and test native supervisor
+        working-directory: supervisor
+        run: |
+          go test -race ./...
+          CGO_ENABLED=0 go build -o current-supervisor .
       - run: composer validate --no-check-publish
       - name: Resolve and test isolated consumer
         run: php tests/compatibility/run.php "${{ matrix.row }}"
@@ -121,4 +127,10 @@ jobs:
           done
       - name: Prepare disposable test storage
         run: mkdir -p prototype/bootstrap/cache prototype/storage/data prototype/storage/logs prototype/storage/framework/{views,cache,sessions}
-      - run: vendor/bin/phpunit -c phpunit.xml --filter AsyncTelemetryTest
+      - name: Verify maintenance locking with a READ COMMITTED session default
+        working-directory: collector
+        env:
+          CURRENT_TEST_SQL_HOST: 127.0.0.1
+          CURRENT_TEST_SQL_PASSWORD: current-test-only
+        run: go test -race -count=1 -run TestSQLMaintenanceAbsenceLock ./...
+      - run: vendor/bin/phpunit -c phpunit.xml --filter 'AsyncTelemetryTest|SynchronousSqlTest'

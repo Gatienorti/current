@@ -1,88 +1,59 @@
 # Compatibility
 
-Current is an application-independent Horizon companion. Vehify and ADAPT supply integration examples, not package version pins. No host application upgrade is required solely to match Vehify's patch release.
+## Requirements
 
-## Declared range
-
-| Dependency | Composer range |
+| Dependency | Supported range |
 | --- | --- |
-| PHP | `^8.2` (Laravel 13 itself requires PHP 8.3+) |
-| Laravel / Illuminate | `^11.44 \|\| ^12.0 \|\| ^13.0` |
-| Horizon | `^5.30` |
+| PHP | `^8.2`; Laravel 13 requires PHP 8.3+ |
+| Laravel / Illuminate | `^11.44`, `^12.0`, `^13.0` |
+| Horizon, for the default backend | `^5.30`, with a compatible Laravel version |
 | PHP-Parser | `^5.7` |
 
-Composer must also satisfy Horizon's own Laravel constraints. This does not mean every Horizon version pairs with every Laravel version: Horizon 5.30 supports Laravel 11, while the Laravel 12 lower-bound fixture uses Horizon 5.31. Laravel 10, Laravel 11 before 11.44, Horizon before 5.30, and future major releases are not claimed here. No installation-share data was collected, so “most Horizon installations” is a product goal, not a measured coverage percentage.
+Horizon is optional only when explicitly selecting Current's experimental native execution backend. Composer must satisfy each dependency's own constraints: Horizon 5.30 pairs with Laravel 11; the Laravel 12 lower-bound fixture uses Horizon 5.31. Laravel 10 and earlier versions than the declared floors are not supported.
 
-The Laravel floor is the first tested baseline for the existing attempt recorder. Laravel 11.0 does not emit `JobAttempted`; registering a nonexistent event would silently lose completion observations. Older event lifecycles need a separately verified adapter before lowering this floor. Horizon 5.23–5.29 have an incompatible `RedisQueue::pop` signature with Laravel 11.44; Horizon 5.30 accepts the added index argument. The package continues to use public events and repository contracts, with optional dashboard-source failures reported as unavailable.
+Laravel 11.44 is the tested floor for the attempt lifecycle events Current needs. Historical Laravel 11.44/12.0 test consumers pin Symfony Console ~7.3 because their command registration is incompatible with Console 7.4. This is a historical test-fixture constraint, not a recommended host pin. Keep your application dependencies on mutually compatible, maintained versions.
 
-## Verification scope
+## Tested native profiles
 
-**VERIFIED locally on 2026-10-25:** after the installation/automatic-data pass, each combination below passed **52 tests / 517 assertions** on PHP **8.4.23**, real Redis, and SQLite after a fresh Composer path-consumer resolution. These are tested pairs, not every patch permutation within the declared ranges.
+These clean consumers were tested locally without Horizon, with both synchronous recording and the optional async collector:
 
-| Laravel | Horizon | Symfony Console | Profile |
-| --- | --- | --- | --- |
-| 11.44.0 | 5.30.0 | 7.3.10 | Historical lower bound |
-| 11.57.0 | 5.50.1 | 7.4.21 | Current 11.x resolution |
-| 12.0.0 | 5.31.0 | 7.3.10 | Historical lower bound |
-| 12.62.0 | 5.47.2 | 7.4.21 | ADAPT version pair |
-| 12.69.3 | 5.47.2 | 7.4.21 | Vehify version pair |
-| 13.38.0 | 5.50.1 | 8.1.9 | Current 13.x resolution |
+| PHP | Laravel |
+| --- | --- |
+| 8.2.35 | 11.44.0 |
+| 8.2.35 | 12.0.0 |
+| 8.3.36 | 11.57.0, 11.57.1 |
+| 8.3.36 | 12.70.1, 12.70.2 |
+| 8.3.36 | 13.38.0, 13.39.0 |
+| 8.4.23 | 13.38.0, 13.39.0 |
 
-The clean consumers resolved PHP-Parser 5.9.0 and PHPUnit 11.5.57. Their ADAPT/Vehify labels refer only to the framework/Horizon version pairs, not those applications' complete lockfiles or runtime behavior. The live lab retains its existing dependency tree; its full suite, including the actual mocked Vehify job, passed 53 tests / 527 assertions after the setup pass. The actual ADAPT application suite passed seven tests / 117 assertions. The six-profile run includes the new additive migration, `JobQueued` capture, redaction/limits/failure isolation and rendered detail checks; browser interaction checks remain separate.
+Coverage includes installation, retry/release behavior, worker loss, transaction boundaries, named pools, controls, retained history and dashboard access. These are selected Linux ARM64 / standalone Redis / SQLite combinations, not every possible version pairing or production topology. The newer per-queue balancing and batch/metric operations also passed fresh consumers on Laravel 11.44 and 12.0/PHP 8.2, and Laravel 13.39/PHP 8.3. Concurrent native batch retry checks passed with MySQL 8.4 and MariaDB 11.4 application batch storage. The native hosted workflow runs the configured profiles on GitHub; inspect its checks for the revision you plan to deploy. Native execution remains experimental; see [setup and limitations](NATIVE-ENGINE.md).
 
-Subsequent actual ADAPT application tests boot its normal providers and run three real job classes with fixture data and mocked external services. Seven tests / 112 assertions pass on its installed PHP-Parser 5.7.0 and PHPUnit 12.5.12. This extends evidence beyond the matrix's version-only ADAPT profile and permits the lower parser constraint without upgrading the application.
+The default Horizon compatibility matrix is defined in `tests/compatibility/matrix.json` and `.github/workflows/compatibility.yml`. Historical fixtures may permit Composer advisories solely in disposable test consumers; that is not a recommendation to deploy vulnerable dependency versions.
 
-The recorder uses `JobAttempted::successful()` after checking failure/release flags. Laravel 13 replaces the earlier `exceptionOccurred` property with an exception object; directly reading the old property left successful jobs stuck in processing. The shared public method preserves lifecycle capture across the tested versions.
+## Storage and transport limits
 
-The matrix in [tests/compatibility/matrix.json](../tests/compatibility/matrix.json) includes lower-bound Laravel 11/12 combinations, current Laravel 11/13 resolution, and the Laravel/Horizon versions used by ADAPT and Vehify. Each row creates a fresh temporary consumer, resolves Current through a Composer path repository, and executes the portable lifecycle, filtering, navigation, authorization, retention, timeout, worker-loss, and concurrency tests against Redis and SQLite. It does not load either host application's providers, environment, database, or normal jobs.
+- Synchronous history has been tested with SQLite, MySQL 8.4 and MariaDB 11.4. Use a dedicated history connection outside application-owned transactions. Server-SQL concurrency checks cover producer/worker races; SQLite still serializes its writers.
+- Async job telemetry requires Linux, phpredis, standalone Redis 7, and either local SQLite or MySQL 8.4/MariaDB 11.4 InnoDB. See [async setup](ASYNC-TELEMETRY.md) for TLS, ownership, supervision and recovery requirements.
+- PostgreSQL, Redis Cluster/Sentinel, SQL table prefixes, SQL URLs/read-write splitting and unsupported PDO options are outside the async support boundary.
+- Native enqueue confirmation is verified with standalone phpredis. Predis, Redis Cluster, caller-owned pipelines and distributed coordination remain unsupported or unvalidated.
+- Local SQLite must not be hosted on a shared/network filesystem for the collector.
+- Async protocol 2 removes job-identity SQL reads from producers. MySQL/MariaDB network-pause checks verify buffered recovery; stopped-producer upgrades and matching collector/migrations are required. Native time-balancing/workload reads use short-lived Redis observations; SQL sampling is isolated behind a process timeout. This does not make application SQL or the separate webhook/broadcast recorders asynchronous.
 
-The optional `vehify` test group runs separately against its existing read-only vendor tree. It is excluded from portable runs because a standalone package must not require that application's job class. The test harness isolates both normal Redis keys and Horizon's copied connection prefix; setting only `horizon.prefix` after provider boot was insufficient to isolate metrics.
+Passing finite tests does not establish production-scale performance, losslessness during Redis data loss, exactly-once external effects or unlimited outage recovery.
 
-The matrix exposed a real storage difference: Laravel 11's SQLite connection ignores the newer `transaction_mode` option. A deferred read followed by a write could lose an observation under concurrency even with a busy timeout. Current now acquires a SQLite write lock with a no-op metadata UPDATE before reading in recorder/prune transactions, while retaining Laravel transaction handling. The simultaneous-worker fixtures exercise this path. Timeout bounds still depend on host connection configuration; no production throughput or latency claim follows from these tests.
+## Run compatibility checks
 
-Historical Laravel 11.44 / 12.0 fixtures pin Symfony Console to 7.3. Their Artisan command registration fails with Console 7.4 despite the old manifests allowing that combination. This is an upstream compatibility constraint, not a Current adapter. Existing installations must retain a mutually compatible Laravel/Symfony set; the current-release matrix also tests normal dependency resolution.
-
-Historical fixture resolution explicitly permits packages flagged by Composer advisories only inside the disposable test consumers, with audit reporting retained. The package manifest and host security policies are not relaxed. Passing compatibility tests does not recommend deploying historical vulnerable releases.
-
-Local runtime results are recorded in the plan. PHP 8.2/8.3 jobs are configured in [the CI workflow](../.github/workflows/compatibility.yml); configuration alone is not execution evidence. The current local matrix uses PHP 8.4.23. A fresh Laravel 13.38/Horizon 5.50.1 app passed normal Composer discovery, repeated installation, authorization, default SQLite and MySQL 8.4 strict-mode lifecycle/detail/pruning checks, cached config/routes, and package removal preserving configuration/history. MySQL strict grouping exposed and verified a fix to the dashboard counts query. Other PHP runtimes, MySQL concurrency/load and in-place host installation remain separate validation work. See [Installation](INSTALLATION.md).
-
-## Source-cache regression check
-
-**VERIFIED 2026-10-25:** after worker-local source caching, the original package suite passes **60 tests / 581 assertions**, actual ADAPT through Composer discovery passes **7 / 117**, and the oldest supported Laravel 11.44/Horizon 5.30 profile passes **59 / 571**, all on PHP 8.4.23. These runs include content invalidation, bounded eviction and failure isolation. The other five profiles above retain their earlier installation evidence and were not repeated for caching. ADAPT continues to exercise PHP-Parser 5.7.0.
-
-## MariaDB verification
-
-**VERIFIED on 2026-10-25:** MariaDB **11.4.13** (`mariadb:11.4`, image digest `sha256:250e1609e93c0e6aecf64bfbab2d84d5e89d2481540fe77447ff6c855c3b1873`) passes all **17 installation/lifecycle smoke checks** through both Laravel's `mariadb` and `mysql` drivers. Consumer: Laravel 13.38.0, Horizon 5.50.1, PHP 8.4.23. Session SQL mode includes `ONLY_FULL_GROUP_BY` and `STRICT_TRANS_TABLES`.
-
-Checks cover initial/repeated installation, Current route registration, anonymous denial/authorized access, real Redis job completion and terminal retry, three attempts/six named steps, automatic Args and pre-storage redaction, job-detail rendering, populated dashboard aggregates, intersected status/queue filters and retention pruning. The native driver creates the schema; the MySQL-driver run reuses that schema and verifies repeat installation and the same lifecycle. No application-code fix was necessary. The enhanced smoke fixture also passes against SQLite. Existing package/ADAPT/version-matrix totals above were not rerun for this test-only change.
-
-This is one tested MariaDB server/framework combination, not a guarantee for all MariaDB versions or production concurrency/load. The database ran on the isolated lab network with no published ports and was removed afterward; neither host application was modified.
-
-## Repeat the checks
-
-Inside the isolated lab:
+See [contributing](../CONTRIBUTING.md) for the portable suite. Native checks use fresh temporary Composer consumers, a disposable Redis server and built supervisor/collector binaries:
 
 ```sh
-docker compose -f compose.prototype.yaml exec -T lens-web php tests/compatibility/run.php
-docker compose -f compose.prototype.yaml exec -T lens-web php tests/compatibility/run.php adapt
+NATIVE_REDIS_HOST=127.0.0.1 php tests/native/install.php '^12.0' local-native sync,redis
 ```
 
-Outside Docker, use PHP with PCNTL, Redis, PDO SQLite, DOM and mbstring, Composer 2.9+, and a disposable Redis instance. Set `LENS_REDIS_HOST` to that instance, then run `php tests/compatibility/run.php`. The script prints its temporary directories and retains resolved lockfiles for inspection. It does not alter the root manifest or either application's lockfile. The GitHub Actions workflow is prepared locally and has not been published or executed remotely.
+The test harness never requires private application source. Keep generated screenshots, benchmark output and verification reports local; they are intentionally excluded from Git.
 
-Source references: [Laravel 12 worker events](https://github.com/laravel/framework/blob/v12.0.0/src/Illuminate/Queue/Worker.php), [Horizon 5.30 queue adapter](https://github.com/laravel/horizon/blob/v5.30.0/src/RedisQueue.php), [Horizon 5.31 constraints](https://github.com/laravel/horizon/blob/v5.31.0/composer.json), [Laravel 13 requirements](https://github.com/laravel/framework/blob/13.x/composer.json).
+The isolated runtime-sampler and deployment-termination slice also passed clean Laravel12.0/PHP8.2 and Laravel13.39/PHP8.3 native consumers in both recording modes, including proportional balancing and batch/metric operations. SQL network-pause checks on MySQL8.4 and MariaDB11.4 verify bounded sampling and recovery. These finite checks do not establish production multi-host reliability.
 
-Latest retry/live-view regression (2026-10-25): **VERIFIED** all six profiles pass 63 portable tests / 611 assertions each, including native Horizon retry payload preparation, lineage, duplicate-submit protection, authorization/CSRF and ambiguous transport handling. The original Vehify-backed suite passes 64 / 621; actual ADAPT Composer-discovery integration passes 7 / 117. These supersede earlier suite counts without broadening runtime/database claims.
 
-## Fresh beta consumer acceptance — 2026-10-25
+Native maintenance uses migration16 and a matching collector with maintenance protocol1. Queue-clear/history reconciliation and forgotten replay suppression passed SQLite plus live MySQL8.4/MariaDB11.4 collector contention checks. Clean Laravel12.0/PHP8.2 and Laravel13.39/PHP8.3 consumers exercise the public commands in both telemetry modes. Queue clearing has explicit entry/payload bounds and preserves reservations; see the native operation guide. These are scoped acceptance results, not production-scale or Redis failover guarantees.
 
-A new `composer create-project laravel/laravel` consumer resolved Laravel 13.38.0 and Horizon 5.50.1 with PHP 8.4.23 in the isolated lab. Current installed through its local Composer path repository, discovered normally, applied all 11 migrations and passed jobs-only acceptance both before and after config/route caching. This is focused installation evidence, not a new full compatibility-matrix profile.
-
-Adding Reverb afterward required `--with-all-dependencies` in this fresh consumer: its initial Guzzle 8.3.1 / PSR-7 3.2.0 lock did not satisfy Reverb's PSR-7 2.x requirement. Composer resolved Reverb 1.12.0 with Guzzle 7.16.1 / PSR-7 2.13.2. Optional synthetic incoming receipts → queued jobs → mocked outgoing retry groups / real loopback Reverb submissions, channel-auth rejection, comparison/prompt rendering and pruning then passed. No package runtime code needed changing. Existing application lockfiles were untouched; this does not authorize equivalent dependency changes in a host app.
-
-### Optional async telemetry
-
-The synchronous database matrix does not imply async collector support. Async support is Linux, phpredis, standalone Redis 7, and either SQLite on a local Linux filesystem or MySQL 8.4/MariaDB 11.4 with InnoDB. SQL table prefixes, SQL URLs/read-write splitting/unsupported PDO options, PostgreSQL, Redis Cluster/Sentinel and host-shared/network SQLite files are outside this opt-in boundary. See [setup and limitations](ASYNC-TELEMETRY.md). The compatibility workflow now builds the optional collector before testing consumers; new hosted results are not implied until CI actually runs. Local async integration evidence is recorded in PLAN.md.
-
-**VERIFIED async server-database checks, 2026-10-26:** MySQL **8.4.10** and MariaDB **11.4.13**, each 13 tests / 124 assertions on Laravel 12.69.3, Horizon 5.47.2 and PHP 8.4.23. MariaDB passed with both Laravel's `mariadb` and `mysql` drivers. The tests include real retries, deferred writes, Unicode/redaction, reverse snapshots and duplicate replay, database-lock recovery, whole-batch rollback, SQL session loss, competing collectors/namespaces, InnoDB enforcement and pruning. These are isolated functional checks, not throughput or production durability evidence. Custom PDO options outside the supported TLS set and topology/failover configurations are not validated. The subsequent hosted TLS/recovery checks are recorded below.
-
-**VERIFIED hosted async hardening, 2026-10-26:** [run 40393169614](https://github.com/Gatienorti/current/actions/runs/40393169614) passed all six profiles on PHP 8.2.35/8.3.36/8.4.27 (134 portable tests / 1,429 assertions each; seven separately exercised or optional cases skipped). Three SQL configurations—MySQL, native MariaDB and MariaDB through the mysql driver—each passed all 17 async tests, including TLS trust/hostname rejection, mandatory encryption/client certificates, a deterministic SIGTERM-during-transaction regression and a 60-second recovery run. [Binary builds](https://github.com/Gatienorti/current/actions/runs/40393164626) produced static Linux amd64/arm64 executables and checksums. These checks do not establish production-scale performance or unlimited outage durability.
+The final local clean-consumer pass also covers Laravel 11.57.1, 12.70.2 and 13.39.0 with PHP 8.3.36, alongside both historical floors on PHP 8.2.35 and Laravel 13.39.0/PHP 8.4.23. Native runs include busy graceful/forced shutdown, launcher loss, stopped-producer telemetry transitions, balancing and guarded maintenance. The default Horizon matrix passes across its six declared profiles. Collector maintenance locking is verified with READ COMMITTED session/server defaults and mutual TLS on both supported SQL servers. Go supervisor tests and static collector builds also run under local AMD64 emulation; that local emulation result does not establish native AMD64 hardware behavior.

@@ -1,6 +1,6 @@
 # Install Current
 
-Current runs alongside an existing Horizon installation. Laravel 11.44+, 12 and 13 are declared; see [tested combinations](COMPATIBILITY.md). Horizon continues to execute jobs. No frontend build or additional service is required for the dashboard.
+By default, Current runs alongside an existing Horizon installation. Laravel 11.44+, 12 and 13 are declared; see [tested combinations](COMPATIBILITY.md). Horizon continues to execute jobs. No frontend build or additional service is required for the dashboard.
 
 ## 1. Install the development beta
 
@@ -32,6 +32,8 @@ php artisan current:install
 ```
 
 Composer discovers the provider. The installer publishes `config/current.php` without overwriting an existing configuration, creates `storage/current/current.sqlite`, and runs only package migrations on that connection. Repeating it preserves data. Production installation requires `--force`. PHP needs PDO SQLite for this default. The web and queue processes must share access to the history file; use a dedicated shared database connection for multiple hosts or ephemeral deployments.
+
+Run `current:install` again after package upgrades. Current's schema uses its own migration repository; ordinary application `migrate` commands do not manage it. This keeps application deployments from repeating history migrations already applied by the installer. If you previously managed these migrations manually through a different repository, reconcile that migration history before changing installation methods; keep a history backup.
 
 ## 2. Open Current with your Horizon access
 
@@ -152,7 +154,7 @@ Content hashes invalidate edited files even if size/timestamps are unchanged. So
 
 `Current\Current::step`, `lensArguments`, `lensMetadata`, `lens:prune`, `current.php`, table names and internal route names remain compatible. New installs use `current.php`, `/current`, `Current\Current` and `current:*` commands. If both config files exist, explicit Current keys take precedence. The existing labs intentionally retain `/current` and their isolated databases.
 
-To use MySQL or MariaDB, define a dedicated Laravel database connection with an empty table prefix, point `CURRENT_CONNECTION` to its name, and run `current:install` again for that database. Configure appropriate connection/lock timeouts; recorder isolation does not imply a universal driver timeout guarantee. Installation does not copy history between databases. MySQL 8.4 strict-mode installation, success/retry recording, dashboard/details and pruning have been verified in a disposable container; MariaDB 11.4.13 passes the same smoke checks using both Laravel's `mariadb` and `mysql` drivers. Broader database version/concurrency/load testing remains separate.
+To use MySQL or MariaDB, define a dedicated Laravel database connection with an empty table prefix, point `CURRENT_CONNECTION` to its name, and run `current:install` again for that database. Configure appropriate connection/lock timeouts; recorder isolation does not imply a universal driver timeout guarantee. The history connection must have its own Laravel connection name and stay outside application-owned transactions, even if it uses the same database. Synchronous MySQL/MariaDB capture coordinates concurrent enqueue/start/finish observations with a per-job SQL advisory lock on the writer connection (up to one second waiting). A lock timeout or an already-active application transaction opens Current’s recorder circuit and writes a diagnostic; it does not abort the business job. All history writers must reach the same SQL primary; multi-primary lock coordination is not supported. Installation does not copy history between databases. MySQL 8.4 strict-mode installation, success/retry recording, dashboard/details and pruning have been verified in a disposable container; MariaDB 11.4.13 passes the same smoke checks using both Laravel's `mariadb` and `mysql` drivers. Broader database version/concurrency/load testing remains separate.
 
 ## Removal
 
@@ -162,7 +164,7 @@ Remove the Composer dependency, clear/rebuild deployment caches and restart long
 
 For a complete clean jobs-only → optional integrations check, run `php tests/installation/fresh.php` **inside the isolated lab**. It creates a new Laravel 13 project under `/tmp/current-beta-install-*`, installs the local path package normally, checks default and config/route-cached boots, then installs Reverb and exercises synthetic incoming → queued job → outgoing retries/broadcasts, authorization rejection, investigation pages and cleanup. Outgoing requests are intercepted; Reverb listens only on loopback and stops afterward. Logs and the resolved lockfile stay in the temporary consumer. This requires Composer network/cache access and the lab Redis host `lens-redis`; do not run it against a host application.
 
-`tests/installation/smoke.php` accepts the absolute path of a disposable Laravel application already installed through Composer. Run it with `php tests/installation/smoke.php /path/to/disposable-app`, optionally adding `mysql` or `mariadb`; use `mariadb mysql` to check MariaDB through Laravel’s MySQL driver. It assumes the isolated lab Redis host `lens-redis` and, for database checks, the disposable `current-install-mysql` or `current-install-mariadb` container and `current` database; it must not be pointed at an ordinary application. The jobs-only smoke verifies normal provider discovery, all 11 package migrations, default-off optional collectors, untouched application schema, repeat install, `/current` authorization, actual queue completion/retry, automatic redaction, the step API, rendered job details and retention cleanup. Default and config/route-cached boots are checked separately. It intentionally prunes its synthetic history.
+`tests/installation/smoke.php` accepts the absolute path of a disposable Laravel application already installed through Composer. Run it with `php tests/installation/smoke.php /path/to/disposable-app`, optionally adding `mysql` or `mariadb`; use `mariadb mysql` to check MariaDB through Laravel’s MySQL driver. It assumes the isolated lab Redis host `lens-redis` and, for database checks, the disposable `current-install-mysql` or `current-install-mariadb` container and `current` database; it must not be pointed at an ordinary application. The jobs-only smoke verifies normal provider discovery, all 16 package migrations, default-off optional collectors, untouched application schema, repeat install, `/current` authorization, actual queue completion/retry, automatic redaction, the step API, rendered job details and retention cleanup. Default and config/route-cached boots are checked separately. It intentionally prunes its synthetic history.
 
 ## Retrying a failed job
 
@@ -410,3 +412,7 @@ The package now uses `gatienorti/current`, the `Current\` PHP namespace, `Curren
 For an installation using the previous Composer package name, remove that requirement with `composer remove horizon-lens/horizon-lens --no-update`, then require `gatienorti/current:dev-main`. Update explicit provider imports and capture calls to the Current namespace. Move any published `config/horizon-lens.php` settings into `config/current.php` and rename `HORIZON_LENS_*` environment settings to `CURRENT_*`. Review your configured history connection before restarting workers.
 
 Rebuild Composer autoloading and Laravel config/route/view caches through your deployment process. Restart long-lived workers so queued application code uses the new package. The original database migration filename and `lens_*` SQL tables are intentionally preserved as storage identifiers; no history rewrite is required. A small old-provider entry point lets existing Composer discovery boot during this transition. Old names stored in historical observations and Git history are not rewritten.
+
+## Experimental native backend
+
+The source checkout also provides an explicit opt-in Linux Go supervisor for native Laravel Redis workers without Horizon. Follow [Native engine](NATIVE-ENGINE.md), including independent access gates, the `current-redis` connection, worker limits and compatibility restrictions. These instructions do not switch an existing application automatically.

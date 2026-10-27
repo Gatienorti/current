@@ -1,0 +1,53 @@
+name: Experimental supervisor binaries
+on:
+  pull_request:
+    paths: ['supervisor/**', '.github/workflows/supervisor-binaries.yml']
+  workflow_dispatch:
+  release:
+    types: [published]
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Test and build Linux artifact
+        env:
+          SUPERVISOR_VERSION: ${{ github.event.release.tag_name || github.sha }}
+        run: |
+          docker run --rm -e SUPERVISOR_VERSION -v "$PWD:/workspace" -w /workspace/supervisor golang:1.25-bookworm sh -c './build-release.sh "$SUPERVISOR_VERSION"'
+          cd supervisor/dist && sha256sum -c current-supervisor-SHA256SUMS-linux-${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: experimental-current-supervisor-linux-${{ matrix.arch }}
+          path: supervisor/dist/*
+          if-no-files-found: error
+  release-assets:
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Attach supervisor binaries and checksums to the existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" artifacts/*

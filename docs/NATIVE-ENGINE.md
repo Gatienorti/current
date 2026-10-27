@@ -1,0 +1,229 @@
+# Optional native engine — experimental
+
+Current can now boot without Horizon and run native Laravel Redis workers under its Linux Go supervisor. Horizon remains the default backend. This work is not yet a published stable Horizon replacement. Synchronous or optional async telemetry can be selected independently.
+
+## Installation
+
+Use a dedicated development/test application first. Install Current, explicitly select native execution, and define access:
+
+```dotenv
+CURRENT_EXECUTION_BACKEND=native
+CURRENT_NATIVE_STATE_DIRECTORY=/srv/app/storage/current/supervisor
+CURRENT_NATIVE_INSTANCE=app-worker-a
+CURRENT_SUPERVISOR_BINARY=/srv/app/storage/current/current-supervisor
+```
+
+```php
+Gate::define('viewCurrent', fn ($user) => $user->is_admin);
+Gate::define('operateCurrent', fn ($user) => $user->is_admin);
+```
+
+Apply your application's actual authorization policy. There is no implicit local-environment bypass. `viewCurrent` permits inspection; `operateCurrent` additionally permits native retry and enabled dashboard controls. POSTs retain CSRF protection.
+
+In the selected `config/queue.php` connection, set `driver` to `current-redis`, retain its Redis connection/queue settings, and ensure `retry_after` exceeds the worker timeout. Do not replace an existing application's worker configuration implicitly. If Horizon is installed, disable its worker service before moving that application's queues to native execution; do not run competing engines accidentally. The clean native installation omits Horizon entirely. Merely stopping Horizon while retaining its auto-discovered provider is not the provider-free configuration used in our benchmarks. To keep using Horizon, retain its ordinary `redis` driver and `CURRENT_EXECUTION_BACKEND=horizon`.
+
+Drain the old engine's work before a backend cutover. Older queued payloads without Current's native dispatch identity can still execute through Laravel, but they do not retroactively acquire the exact identity required by Current's native retry/maintenance controls. Keep Laravel's normal CLI tools available for retained legacy failures. Existing history remains inspectable; Current does not guess retry lineage during a backend switch.
+
+Run `php artisan current:install` for Current's dedicated history schema. Configure Laravel's normal failed-job and batch storage separately. For SQLite batch storage, keep it separate from history and dispatch jobs after the batch transaction commits (`afterCommit()` or the connection's `after_commit` setting). Concurrent batch-counter updates are verified on MySQL/MariaDB; a shared SQLite application/history file can encounter writer-lock races. Native retries require Laravel's retained executable failure payload; Current's redacted display snapshots are never executed.
+
+Build the supervisor from `supervisor/` on Linux, verify the checksum, and install it at `current.native.binary`. Configure named pools in `config/current.php`:
+
+```php
+'native' => [
+    'state_directory' => storage_path('current/supervisor'),
+    'instance' => env('CURRENT_NATIVE_INSTANCE', 'app-worker-a'),
+    'binary' => storage_path('current/current-supervisor'),
+    'controls' => false, // Explicitly enable dashboard pause/resume/restart.
+    'grace_seconds' => 90,
+    'worker_limit' => 32, // Shared live-worker budget for this instance.
+    'pools' => [
+        'default' => [
+            'connection' => 'redis',
+            'queues' => ['default'],
+            'workers' => 2,
+            'min_workers' => 1,
+            'max_workers' => 10,
+            'timeout' => 60, // Must be below retry_after AND grace_seconds.
+            'memory' => 128,
+            'tries' => 3,
+            'balance' => 'fixed', // Or size, time, simple, auto; see semantics below.
+            'jobs_per_worker' => 10, // Size strategy.
+            'target_clear_seconds' => 60, // Time strategy.
+            'balance_shift' => 1,
+            'balance_cooldown' => 5,
+        ],
+    ],
+    'silenced' => [],
+    'silenced_tags' => [],
+],
+```
+
+Other bounded worker options: `sleep`, `backoff` (integer seconds or a nonempty list such as `[1, 5, 30]`), `max_jobs`, `max_time`, `rest`, boolean `force` (default false), and `nice` (-20 to 19, default 0). Nonzero niceness uses the system `/usr/bin/nice` or `/bin/nice` to adjust only the child worker priority, matching Horizon’s relative adjustment; negative adjustments require the appropriate OS privileges. Laravel repeats the final backoff value for later retries. `tries=0` permits unlimited attempts unless the job defines its own limit, retry deadline or exception limit. Job-level retry settings retain Laravel precedence. Workers use their pool name for Laravel worker naming. Maintenance mode pauses consumption unless `force=true` is explicitly selected. Queue names are limited to 100 characters to match retained history and filters. Queue lists are ordered, retaining Laravel's priority behavior; a pool's workers are shared across that list. Separate pools provide independent allocation. Unknown options fail validation. `block_for` must be null or a positive integer shorter than `grace_seconds`; indefinite, string-valued or excessive blocking is rejected because it conflicts with predictable graceful handling. An explicit `current:supervise --env=staging` is forwarded to every worker.
+
+### Environment-specific pools
+
+Instead of `native.pools`, use named `native.defaults` plus `native.environments`:
+
+```php
+'defaults' => [
+    'imports' => ['connection' => 'redis', 'queues' => ['imports'], 'workers' => 1,
+        'max_workers' => 10, 'timeout' => 60],
+    'mail' => ['connection' => 'redis', 'queues' => ['mail'], 'timeout' => 60],
+],
+'environments' => [
+    'production' => ['imports' => ['workers' => 5, 'balance' => 'size']],
+    'staging*' => ['imports' => ['workers' => 2], 'mail' => false],
+    '*' => ['imports' => ['workers' => 1]],
+],
+```
+
+The first matching environment wins; put the `*` fallback last. All named defaults are included unless explicitly disabled with `false`. Overrides replace whole queue/backoff lists, rather than merging list positions. `pools` and nonempty `environments` cannot both be configured. An unmatched environment or a configuration with no enabled pools fails validation before launching. The queue architecture page uses the same resolved configuration.
+
+```sh
+php artisan current:supervise --check
+php artisan current:supervise
+php artisan current:supervise --status
+php artisan current:supervise --control=pause --pool=default
+php artisan current:supervise --control=resume --pool=default
+php artisan current:supervise --control=restart --pool=default
+php artisan current:supervise --control=stop
+```
+
+Use a process manager with a stop timeout longer than Current's grace. PHP and Go must have the same OS user and private local state directory. Each concurrent instance needs a unique name (`--instance=app-worker-b` also overrides the configured name). Controls target the configured local instance. Shared process inventory can also show other hosts using the same Redis prefix and registry namespace; it does not provide remote controls or distributed execution fencing.
+
+## Operational semantics
+
+Pause drains the selected pool; resume recreates workers. Restart drains each selected worker before replacing its slot. Scale-down drains surplus slots while keeping other workers; a draining slot retains its capacity until reaped. Grace expiry forcibly terminates unfinished workers, which remain subject to Laravel's reservation/retry behavior. These operations do not guarantee exactly-once external effects.
+
+Size balancing uses ready plus reserved queue counts, min/max limits, a maximum shift and cooldown. Future delayed jobs are excluded until Laravel migrates them. Unknown Redis data or stale supervisor health holds the allocation. PHP performs this observation in the existing launcher; this is not a Go-only Redis scheduler. The optional time strategy estimates ready/reserved work from captured completed/failed attempt runtimes in the past five minutes, using a short-lived Redis snapshot and aims to clear it within `target_clear_seconds`. Busy queues without recent usable samples, invalid timing, or unavailable history hold their current allocation. This is an estimate based on Current coverage, not Horizon's proportional per-queue algorithm. For dedicated per-queue workers, use the balanced modes below.
+
+### Dedicated queue balancing
+
+Set `balance` to `simple` or `auto` to give each queue dedicated Laravel workers instead of one shared priority-ordered consumer. In these modes, `workers` is the initial **total**, `min_workers` applies **per queue**, and `max_workers` caps the **whole configured pool**. The initial total must cover every queue's minimum. `simple` distributes the initial total evenly, assigning any remainder deterministically. `auto` redistributes the pool's budget using `auto_scale_strategy`:
+
+- `size`: proportional ready job counts.
+- `time`: proportional ready count × recent captured runtime; missing runtime evidence holds the group's allocation.
+- `log`: proportional `log(1 + ready jobs)`, reducing how much a very large queue dominates.
+
+Empty queues retain their minimum. Reserved and future delayed jobs do not add demand in these proportional modes. Minimums, integer rounding and caps are enforced together; this follows the purpose of Horizon's policies without promising identical rounding/transient allocations. Existing `fixed`, `size` and `time` modes preserve their shared ordered queue list and previously documented clearance behavior.
+
+For example, `queues => ['mail', 'imports']`, `workers => 2`, `min_workers => 1`, `max_workers => 10`, `balance => 'auto'`, `auto_scale_strategy => 'size'` starts one worker per queue and shares up to ten. At most 32 expanded worker pools are supported. `current:supervise --check` shows the generated queue pool names. Pause/resume/restart accepts either one generated name or the configured parent pool name; stopping remains an instance operation.
+
+Go enforces both the parent-pool and instance limits, including draining processes. A paused queue reserves its allocation. Lost control replies stop the current rebalance until fresh health is available; rejected reductions do not free capacity.
+
+`worker_limit` (1–256, default 256) caps the whole instance independently of pool maxima. Autoscaling requests reductions before growth and only reuses confirmed allocation. Go retains capacity for draining workers until they exit, so reallocating across pools cannot temporarily exceed the live-worker cap. Fixed/paused allocations still reserve their configured share. Budgets are local to one instance, not cluster-wide.
+
+Native queue architecture uses the same validated configuration as the launcher. Native metric lists summarize captured completed attempts in the past hour, separated by job class and connection/queue. Each links to retained five-minute history. Run `current:install` after updating, then keep Laravel's scheduler running: `current:snapshot` is registered every five minutes for native mode. It aggregates captured completed/terminal-failed attempts outside worker execution; it does not measure unobserved throughput. Missing snapshots remain gaps. Zero means no captured finishes, and invalid/missing durations are excluded from runtime averages. The latest three closed windows are replaced idempotently to include recent late telemetry; data arriving later than fifteen minutes is not automatically corrected. Snapshot retention defaults to 24 hours (`native.metrics.retention_hours`, 1–168), with hourly pruning. A window exceeding 1,000 job classes or queue groups fails without publishing partial results. Disable scheduled aggregation with `native.metrics.enabled=false`. No historical wait-time series is provided yet.
+
+Batch listing reads Laravel's retained repository. Explicit `tags()` values and automatic Eloquent model tags are discovered from dispatch objects, including queued listener, mail, notification and broadcast wrappers. Explicit nonempty tags take precedence over model discovery; listeners can receive their event in `tags($event)`. Discovery is bounded to 100 properties/models/tag candidates and skips uninitialized/static properties and models without a key. All discovered tags still pass through Current's tag-prefix allowlist and retained-tag limits; class/tag silencing uses those approved tags at enqueue. A tag callback failure cannot break dispatch and leaves classification unknown.
+
+Batch details show retained captured members, counters and progress. Authorized operators can retry up to 50 shown failures per request. Batch and individual retry endpoints share per-dispatch claims; missing membership, expired observations, replaced payloads and unrelated batch selections are not executable. Retrying a cancelled batch does not uncancel it. Batch cancellation and arbitrary unobserved-member retries are not provided.
+
+Retries require `operateCurrent`, matching connection/queue and the exact retained dispatch identity. Laravel prepares the executable payload and resets its retry fields. Current records the new dispatch separately even when Laravel reuses its UUID. A durable request claim prevents automatic duplicate POST retries; an ambiguous outcome remains unconfirmed.
+
+### Shared supervisor inventory
+
+Native launchers publish process observations every two seconds to a bounded Redis registry. Defaults:
+
+```php
+'registry' => [
+    'enabled' => true,
+    'redis_connection' => 'default',
+    'namespace' => 'current',
+],
+```
+
+All participating web/worker hosts must use the same application Redis prefix, namespace and standalone phpredis connection. Use separate prefixes/namespaces for unrelated applications/environments. The registry uses a private, nonpersistent connection with 500 ms connection/read timeouts and no automatic retries; it does not alter the application's Redis connection settings. TLS/auth configuration is inherited from the selected connection. Registry failure does not stop workers.
+
+Host, instance and process generation distinguish records; control ownership tokens and worker commands are not published. Missing heartbeats become stale after six seconds, with live process counts shown as unknown. Records expire after sixty seconds; at most 256 recent instances are listed. Graceful shutdown publishes a final stopped state. The dashboard's existing access gate protects this inventory, and remote records have no control buttons. This is visibility, not a cluster-wide allocation budget, leader election or proof of job completion.
+
+Normal worker exits and Laravel's memory-limit exit code retain a fixed short restart delay. Crashes retain increasing backoff and the restart budget. Process-manager restart supervision is still required.
+
+## Compatibility and evidence
+
+Standalone phpredis is the currently verified native enqueue-confirmation path. Bulk observations flush only after a complete successful EXEC response. Serialization failures, partial Redis errors, ambiguous replies and telemetry-buffer overflow do not fabricate enqueues. Caller-owned pipelines, Predis and Redis Cluster confirmation remain unsupported/unvalidated. Workers can still establish start-only history; that must not be advertised as complete enqueue coverage.
+
+The optional collector retains its own documented standalone Redis/storage constraints. This native engine does not expand collector topology support. Keep native execution experimental until the remaining compatibility, operations and sustained-recovery gates are complete. No universal speed/memory claim follows from the current fixed-pool comparisons.
+
+See [compatibility](COMPATIBILITY.md) for tested Laravel/PHP profiles and current limits. Native execution remains experimental; hosted native CI and production network/deployment acceptance remain release gates. Local tests cover a lost bulk-EXEC acknowledgement and a rolling handover between two container hostnames; they do not establish all Redis failure modes or production multi-host reliability.
+
+Async protocol 2 removes history SQL reads from the job recorder's identity-cache-miss path. Isolated MySQL/MariaDB network-pause checks verify execution and subsequent history recovery, with matching collector/migrations and the documented stopped-producer upgrade. Time-based balancing and workload requests read only bounded Redis runtime observations; SQL aggregation runs in an isolated, time-limited sampler. Application SQL, batch/failed-job storage and the separate webhook/broadcast recorders retain their own database dependencies.
+
+
+### Workload and wait notifications
+
+The native dashboard reads ready Redis counts using the queue routing reported at supervisor startup. Identical queue groups across instances share one row; the local instance is deduplicated against its registry record. Clearance estimates use recent captured runtime divided by confirmed consuming workers. Stale inventory, unavailable runtime data, and queues overlapping different routing groups remain unknown. These are estimates, not measured oldest-job latency. A private Redis connection bounds connect/read waits and a workload observation pass has a time budget; observation does not alter host queue connections.
+
+Optional thresholds emit `Current\Events\QueueWaitExceeded` through Laravel's event dispatcher:
+
+```php
+// Inside current.native:
+'waits' => ['redis:default' => 60],
+'wait_cooldown' => 300,
+```
+
+Register an application listener for that event and send notifications through your existing Laravel notification setup. Current does not choose recipients or send external messages by itself. The event includes the connection, ordered queue list, estimated seconds, configured threshold and observation time. A shared Redis claim suppresses repeat events during the cooldown (60–86400 seconds). Unknown/partial observations never trigger an alert; a failed or ambiguous listener is not automatically retried. This is a notification hook, not guaranteed notification delivery.
+
+Laravel's scheduler invokes `current:monitor` every minute only when native thresholds are configured. For a shared ordered queue group, the key is the connection followed by the comma-separated ordered queues, such as `redis:high,default`; the threshold applies to that group's estimate. All scheduler/web hosts must resolve reported queue connection names to the same Redis databases/prefixes as their workers.
+
+
+### Runtime observations
+
+Each native launcher refreshes runtime estimates approximately every ten seconds through an isolated sampler. The sampler boots PHP with history configuration over a private stdin pipe, queries the previous five minutes of completed/failed attempt durations, and publishes only queue names, aggregate durations and observation times. SQL credentials never appear in command arguments or generated configuration files.
+
+The Go supervisor binary bounds each sample to four seconds, limits input/output to 256 KiB, and kills/reaps the sampling PHP process group on timeout, cancellation or launcher loss. At most one sample per launcher runs at once. Rebuild/install the matching supervisor binary when upgrading; older binaries leave runtime observations unavailable rather than substituting zero.
+
+Runtime observations expire after thirty seconds. Missing, malformed, stale or unavailable data holds time-based allocation and leaves workload/wait estimates unknown. Empty queues still have zero ready work. Autoscaling, dashboard workload and wait alerts never issue the history SQL query themselves. Size/log balancing continues to use queue counts. Sampling adds a transient PHP process; no speed or memory improvement is inferred from this isolation.
+
+### Deployment termination
+
+Use `php artisan current:terminate` to request graceful shutdown of the configured local instance. `--instance=name` targets another instance in the same application's private state directory; `--all` targets all its local instance records. `--wait=30` waits up to thirty seconds for the targeted generation to report stopped with no observed running workers. The default only confirms command acceptance. A timeout, missing/corrupt record, rejected owner or replaced generation remains unconfirmed and exits unsuccessfully.
+
+This command reads existing ownership and the local control socket without validating the new worker plan or requiring a newly deployed binary to exist. It therefore remains usable when a deployment contains invalid pool configuration. Run it on each deployment host and let your process manager start the new launcher. It does not signal unrelated process IDs or control remote hosts. Each application must have its own private state directory. Graceful termination still uses the running supervisor's configured grace period.
+
+### Queue and failed-history maintenance
+
+These commands require the native backend and use Laravel's normal production `--force` confirmation. They are CLI operations; no destructive HTTP endpoints are added.
+
+- `php artisan current:clear redis --queue=emails` atomically removes waiting and delayed entries for one explicitly observed native connection/queue. Reservations are retained. Captured job/attempt evidence remains; removed entries display **Cleared** until a later observed attempt establishes another outcome. A new release after the clear is pending again. A waiting copy matching an active reservation keeps its execution history unchanged.
+- Each clear prints an operation ID before submission. If the Redis reply or SQL update fails, inspect the queue and run the same connection/queue with `--resume=ID`. A retained receipt reconciles history without clearing new work. Receipts expire after24 hours. The operation refuses, before deletion, more than1,000 combined waiting/delayed/reserved entries, a payload above256KiB, more than4MiB aggregate payload bytes, or unsupported payload identities. Laravel's `queue:clear` remains available for other scenarios; external clearing does not annotate Current history.
+- `php artisan current:forget CURRENT_HISTORY_ID` removes one terminal native failure's captured job, attempts, steps and tags, plus its exact matching Laravel failed payload. It rejects unfinished attempts and unconfirmed retry claims. `--history-only` retains executable failed storage and supports cleaning an earlier generation after a newer failed payload has replaced it. Application-level retry/forget operations outside Current must be quiesced during removal.
+- Failed payload storage and history can be separate databases. If executable payload deletion succeeds but history commit fails, the command reports a partial/unconfirmed result. Inspect both stores, then use `--history-only` to reconcile; it never retries an ambiguous enqueue or deletes a replacement dispatch automatically.
+
+Clear/forget actions retain only a dispatch fingerprint, action time and optional history ID, bounded by the configured maximum history retention plus one day. Collector and synchronous recording honor them, preventing buffered events from recreating forgotten captures. Related webhook/broadcast activity keeps its own retention and becomes unlinked when its job history is removed. Use a matching collector advertising maintenance protocol1; commands refuse an active old/unconfirmed collector before queue changes. Never mix old and new producers/collectors during an upgrade.
+
+`php artisan current:clear-metrics` resets native metric summaries/charts and establishes a cutoff so scheduled snapshots do not rebuild pre-reset data. A reset inside a five-minute window marks that first window partial. Captured jobs, runtime observations and dashboard history remain available; resetting charts does not change worker allocation.
+
+### Batch navigation and retry scope
+
+The native batch list supports cursor navigation beyond the latest fifty records. Laravel database batch storage also supports literal name/ID search; `%`, `_` and `!` are treated as ordinary search characters. Retained batch detail uses the configured Laravel batch repository. Custom repositories can provide ordinary cursor navigation, but database name search is not assumed for them.
+
+Retries operate on at most fifty displayed, captured failures per request. Page through retained failures to review further selections. Current deliberately does not blindly execute every UUID in a batch: each submitted item must still match the retained native dispatch and executable failed payload. Missing/expired Current history does not grant retry permission. Application operators can use Laravel's own batch retry tooling outside Current with its normal semantics; quiesce independent retry/forget operations when using Current maintenance. The wait-notification event and per-host process-manager shutdown remain the documented integration points; no remote PID purge or notification delivery service is implied.
+
+### Process-manager setup
+
+Run the launcher in its own service or container, with descendant cleanup enabled. For example, with systemd and the default90s grace period:
+
+```ini
+[Unit]
+Description=Current queue supervisor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/srv/app
+ExecStart=/usr/bin/php /srv/app/artisan current:supervise --instance=worker-a
+Restart=always
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=105
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Replace the user, paths and instance name for your application. Configure native execution and the private writable state/binary paths before rebuilding Laravel's configuration cache. Give each concurrent launcher a distinct instance name. Keep the manager's stop timeout longer than `grace_seconds`; the cgroup cleanup covers all descendants even though workers have separate Unix process groups. Containers need an init/reaper and a container stop timeout longer than the native grace. A process group's cleanup is not a replacement for cgroup/container ownership when the engine itself is forcibly killed. Run an enabled async collector as its own supervised service using `php artisan current:collect`.
+
+The launcher forwards engine output without retaining its full output history. Configure log rotation in your service manager. Healthy worker recycling remains bounded by its short restart delay; repeated crashes exhaust the native restart budget and should be visible through your service-manager failure monitoring. No worker restart mechanism guarantees exactly-once external effects.

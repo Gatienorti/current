@@ -14,3 +14,22 @@
 /PLAN.md export-ignore
 
 /experiments export-ignore
+
+# Never ship local investigation artifacts, even if force-added accidentally.
+/docs/benchmarks export-ignore
+/docs/verification export-ignore
+/.local-docs-backup export-ignore
+/docs/RESEARCH.md export-ignore
+/docs/DEVELOPMENT.md export-ignore
+/docs/ADAPT-INTEGRATION.md export-ignore
+/docs/DEPENDENCIES.json export-ignore
+/docs/PERFORMANCE.md export-ignore
+/docs/NATIVE-RELIABILITY.md export-ignore
+/ARCHITECTURE.md export-ignore
+/.phpunit.cache export-ignore
+/.env export-ignore
+/.env.* export-ignore
+/collector/current-collector export-ignore
+/collector/dist export-ignore
+/supervisor/current-supervisor export-ignore
+/supervisor/dist export-ignore

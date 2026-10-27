@@ -8,9 +8,6 @@ Current brings job investigation, webhook activity, and broadcast debugging into
 
 **Early beta · MIT licensed · Self-hosted · No frontend build**
 
-
-
-
 ## What you can investigate
 
 | Area | Included |
@@ -24,10 +21,9 @@ Retry failed jobs through Horizon. Copy a **Debug with AI** prompt from captured
 
 Light, dark, and system appearance are included. Live data refreshes every five seconds by default, with pause and interval controls.
 
-
 ## Get started
 
-Current is available on [Packagist](https://packagist.org/packages/gatienorti/current) as **v0.1.0-beta.1**. Install the beta in a development application, following the [installation guide](docs/INSTALLATION.md):
+Current is available on [Packagist](https://packagist.org/packages/gatienorti/current) as an early beta. Install the beta in a development application, following the [installation guide](docs/INSTALLATION.md):
 
 ```sh
 composer require gatienorti/current:^0.1.0@beta
@@ -38,7 +34,7 @@ Open **`/current`** using your application's existing Horizon access. The instal
 
 The Composer package is `gatienorti/current`, matching its GitHub home. No hosted account, Node build, or WebSocket server is required for jobs.
 
-**Requirements:** PHP 8.2+, Laravel 11.44/12/13, and Horizon 5.30+ within 5.x, subject to compatible version pairs. Laravel 13 requires PHP 8.3+. See the [compatibility matrix](docs/COMPATIBILITY.md) for tested combinations and database limits.
+**Default Horizon backend requirements:** PHP 8.2+, Laravel 11.44/12/13, and Horizon 5.30+ within 5.x, subject to compatible version pairs. Laravel 13 requires PHP 8.3+. See the [compatibility matrix](docs/COMPATIBILITY.md) for tested combinations and database limits.
 
 ## Give a job an execution map
 
@@ -79,10 +75,9 @@ Current remains an early beta. Isolated integration and compatibility tests have
 
 - [Installation and configuration](docs/INSTALLATION.md)
 - [Compatibility and verification](docs/COMPATIBILITY.md)
-- Scoped overhead measurements
+- [Unreleased changes](CHANGELOG.md)
 - [Contributing and running tests](CONTRIBUTING.md)
 - [Security reporting](SECURITY.md)
-- Architecture, research, and development plan
 
 Bug reports with a minimal, sanitized reproduction are especially useful. Keep credentials, real payloads, and customer information out of public issues.
 
@@ -91,3 +86,7 @@ Released under the [MIT license](LICENSE).
 ### Optional async job telemetry
 
 Current keeps synchronous recording by default. An opt-in Redis transport and Go collector can batch job/attempt/step writes while retaining Horizon execution. The opt-in path supports Linux, phpredis, standalone Redis 7 and either local SQLite or MySQL 8.4/MariaDB 11.4 InnoDB connections. See [setup, collector health, recovery and switching modes](docs/ASYNC-TELEMETRY.md). Webhooks and broadcasts stay synchronous. Static Linux binaries and checksums are built by CI; the setup guide covers verified installation and TLS. This feature is not in the previously published beta.
+
+## Experimental native execution
+
+An opt-in Linux Go supervisor can run Laravel workers without Horizon, while keeping Current investigation and independently selected telemetry. This is unreleased experimental work, not complete Horizon parity. See [native setup and explicit limits](docs/NATIVE-ENGINE.md). Existing Horizon applications keep their default backend.

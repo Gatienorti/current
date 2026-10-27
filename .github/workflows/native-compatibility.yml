@@ -1,0 +1,120 @@
+name: Experimental native compatibility
+on:
+  pull_request:
+    paths: ['src/**', 'config/**', 'database/**', 'resources/**', 'supervisor/**', 'collector/**', 'tests/native/**', 'composer.json', '.github/workflows/native-compatibility.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php: '8.2'
+            laravel: '11.44.0'
+            profile: laravel11-floor-php82
+          - php: '8.2'
+            laravel: '12.0.0'
+            profile: laravel12-floor-php82
+          - php: '8.3'
+            laravel: '^11.44'
+            profile: laravel11-php83
+          - php: '8.3'
+            laravel: '^12.0'
+            profile: laravel12-php83
+          - php: '8.3'
+            laravel: '^13.0'
+            profile: laravel13-php83
+          - php: '8.4'
+            laravel: '^13.0'
+            profile: laravel13-php84
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: redis, pdo_sqlite, pcntl, posix
+          tools: composer:v2
+          coverage: none
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: false
+      - name: Build native engine
+        working-directory: supervisor
+        run: CGO_ENABLED=0 go build -o current-supervisor .
+      - name: Build async collector
+        working-directory: collector
+        run: go build -o current-collector .
+      - name: Clean install, execution and access without Horizon
+        env:
+          NATIVE_REDIS_HOST: 127.0.0.1
+          NATIVE_PROVISIONING: '1'
+          NATIVE_BALANCING: '1'
+          NATIVE_OPERATIONS: '1'
+          NATIVE_DEPLOYMENT: '1'
+          NATIVE_TRANSITIONS: '1'
+        run: php tests/native/install.php '${{ matrix.laravel }}' '${{ matrix.profile }}' sync,redis > native-result.json
+  native-batches-sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - database: mysql
+            image: mysql:8.4
+          - database: mariadb
+            image: mariadb:11.4
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+      sql:
+        image: ${{ matrix.image }}
+        env:
+          MYSQL_ROOT_PASSWORD: current-test-only
+          MYSQL_DATABASE: current_async_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd "mysql -h 127.0.0.1 -uroot -pcurrent-test-only -e 'SELECT 1' || mariadb -h 127.0.0.1 -uroot -pcurrent-test-only -e 'SELECT 1'"
+          --health-interval 5s --health-timeout 5s --health-retries 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: redis, pdo_sqlite, pdo_mysql, pcntl, posix
+          tools: composer:v2
+          coverage: none
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache: false
+      - name: Build native engine
+        working-directory: supervisor
+        run: CGO_ENABLED=0 go build -o current-supervisor .
+      - name: Build async collector
+        working-directory: collector
+        run: go build -o current-collector .
+      - name: Concurrent native batch retries with server SQL
+        env:
+          NATIVE_REDIS_HOST: 127.0.0.1
+          NATIVE_PROVISIONING: '1'
+          NATIVE_OPERATIONS: '1'
+          NATIVE_BATCH_SQL_HOST: 127.0.0.1
+          NATIVE_BATCH_SQL_PASSWORD: current-test-only
+        run: php tests/native/install.php '^13.0' 'batch-${{ matrix.database }}' sync,redis > native-result.json

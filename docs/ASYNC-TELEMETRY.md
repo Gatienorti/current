@@ -1,6 +1,6 @@
 # Opt-in asynchronous job telemetry
 
-Current defaults to synchronous recording. An optional Redis transport and Go collector move **job, attempt and step SQL writes** out of Laravel workers while Horizon continues to execute jobs. Existing Args/Metadata sanitization, source inspection and the Redis acceptance round trip still happen in PHP. Webhook and broadcast recording stay synchronous.
+Current defaults to synchronous recording. An optional Redis transport and Go collector move **job, attempt and step SQL writes** out of Laravel workers. Execution stays with the selected backend: Horizon by default, or the optional native supervisor. Existing Args/Metadata sanitization, source inspection and the Redis acceptance round trip still happen in PHP. Webhook and broadcast recording stay synchronous.
 
 ## Initial support boundary
 
@@ -9,11 +9,11 @@ The opt-in implementation targets **Linux, PHP with phpredis and standalone Redi
 - **SQLite** on a local Linux filesystem.
 - **MySQL 8.4 or MariaDB 11.4**, with Current tables using InnoDB and one explicit server connection.
 
-Current uses the database configured by `current.connection`; it does not move existing history or change the application's default database. MySQL/MariaDB credentials are passed to the collector over stdin. The collector uses a pinned SQL connection, UTF-8 (`utf8mb4`), strict writes and a one-second InnoDB lock-wait timeout. It never uses `INSERT IGNORE`, which could hide truncation or other write errors.
+Current uses the database configured by `current.connection`; it does not move existing history or change the application's default database. MySQL/MariaDB credentials are passed to the collector over a private pipe. The collector uses a pinned SQL connection, UTF-8 (`utf8mb4`), strict writes and a one-second InnoDB lock-wait timeout. Its own transactions explicitly request `REPEATABLE READ` so maintenance locking does not depend on a server's default isolation. Application sessions and server defaults are unchanged. It never uses `INSERT IGNORE`, which could hide truncation or other write errors.
 
 SQL URL-style connections, read/write splitting and table prefixes are rejected rather than silently ignored. The collector supports Laravel PDO TLS options `MYSQL_ATTR_SSL_CA`, `MYSQL_ATTR_SSL_CERT`, `MYSQL_ATTR_SSL_KEY` and `MYSQL_ATTR_SSL_VERIFY_SERVER_CERT`; other PDO options remain unsupported. TLS verifies the server certificate and hostname, requires TLS 1.2+, supports private CAs and mutual TLS, and never falls back to plaintext. Disabling verification is rejected. Certificate paths must be readable by both the PHP workers and the collector; configure the SQL host to match the certificate. A client certificate and key must be supplied together. PostgreSQL, Redis Cluster/Sentinel, SQLite memory databases, network filesystems and Docker Desktop host-shared database files are outside the validated boundary. The SQLite lock/recovery tests pass on container-local storage; a Docker Desktop bind-mounted fixture did not enforce the expected cross-process lock behavior.
 
-Use one collector per Current database/namespace. The Go supervisor remains an independent experiment: this mode works with Horizon and does not replace its process manager, balancing or retry engine. Current still depends on Horizon.
+Use one collector per Current database/namespace. Async collection and the optional native supervisor are independent choices. Keeping the default Horizon backend retains Horizon execution, balancing and retries; selecting native execution uses the explicitly configured Current engine.
 
 ## Install and start
 
@@ -45,6 +45,8 @@ Use one collector per Current database/namespace. The Go supervisor remains an i
    chmod 0755 storage/current/current-collector
    ```
 
+   Run `php artisan current:install` before starting a newly built collector so its required history migrations are present. If the async identity migration is missing, startup fails without consuming pending events.
+
    Build from the installed, trusted package source; do not copy binaries across CPU architectures or incompatible operating systems. The release workflow builds statically with musl, including SQLite, so its Linux executables do not require Go, a compiler, or a matching glibc version at runtime.
 
 3. Configure the application:
@@ -59,13 +61,13 @@ Use one collector per Current database/namespace. The Go supervisor remains an i
 
    Choose a unique namespace per application/database. The application Redis prefix also contributes to isolation. A dedicated Redis connection with short timeouts is created; Current does not change Laravel's existing Redis connection. The transport's connect/read timeout is 200 ms. The collector has separate one-second Redis timeouts.
 
-4. Refresh cached configuration if used, then restart Horizon workers so they use the selected recorder. Run:
+4. Refresh cached configuration if used, then restart long-lived producers and workers so they use the selected recorder. Run:
 
    ```sh
    php artisan current:collect
    ```
 
-   Keep this command running under your service manager, with automatic restart and process-group termination enabled. For Supervisor, set `stopasgroup=true` and `killasgroup=true`; choose a shutdown grace longer than a database batch. The wrapper forwards TERM/INT, and the Go collector also notices a departed launcher. It processes at most 100 events per SQL transaction and polls idle queues at 100 ms intervals. Credentials pass through standard input, not command-line arguments or temporary configuration files.
+   Keep this command running under your service manager, with automatic restart and process-group termination enabled. For Supervisor, set `stopasgroup=true` and `killasgroup=true`; choose a shutdown grace longer than a database batch. Run the daemon outside `APP_ENV=testing`: Laravel disables command signal traps in that environment. With a compatible collector on Linux and PCNTL, the CLI replaces itself with Go at the same PID. Go obtains configuration from a short-lived PHP child over a private pipe and handles TERM/INT directly. Compatible binaries without bootstrap support, programmatic calls and explicit `--env` overrides retain the PHP stdin launcher; in normal runtime environments that wrapper forwards TERM/INT and Go notices a departed launcher. It processes at most 100 events per SQL transaction and polls idle queues at 100 ms intervals. Credentials pass through private pipes, not command-line arguments or temporary configuration files. The internal `current:collector-config` command emits sensitive configuration only for this CLI handoff; it is not an HTTP endpoint. Bootstrap output is bounded to 64 KiB and startup to 60 seconds; child errors are sanitized.
 
 5. Check health:
 
@@ -86,7 +88,15 @@ Use one collector per Current database/namespace. The Go supervisor remains an i
 
 Defaults are 2,000 queued events, 128 KiB per event and a one-hour maximum event age. These bounds are configurable under `current.telemetry`. If no publisher refreshes the stream, it expires after twice the maximum event age, so abandoned buffers are bounded. Health counters can reveal unaccounted accepted events while the health hash survives; they cannot recover lost data. Rejected/expired/invalid counters are cumulative for the namespace and warnings deliberately remain visible after loss. They count known losses; events suppressed during an open recorder circuit are not individually counted.
 
-Keep the existing `current:prune` schedule. It removes expired history and async receipts/version records in bounded batches. The collector also prunes expired receipt/version rows periodically. Identity-cache entries expire within twice the configured maximum event age; a job observed after its retained cycle expires receives a fresh cycle ID. On cache misses, a read checks existing SQL history so switching modes can preserve a retained cycle. No telemetry SQL write occurs in the async recorder.
+Keep the existing `current:prune` schedule. It removes expired history, async receipts, versions and identity aliases in bounded batches; the collector also prunes its bookkeeping periodically. Producer identity-cache entries expire within twice the configured maximum event age. A cache miss creates a provisional ID in Redis without reading history SQL. The collector resolves it to any retained matching dispatch and preserves that history's expiry. Durable aliases also resolve webhook/broadcast links written after the last job event; expiry tombstones prevent an old identity from recreating expired history.
+
+The async job recorder performs no history SQL reads or writes. Isolated MySQL and MariaDB network-pause checks verify jobs can run while history SQL is unavailable and their buffered observations drain after recovery. This does not remove database dependencies from application code, Laravel's failed-job/batch repositories, the separate webhook/broadcast recorders, or the isolated native runtime sampler. Buffer bounds, event age and Redis availability still apply.
+
+## Upgrading the async protocol
+
+Protocol 2 requires matching package migrations and a collector advertising `identity_protocol: 2` and `maintenance_protocol: 1`. The installer and `current:collect` reject older binaries. New events use `events:v2` and a separate identity-cache key; an already-running old collector cannot consume those events. Health includes both streams and reports an old collector as unavailable for the new protocol.
+
+Pause producers and let in-flight jobs finish. Drain the old collector, then stop it. Upgrade the package, run `php artisan current:install`, build/install its matching collector, and start the collector before restarting all workers and resuming producers. The new collector drains any remaining legacy backlog before processing v2 events, preserving retained IDs across the upgrade. Do not run rolling mixed-version producers or toggle recorder mode inside a live worker; quiescing producers is required for identity consistency. Never delete pending events or ownership keys to bypass an upgrade problem.
 
 ## Switching back to synchronous recording
 
@@ -98,7 +108,7 @@ If Redis is unavailable and draining is impossible, explicitly accept the histor
 
 Package integration tests cover real Laravel retry history, bounded admission and publication outage, expiry/invalid events, database-lock recovery, competing collectors, manual Horizon raw-payload retries, retained/expired cycle identities, pruning and the existing UI. Go tests cover rollback, post-commit replay, out-of-order snapshots and invalid relationships. Server-database checks additionally cover Unicode, whole-batch rollback, named-lock ownership across namespaces, lost SQL sessions and non-InnoDB rejection. Local MySQL 8.4.10 and MariaDB 11.4.13 each passed 13 tests / 124 assertions; MariaDB also passed through Laravel's mysql driver. ADAPT tests exercise its actual notification job and normal provider stack, with external delivery mocked.
 
-The earlier ADAPT benchmark evaluated an experimental adapter, not this hardened release path. Its throughput/memory results are not a performance guarantee for this implementation, which adds ownership, validation, health and retention work. No new performance benchmark is implied by this change. Hosted CI has passed all six PHP/Laravel profiles, three TLS database configurations and both Linux binary architectures. The checks include shorter repeated recovery runs; longer local-run evidence is recorded in PLAN.md. Static release builds run the Go projector tests on each target architecture before producing the executable. Synchronous mode remains the default.
+The earlier ADAPT benchmark evaluated an experimental adapter, not this hardened release path. Its throughput/memory results are not a performance guarantee for this implementation, which adds ownership, validation, health and retention work. No new performance benchmark is implied by this change. Hosted CI has passed all six PHP/Laravel profiles, three TLS database configurations and both Linux binary architectures. The checks include shorter repeated recovery runs; longer production-scale validation remains separate. Static release builds run the Go projector tests on each target architecture before producing the executable. Synchronous mode remains the default.
 
 ## Reproducing server-database integration checks
 
@@ -138,8 +148,8 @@ stdout_logfile=/var/log/current-collector.log
 
 The 35-second startup window lets a restarted collector encounter an expired ownership lease before exhausting restart attempts. The service remains responsible for restarting an exited process. Configure log rotation and use `current:telemetry-status` for health checks; a running process alone is not proof that its backlog is caught up. Stop this service before replacing its binary. Never remove the ownership key to bypass a live collector.
 
-### Sustained verification
+### Validated transport settings
 
-Three corrected ten-minute local runs covered **7,157 jobs, 14,308 attempts and 144,879 accepted observations** across SQLite, MySQL and MariaDB. Each completed 13 collector restarts, including SIGKILL with actual ownership-lease expiry; retained counts matched and every accepted observation was processed. The first trial exposed a graceful shutdown acknowledgement race, which was fixed and regression-tested before these runs. [Machine-readable evidence](verification/async-telemetry-2026-10-26.json) includes scope and reproduction. Run `CURRENT_ASYNC_SOAK_SECONDS=600 vendor/bin/phpunit -c phpunit.xml --filter test_sustained_collection` only against isolated test services, adding the SQL/TLS environment settings for server databases.
+The PHP transport keeps one validated settings snapshot per Transport instance. Each access compares the relevant SQL/Redis/telemetry configuration values; a change invalidates the snapshot and cached Redis client. Explicit disconnect also clears both. Publications use one consistent settings/client selection, so runtime namespace changes cannot keep sending through the previous cached prefix. Application code holding an already returned Redis client should not reuse it after changing transport configuration.
 
-These finite runs do not establish behavior at arbitrary production load, during permanent Redis data loss, or across untested database topologies. The synchronous default remains the conservative installation path.
+SQL PDO TLS options deliberately bypass the validation fast path because certificate readability is a filesystem input. Certificate and verification checks still run on each settings access. This optimization does not alter stream envelopes, queue limits, step boundaries, redaction, acknowledgement or collector durability.

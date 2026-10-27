@@ -12,6 +12,6 @@ A useful private report includes affected versions, a minimal synthetic reproduc
 
 ## Deployment considerations
 
-Current exposes application-wide operational information. Keep it behind your application's Horizon authorization and restrict it to trusted operators. Review automatic Args capture and optional exporters before enabling them; redaction patterns do not detect all personal or confidential business data.
+Current exposes application-wide operational information. Restrict it to trusted operators. The default backend requires your application's Horizon authorization; the optional native backend requires an explicit `viewCurrent` gate. Native retry and enabled process controls additionally require `operateCurrent`. These are whole-application permissions, not tenant isolation. Review automatic Args capture and optional exporters before enabling them; redaction patterns do not detect all personal or confidential business data.
 
-Use dedicated history storage, bounded retention, and the registered pruning schedule. Webhook and broadcast collection are off by default. Retry actions execute application jobs again through Horizon and should be available only to operators allowed to perform them.
+Use dedicated history storage, bounded retention, and the registered pruning schedule. Webhook and broadcast collection are off by default. Retry actions execute application jobs again through the selected backend and should be available only to operators allowed to perform them. Native maintenance commands require trusted CLI access; queue clearing and failed-payload removal change application work and cannot undo external effects already performed by a job.
