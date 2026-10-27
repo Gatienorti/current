@@ -78,8 +78,12 @@ final class HorizonMigration
                 $balance = match ($option->balance) { false, 'off', '' => 'fixed', 'simple' => 'simple', 'auto' => 'auto', default => throw new \InvalidArgumentException };
                 $queues = explode(',', $option->queue);
                 $minimum = $balance === 'fixed' ? $option->minProcesses : count($queues) * $option->minProcesses;
-                // Explicit native startup allocation. Runtime/transient balancing is not promised identical.
-                $workers = max($minimum, (int) floor(($option->minProcesses + $option->maxProcesses) / 2));
+                // Horizon starts at the midpoint and rounds each balanced queue share down.
+                // Native cannot start below its per-queue minimum; report that boundary explicitly.
+                $startup = (int) floor(($option->minProcesses + $option->maxProcesses) / 2);
+                $rounded = $balance === 'fixed' ? $startup : intdiv($startup, count($queues)) * count($queues);
+                $workers = max($minimum, $rounded);
+                if ($workers > $rounded) { $report = $this->issue($report, 'warning', 'startup_minimum', 'Supervisor '.$name.' needs native startup allocation '.$workers.' to meet its queue minima; Horizon midpoint rounding starts lower. Review this explicit difference.'); }
                 $backoff = $option->backoff;
                 if (is_string($backoff)) {
                     if (! preg_match('/^\d+(,\d+)*$/D', $backoff)) { throw new \InvalidArgumentException; }

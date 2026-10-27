@@ -34,7 +34,7 @@ final class NativeMigrationTest extends TestCase
         $this->assertSame([5, 3, 9], $pool['backoff']);
         $this->assertSame($original->minProcesses, $pool['min_workers']);
         $this->assertSame($original->maxProcesses, $pool['max_workers']);
-        $this->assertSame(4, $pool['workers']);
+        $this->assertSame(3, $pool['workers']);
         $this->assertSame('auto', $pool['balance']);
         $this->assertSame('time', $pool['auto_scale_strategy']);
         $this->assertSame('horizon', $pool['balance_policy']);
@@ -115,7 +115,7 @@ final class NativeMigrationTest extends TestCase
         config()->set('queue.connections.redis.driver', 'current-redis');
         $pools = app(Plan::class)->workerPools();
         $this->assertCount(3, $pools);
-        $this->assertSame(4, array_sum(array_column($pools, 'workers')));
+        $this->assertSame(3, array_sum(array_column($pools, 'workers')));
         $this->assertSame([['priority'], ['normal'], ['bulk']], array_column($pools, 'queues'));
         $this->assertContains('--queue=priority', app(Plan::class)->runtime()['pools'][0]['command']);
     }
@@ -131,5 +131,27 @@ final class NativeMigrationTest extends TestCase
         $this->assertFalse(app(HorizonMigration::class)->preview()['valid']);
         config()->set('horizon.defaults.orders.maxProcesses', true);
         $this->assertFalse(app(HorizonMigration::class)->preview()['valid']);
+    }
+
+    public function test_simple_startup_rounds_each_queue_share_down_with_native_minima_explicit(): void
+    {
+        config()->set('horizon.defaults', []);
+        config()->set('horizon.environments', ['testing' => ['pair' => [
+            'connection' => 'redis', 'queue' => ['one', 'two'], 'balance' => 'simple',
+            'minProcesses' => 1, 'maxProcesses' => 7, 'timeout' => 2,
+        ]]]);
+        $report = app(HorizonMigration::class)->preview();
+        $this->assertTrue($report['valid']);
+        $this->assertSame(4, $report['config']['native']['pools']['pair']['workers']);
+        config()->set('horizon.environments.testing.pair.maxProcesses', 5);
+        $report = app(HorizonMigration::class)->preview();
+        // Midpoint 3 divided among two Horizon pools gives one each.
+        $this->assertTrue($report['valid']);
+        $this->assertSame(2, $report['config']['native']['pools']['pair']['workers']);
+        config()->set('horizon.environments.testing.pair.maxProcesses', 2);
+        $report = app(HorizonMigration::class)->preview();
+        $this->assertTrue($report['valid']);
+        $this->assertSame(2, $report['config']['native']['pools']['pair']['workers']);
+        $this->assertContains('startup_minimum', array_column($report['issues'], 'code'));
     }
 }
