@@ -2,43 +2,98 @@
   <img src="resources/brand/current-wordmark.svg" alt="Current" width="220">
 </p>
 
-# See what happened inside your Laravel jobs
+# Run your queues. Understand every attempt.
 
-Current brings job investigation, webhook activity, and broadcast debugging into your Laravel application. Find a job, inspect its attempts, follow recorded steps, and see where an exception surfaced—all alongside Horizon.
+Current is a self-hosted dashboard for Laravel jobs, webhooks, and broadcasts. Keep Horizon as your queue engine, or opt into Current’s Go supervisor while Laravel continues to execute your PHP jobs.
+
+Find the right job, follow its attempts and recorded steps, inspect a failure, and navigate to related activity—all inside your application.
 
 **Early beta · MIT licensed · Self-hosted · No frontend build**
 
-## What you can investigate
+> This README describes the development branch, including unreleased improvements. Check the [changelog](CHANGELOG.md) and use the documentation for your installed [release](https://github.com/Gatienorti/current/releases).
 
-| Area | Included |
-| --- | --- |
-| **Queues & Jobs** | Horizon dashboard, supervisor/queue architecture, combined job filters, metrics, batches, and registered schedules. |
-| **Job details** | Attempts and retries, pan/zoom execution maps, exception locations and stack context, Args and Metadata, and related webhook/broadcast activity. |
-| **Webhooks** | Incoming receipts and outgoing Laravel HTTP deliveries, HTTP outcomes, explicit retry grouping, optional context snapshots, and linked jobs. |
-| **Broadcasts** | Reverb and Pusher submissions, queued/immediate timelines, authorization failures, snapshot comparison, and linked jobs. |
+![Current job investigation: recorded execution map and attempt timeline](resources/images/job-investigation.webp)
 
-Retry failed jobs through Horizon. Copy a **Debug with AI** prompt from captured failure evidence into your coding agent; Current sends nothing to an AI service automatically.
+*Synthetic demo data. Internal steps require instrumentation.*
 
-Light, dark, and system appearance are included. Live data refreshes every five seconds by default, with pause and interval controls.
+## Choose your queue engine
 
-## Get started
+| | Horizon | Current native |
+| --- | --- | --- |
+| Execution | Your existing Horizon installation | Optional Go supervisor managing standard Laravel PHP workers |
+| Queue storage | Laravel Redis queues | Laravel Redis queues |
+| Current dashboard | Investigation alongside Horizon | Investigation and native queue operations |
+| Setup | Default backend | Explicit opt-in; Linux; experimental |
 
-Current is available on [Packagist](https://packagist.org/packages/gatienorti/current) as an early beta. Install the beta in a development application, following the [installation guide](docs/INSTALLATION.md):
+Current’s native backend includes worker pools and ranges, balancing, supervisor inventory, pause/resume, deployment shutdown, job retries, monitored tags, queue maintenance, metrics, and batches. It keeps Laravel’s job execution semantics. Read the [native setup and support boundaries](docs/NATIVE-ENGINE.md) before switching an application.
+
+**Telemetry is a separate choice.** Recording is synchronous by default. The optional Redis transport and Go collector batch job, attempt, and step writes outside PHP workers. You can use async recording with **either** queue engine. See [async telemetry setup](docs/ASYNC-TELEMETRY.md).
+
+## What you get
+
+- **Dashboard and queue architecture.** See supervisor status, consuming capacity, configured worker ranges, shared queue allocation, and declared job routing. Browse registered schedules alongside queue metrics and batches.
+- **Combined job filters.** Search by queues, job class, ID, tags, outcome, exception, and time range. Keep common filters compact and expand the rest when needed.
+- **An investigation page for each job.** Switch between attempts, follow an execution map with pan/zoom, inspect step timings and exception context, and read redacted Args and Metadata.
+- **Attempt timelines and execution settings.** Compare attempts with compressed or true-scale spacing. Inspect captured retries, timeouts, backoff, and Redis reservation settings, with their sources and relevant configuration warnings.
+- **Guarded operations.** Retry failed jobs and batches. Native mode adds monitored-tag management, queue and failed-history maintenance, and operator controls with explicit access gates.
+- **Webhook visibility.** Browse incoming receipts and outgoing Laravel HTTP deliveries, inspect outcomes and explicit retry groups, and follow recorded links to jobs.
+- **Broadcast debugging.** Inspect Reverb or Pusher submissions, queued/immediate execution, authorization failures, snapshot differences, and related jobs.
+
+Copy a **Debug with AI** prompt assembled from captured failure evidence into your coding agent. Current does not send it to an AI service automatically.
+
+Light, dark, and system appearance are included. Data refreshes every five seconds by default, with pause and interval controls.
+
+<details>
+<summary><strong>More screenshots</strong></summary>
+
+### Dashboard
+
+![Current native dashboard with workload and supervisor information](resources/images/dashboard.webp)
+
+### Monitoring
+
+![Combined job filters and matching job results](resources/images/monitoring.webp)
+
+### Queues
+
+![Queue architecture grouped by supervisor with job routing and worker allocation](resources/images/queues.webp)
+
+### Webhooks
+
+![Incoming and outgoing webhook activity in Current](resources/images/webhooks.webp)
+
+### Broadcasts
+
+![Broadcast submission and authorization debugging in Current](resources/images/broadcasts.webp)
+
+All screenshots use synthetic demo data.
+
+</details>
+
+## Get started with Horizon
+
+For an application already using Horizon:
 
 ```sh
 composer require gatienorti/current:^0.1.0@beta
 php artisan current:install
 ```
 
-Open **`/current`** using your application's existing Horizon access. The installer publishes configuration, creates a dedicated SQLite history store, and runs Current's migrations. Restart long-lived workers after installation and keep Laravel's scheduler running for pruning.
+Open **`/current`** while signed into an account allowed by your application’s Horizon access policy. The installer publishes configuration and creates a dedicated SQLite history store without changing your application’s default database.
 
-The Composer package is `gatienorti/current`, matching its GitHub home. No hosted account, Node build, or WebSocket server is required for jobs.
+Restart long-lived workers after installation and keep Laravel’s scheduler running for pruning. Run `current:install` after upgrades as well. Async upgrades require the [documented drain, migration, and restart sequence](docs/ASYNC-TELEMETRY.md).
 
-**Default Horizon backend requirements:** PHP 8.2+, Laravel 11.44/12/13, and Horizon 5.30+ within 5.x, subject to compatible version pairs. Laravel 13 requires PHP 8.3+. See the [compatibility matrix](docs/COMPATIBILITY.md) for tested combinations and database limits.
+**Requirements:** PHP 8.2+, Laravel 11.44/12/13, and a compatible Horizon 5.30+ version within 5.x. Laravel 13 requires PHP 8.3+. See [tested version pairs and database support](docs/COMPATIBILITY.md).
 
-## Give a job an execution map
+No hosted account, Node build, or application WebSocket server is required for the jobs dashboard. Native execution and async recording each require their matching Linux binary and additional setup:
 
-Queue lifecycle and attempt observations work without adding step calls. To see what happens *inside* a job, wrap useful operations:
+- [Install and configure Current](docs/INSTALLATION.md)
+- [Use the native engine without Horizon](docs/NATIVE-ENGINE.md)
+- [Enable the optional async collector](docs/ASYNC-TELEMETRY.md)
+
+## Record what happens inside a job
+
+Queue lifecycle, attempts, and supported job snapshots are collected automatically. To see internal operations on the execution map, wrap meaningful work:
 
 ```php
 use Current\Current;
@@ -51,44 +106,33 @@ public function handle(): void
 }
 ```
 
-The callback keeps its normal return value and exception behavior. Current records each named step's timing and outcome. Arrows represent recorded start order, not inferred dependencies.
+Callbacks keep their normal return values and exception behavior. Current records each named step’s timing and outcome. Arrows show recorded start order; they do not infer dependencies.
 
-New supported object dispatches capture bounded, redacted job properties and standard metadata. You can disable automatic snapshots or define explicit `currentArguments()` and `currentMetadata()` exports. See [capture configuration](docs/INSTALLATION.md#what-appears-automatically).
+Supported new object dispatches capture bounded, redacted job properties and standard metadata. Configure explicit `currentArguments()` and `currentMetadata()` exports, or disable automatic snapshots, through [capture configuration](docs/INSTALLATION.md#what-appears-automatically). Historical records are not backfilled.
 
-## Follow activity across your application
+## Follow webhooks and broadcasts
 
-Webhook and broadcast collection are **opt-in**, with explicit route, destination, event, and channel allowlists. Payload exports require additional configuration. Current observes your existing integrations; it does not replace webhook signature validation, delivery engines, or broadcaster authorization.
+These integrations are **opt-in**. Configure approved routes, destinations, events, and channels; payload exports require additional configuration.
 
-[Set up incoming and outgoing webhooks](docs/INSTALLATION.md#4-enable-optional-integrations) · [Set up Reverb or Pusher](docs/INSTALLATION.md#optional-reverb-broadcast-observation)
+- [Incoming receipts and outgoing deliveries](docs/INSTALLATION.md#4-enable-optional-integrations)
+- [Reverb and Pusher observation](docs/INSTALLATION.md#optional-reverb-broadcast-observation)
+
+Current observes your existing integrations. Signature validation, delivery, broadcaster authorization, and client receipt remain the application’s responsibility. Webhook and broadcast history writes remain synchronous.
 
 ## Know what the evidence means
 
-- History starts when collection is enabled; there is no historical backfill. Retention defaults to seven days.
-- Missing telemetry is unknown. Worker completion and HTTP success do not prove downstream business success or client receipt.
-- Queue architecture uses configuration and bounded static inspection. Dynamic routing can remain unresolved.
-- Schedule lists describe registered tasks and expression-based next times, not scheduler execution health.
-- Redaction happens before persistence, but cannot identify every sensitive business field. Review your capture policy and dashboard access.
+- Collection starts when enabled, with seven-day retention by default. Missing observations remain unknown.
+- Internal steps require instrumentation. Static source outlines show possible calls, not proof that those calls ran.
+- An exception location shows where an error surfaced; it does not establish root cause. Worker completion and HTTP success do not prove downstream business success or client receipt.
+- Queue architecture combines configuration and bounded static inspection. Dynamic routing can remain unresolved. Schedule lists describe registered tasks, not scheduler execution health.
+- Redaction happens before persistence. Review capture policies for your business data and protect dashboard access with your application’s gates.
 
-Current remains an early beta. Isolated integration and compatibility tests have passed; production load and broad real-world usage are not yet established. Current is an independent project, not an official Laravel product.
+The native engine and async collector are optional, with documented Linux, Redis, and database boundaries. Compatibility and isolated integration tests provide evidence for those boundaries; broad production reliability and universal performance gains are not claimed.
 
 ## Documentation and contributing
 
-- [Installation and configuration](docs/INSTALLATION.md)
-- [Compatibility and verification](docs/COMPATIBILITY.md)
-- [Changelog](CHANGELOG.md)
-- [Contributing and running tests](CONTRIBUTING.md)
-- [Security reporting](SECURITY.md)
+[Installation](docs/INSTALLATION.md) · [Native engine](docs/NATIVE-ENGINE.md) · [Async telemetry](docs/ASYNC-TELEMETRY.md) · [Compatibility](docs/COMPATIBILITY.md) · [Changelog](CHANGELOG.md)
 
-Bug reports with a minimal, sanitized reproduction are especially useful. Keep credentials, real payloads, and customer information out of public issues.
+Contributions and sanitized reproductions are welcome. See [Contributing](CONTRIBUTING.md) and [Security reporting](SECURITY.md). Keep credentials, real payloads, and customer information out of public issues.
 
-Released under the [MIT license](LICENSE).
-
-### Optional async job telemetry
-
-Current keeps synchronous recording by default. An opt-in Redis transport and Go collector can batch job/attempt/step writes. The opt-in path supports Linux, phpredis or optional Predis 2.3/3.x, standalone Redis 7 and either local SQLite or MySQL 8.4/MariaDB 11.4 InnoDB connections. See [setup, collector health, recovery and switching modes](docs/ASYNC-TELEMETRY.md). Webhooks and broadcasts stay synchronous. Static Linux binaries and checksums are built by CI; the setup guide covers verified installation and TLS. Available from beta.2.
-
-## Experimental native execution
-
-An opt-in Linux Go supervisor can run Laravel workers without Horizon, while keeping Current investigation and independently selected telemetry. Available from beta.2, this experimental backend has explicit differences from Horizon. See [native setup and limits](docs/NATIVE-ENGINE.md). Existing Horizon applications keep their default backend.
-
-Development versions after beta.2 include a [Horizon migration preview and native setup checks](docs/NATIVE-ENGINE.md#migration-preview-and-setup-checks). Both require explicit operator review; neither switches engines automatically.
+Current is an independent project, not an official Laravel product. Released under the [MIT license](LICENSE).

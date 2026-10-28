@@ -23,6 +23,12 @@ final class Readiness
             app(Plan::class)->runtime();
             $add('configuration', 'pass', 'Native pool, worker budget, timeout and retry_after settings validate.');
         } catch (Throwable) { $pools = []; $add('configuration', 'error', 'Native configuration is invalid. Run current:supervise --check after selecting native mode; review pools, current-redis drivers, instance, state path and timeout limits.'); }
+        $limit = config('current.native.memory_limit', 128);
+        if (is_int($limit) && $limit >= 1 && $limit <= 65536) {
+            $used = (int) ceil(memory_get_usage(true) / 1048576);
+            $status = $used >= $limit ? 'error' : ($limit - $used < max(16, $limit * .25) ? 'warning' : 'pass');
+            $add('launcher_memory', $status, 'This CLI has allocated '.$used.' MiB; the launcher budget is '.$limit.' MiB. Set current.native.memory_limit above the boot footprint with headroom (CURRENT_NATIVE_MEMORY_LIMIT in the default config). PHP worker memory is separate.');
+        }
         if (array_filter($pools, fn ($pool) => $pool['timeout'] === 0)) {
             $add('worker_timeout', 'warning', 'A pool disables the Laravel worker alarm. Review job deadlines and retry_after; shutdown grace is still finite.');
         }

@@ -178,7 +178,7 @@ final class Plan
 
     public function runtime(?string $environment = null): array
     {
-        $memory = config('current.native.memory_limit', 64);
+        $memory = config('current.native.memory_limit', 128);
         if (! is_int($memory) || $memory < 1 || $memory > 65536) { throw new InvalidArgumentException('Native memory_limit must be between 1 and 65536 MiB.'); }
         if ($environment !== null && ! preg_match('/^[a-zA-Z0-9_.-]{1,128}$/D', $environment)) {
             throw new InvalidArgumentException('Invalid native worker environment.');

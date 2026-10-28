@@ -35,10 +35,13 @@ final class RuntimeSampler
             $snapshot = app(RuntimeSnapshot::class);
             $this->routes = $snapshot->routes($pools);
             $snapshot->validateRoutes($this->routes);
-            $input = json_encode(['source' => $snapshot->source(), 'routes' => $this->routes], JSON_THROW_ON_ERROR);
+            $source = $snapshot->readerSource();
+            $autoload = dirname((new \ReflectionClass(\Composer\Autoload\ClassLoader::class))->getFileName(), 2).'/autoload.php';
+            $input = json_encode(['source' => $source ?? $snapshot->source(), 'routes' => $this->routes, 'autoload' => $autoload], JSON_THROW_ON_ERROR);
             if (strlen($input) > 262144) { return; }
             $this->output = '';
-            $this->process = new Process([config('current.native.binary'), '-runtime-sample', PHP_BINARY, base_path('artisan')], base_path());
+            $entrypoint = $source === null ? base_path('artisan') : __DIR__.'/runtime-sample.php';
+            $this->process = new Process([config('current.native.binary'), '-runtime-sample', PHP_BINARY, $entrypoint], base_path());
             $this->process->setInput($input)->setTimeout(5)->start();
         } catch (Throwable) {
             $this->stop(); // Keep existing values until their short TTL; never invent zero runtimes.

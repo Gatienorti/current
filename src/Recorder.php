@@ -125,6 +125,7 @@ final class Recorder
                 $this->store->table('attempts')->insert(array_merge([
                     'id' => $attemptId, 'job_id' => $jobId, 'worker_id' => $this->workerId,
                     'reported_attempt' => $job->attempts(), 'status' => 'processing', 'started_at' => microtime(true),
+                    'policy_json' => app(Support\AttemptPolicy::class)->capture($event),
                 ], $outline));
                 $this->store->table('jobs')->where('id', $jobId)->update([
                     'status' => $this->store->latestOutcome($jobId), 'observed_at' => microtime(true),

@@ -12,7 +12,7 @@ return [
         'controls' => false,
         'binary' => env('CURRENT_SUPERVISOR_BINARY', storage_path('current/current-supervisor')),
         'grace_seconds' => 90,
-        'memory_limit' => 64, // MiB per launcher/supervisor, excluding PHP worker children; drain on excess.
+        'memory_limit' => (int) env('CURRENT_NATIVE_MEMORY_LIMIT', 128), // MiB per launcher/supervisor; worker children have separate budgets.
         'worker_output' => 'quiet', // quiet, cli, or json (when Laravel supports it).
         'worker_limit' => 256, // Total live workers across this instance, including draining workers.
         'pools' => [], // Named pools: connection, queues, workers, min_workers, max_workers, timeout, memory, tries.

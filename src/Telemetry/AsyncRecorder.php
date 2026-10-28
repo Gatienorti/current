@@ -99,7 +99,7 @@ final class AsyncRecorder
                 return;
             }
             $job = $this->base($event->job->payload(), $event->connectionName, $event->job->getQueue(), 'start_only');
-            $a = array_merge(['id' => (string) Str::ulid(), 'job_id' => $job['id'], 'worker_id' => $this->worker, 'reported_attempt' => $event->job->attempts(), 'status' => 'processing', 'started_at' => microtime(true)], app(SourceOutline::class)->capture(data_get($event->job->payload(), 'data.commandName', '')));
+            $a = array_merge(['id' => (string) Str::ulid(), 'job_id' => $job['id'], 'worker_id' => $this->worker, 'policy_json' => app(\Current\Support\AttemptPolicy::class)->capture($event), 'reported_attempt' => $event->job->attempts(), 'status' => 'processing', 'started_at' => microtime(true)], app(SourceOutline::class)->capture(data_get($event->job->payload(), 'data.commandName', '')));
             $this->current = ['job' => $job, 'attempt' => $a, 'revision' => 1,
                 '_monitoring_tags' => $this->sanitizer->tags($event->job->payload()['tags'] ?? [])];
             $this->executions[$event->job] = $this->current;

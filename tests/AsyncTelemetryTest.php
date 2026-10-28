@@ -119,6 +119,20 @@ final class AsyncTelemetryTest extends TestCase
         $this->assertTrue($p->isSuccessful(), $p->getErrorOutput());
     }
 
+    public function test_attempt_policy_survives_async_projection(): void
+    {
+        dispatch(new PaymentJob('success'));
+        $this->work();
+        $this->drain();
+        $attempt = $this->store()->table('attempts')->first();
+        $this->assertNotNull($attempt);
+        $policy = json_decode($attempt->policy_json, true);
+        $this->assertSame(2, $policy['timeout']['value']);
+        $this->assertSame('Worker option', $policy['timeout']['source']);
+        $this->assertSame(5, $policy['retry_after']['value']);
+        $this->get('/current/jobs/'.$attempt->job_id)->assertOk()->assertSee('Execution settings')->assertSee('No retry backoff');
+    }
+
     public function test_collector_requires_alias_migration_without_consuming_pending_events(): void
     {
         $migration = require dirname(__DIR__).'/database/migrations/2026_10_28_000015_add_async_identity_aliases.php';

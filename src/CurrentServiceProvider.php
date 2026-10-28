@@ -35,10 +35,17 @@ final class CurrentServiceProvider extends ServiceProvider
         $this->app->singleton(Native\MonitoredTags::class);
         $this->app->singleton(Recorder::class);
         $this->app->singleton(SourceOutline::class);
+        $this->app->singleton(Support\AttemptPolicy::class);
     }
 
     public function boot(): void
     {
+        $this->app['events']->listen(\Illuminate\Console\Events\CommandStarting::class, function ($event) {
+            try { $this->app->make(Support\AttemptPolicy::class)->starting($event); } catch (\Throwable) {}
+        });
+        $this->app['events']->listen(\Illuminate\Console\Events\CommandFinished::class, function () {
+            try { $this->app->make(Support\AttemptPolicy::class)->finished(); } catch (\Throwable) {}
+        });
         $this->app['events']->listen(Events\QueueWaitExceeded::class, Native\WaitNotifications::class);
         $this->app->afterResolving('queue', function ($manager) {
             $manager->addConnector('current-redis', fn () => new Native\RedisConnector($this->app['redis']));

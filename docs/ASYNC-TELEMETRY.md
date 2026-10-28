@@ -57,7 +57,7 @@ Use one collector per Current database/namespace. Async collection and the optio
    CURRENT_TELEMETRY_NAMESPACE=my_application
    ```
 
-   The selected `database.redis` connection must use explicit `host`, `port`, `database` and optional `username`, `password`, `scheme=tls` fields. URL-style connections are rejected. Use the normal system trust store for TLS; custom TLS options are not implemented. Authentication/TLS configuration is wired but the local tests use unauthenticated Redis, so those deployment modes require your own connection verification.
+   The selected `database.redis` connection must use explicit `host`, `port`, `database` and optional `username`, `password`, `scheme=tls` fields. URL-style connections are rejected. TLS verifies the peer and hostname using the system trust store, or approved custom CA/client-certificate options (`context.stream` for phpredis, `ssl` for Predis). Certificate paths must be readable by PHP and the matching collector; a collector advertising Redis TLS support is required. Disabling verification and unsupported TLS options are rejected. Isolated authentication, custom CA, mutual TLS, and IPv6 checks are recorded in the [compatibility evidence](COMPATIBILITY.md); verify your own deployment credentials and certificate names.
 
    Choose a unique namespace per application/database. The application Redis prefix also contributes to isolation. A dedicated Redis connection with short timeouts is created; Current does not change Laravel's existing Redis connection. The transport's connect/read timeout is 200 ms. The collector has separate one-second Redis timeouts.
 

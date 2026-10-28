@@ -30,6 +30,10 @@ final class SuperviseCommand extends Command
             if ($this->option('environment') !== null) { config()->set('current.native.environment', $this->option('environment')); }
             $config = $plan->runtime($this->option('env'));
             if ($this->option('check')) { $this->line(json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)); return self::SUCCESS; }
+            $used = (int) ceil(memory_get_usage(true) / 1048576);
+            if ($used >= $config['memory_limit_mb']) {
+                throw new \RuntimeException('Native launcher already allocated '.$used.' MiB at boot, above its '.$config['memory_limit_mb'].' MiB budget. Increase current.native.memory_limit (CURRENT_NATIVE_MEMORY_LIMIT in the default config) with headroom; worker memory is configured separately.');
+            }
             $binary = config('current.native.binary');
             if (! is_string($binary) || ! str_starts_with($binary, '/') || ! is_executable($binary)) {
                 throw new \RuntimeException('Build/install the native Linux supervisor at current.native.binary first.');
@@ -60,7 +64,7 @@ final class SuperviseCommand extends Command
             $registry = app(\Current\Native\Registry::class);
             while ($process->isRunning()) {
                 if (! $memoryExceeded && memory_get_usage(true) > $config['memory_limit_mb'] * 1048576) {
-                    $this->warn('Native launcher memory limit exceeded; draining workers before process-manager restart.');
+                    $this->warn('Native launcher exceeded current.native.memory_limit ('.$config['memory_limit_mb'].' MiB); draining workers before process-manager restart. Increase the launcher budget if the application boot needs more headroom; worker memory is separate.');
                     $memoryExceeded = true;
                     $process->signal(SIGTERM);
                     $sampler->stop();

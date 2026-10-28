@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Native runtime sampling uses a small isolated Laravel database reader for standard connections, avoiding a full provider boot. Custom connections retain the guarded bootstrap path. New launcher configurations default to 128 MiB with an environment override and startup/doctor memory diagnostics.
+
+- Add an all-attempt timeline with compressed spacing, per-attempt execution policy provenance, and targeted configuration notices. Apply migration 20 and restart the async collector before upgraded workers.
+
 - Native worker identity capture can retry temporarily unavailable `/proc` evidence within a bounded100ms budget while checking the original spawn pidfd. Wrong tokens, exited processes and missing proof remain ineligible for purge.
 
 - Optional Predis 2.3/3.x native queue and async telemetry support, with complete-acknowledgement handling, bounded observation connections, and verified custom Redis CA/mutual TLS for matching collectors.
@@ -25,7 +29,7 @@
 - `current:listen` watches application source and drains workers before restart. `current:purge` uses recorded process identity and Linux pidfds to clean up proven orphan workers while preserving active instances.
 - Native automatic balancing defaults to Horizon-style proportional recommendations; the previous bounded rounding remains available. Approved exact tags can extend new history retention within the configured global cap.
 
-Run `current:install` for migrations 17–19 and install the matching supervisor binary before using these changes. Published beta.2 is unchanged. Native execution remains experimental; finite tests do not establish production reliability across every topology.
+Run `current:install` for migrations 17–20 and install the matching supervisor binary before using these changes. Published beta.2 is unchanged. Native execution remains experimental; finite tests do not establish production reliability across every topology.
 
 ## v0.1.0-beta.2 — 2026-10-27
 

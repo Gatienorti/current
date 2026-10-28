@@ -1,8 +1,51 @@
 (() => {
     let cleanup = () => {};
     let payloadOpen = true;
+    let timelineScale = 'compressed';
+    let sourceOpen = true;
+    const timeline = () => {
+        document.querySelectorAll('[data-attempt-timeline]').forEach(panel => {
+            const body = panel.querySelector('[data-time-start]');
+            const bars = [...panel.querySelectorAll('[data-start]')];
+            const start = Number(body.dataset.timeStart), end = Number(body.dataset.timeEnd);
+            const points = [...new Set([start, end, ...bars.flatMap(bar => [Number(bar.dataset.start), Number(bar.dataset.end)])])].filter(Number.isFinite).sort((a, b) => a - b);
+            const durations = bars.map(bar => Number(bar.dataset.end) - Number(bar.dataset.start)).filter(value => value > 0).sort((a, b) => a - b);
+            const gapCap = (durations[Math.floor(durations.length / 2)] || 1) * 0.15;
+            const render = () => {
+                panel.dataset.timelineScale = timelineScale;
+                const cumulative = [0];
+                for (let i = 1; i < points.length; i++) {
+                    const span = points[i] - points[i - 1];
+                    const active = bars.some(bar => Number(bar.dataset.start) < points[i] && Number(bar.dataset.end) > points[i - 1]);
+                    cumulative[i] = cumulative[i - 1] + (timelineScale === 'compressed' && !active ? Math.min(span, gapCap) : span);
+                }
+                const total = cumulative.at(-1) || 1;
+                const position = time => 100 * (cumulative[points.indexOf(time)] || 0) / total;
+                bars.forEach(bar => {
+                    const left = position(Number(bar.dataset.start));
+                    const right = position(Number(bar.dataset.end));
+                    bar.style.left = `${left}%`;
+                    bar.style.width = `${Math.max(0, right - left)}%`;
+                });
+                panel.querySelectorAll('[data-timeline-scale]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.timelineScale === timelineScale)));
+                panel.querySelector('[data-scale-description]').textContent = timelineScale === 'compressed' ? 'Compressed spacing; bar widths are not proportional to elapsed time.' : 'True scale.';
+            };
+            panel.querySelector('.timeline-scale').hidden = false;
+            panel.querySelectorAll('[data-timeline-scale]').forEach(button => button.addEventListener('click', () => { timelineScale = button.dataset.timelineScale; render(); }));
+            render();
+        });
+    };
     const enhance = () => {
         cleanup();
+        timeline();
+        const sourceOutline = document.querySelector('.source-disclosure');
+        if (sourceOutline) {
+            sourceOutline.open = sourceOpen;
+            sourceOutline.querySelector(':scope > summary').addEventListener('click', event => {
+                event.preventDefault();
+                sourceOutline.open = sourceOpen = !sourceOutline.open;
+            });
+        }
         const root = document.querySelector('[data-investigation]');
         const payloadPanels = [...document.querySelectorAll('[data-payload-panel]')];
         payloadPanels.forEach(panel => {

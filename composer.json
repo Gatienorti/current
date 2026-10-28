@@ -1,6 +1,6 @@
 {
     "name": "gatienorti/current",
-    "description": "Current: job investigation and execution history for Laravel Horizon.",
+    "description": "Current: Laravel queue operations, job investigation, webhooks and broadcasts.",
     "type": "library",
     "license": "MIT",
     "require": {

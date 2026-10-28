@@ -35,15 +35,16 @@
 <div id="execution-map" class="execution-investigation" data-investigation data-default-inspector="{{ $defaultInspector }}">
     @if($steps->isNotEmpty())
     <section class="panel investigation-panel">
-        <div class="panel-heading"><h2>Execution map <span class="count-pill">{{ $steps->count() }}</span></h2><a class="step-summary-link" data-step-target="attempt-context" href="#attempt-context">Attempt summary</a><span class="soft-badge">RECORDED ORDER</span></div>
+        <div class="panel-heading"><h2>Execution map <span class="count-pill">{{ $steps->count() }}</span></h2></div>
         @include('current::step-map')
     </section>
     @endif
+    @include('current::attempt-timeline')
     @include('current::job-overview')
     <div class="investigation-details {{ $steps->isEmpty() ? 'without-steps' : '' }}">
         @if($steps->isNotEmpty())
         <section class="panel execution-steps" aria-label="Execution steps">
-            <div class="panel-heading"><h2>Execution steps</h2><span class="soft-badge">OBSERVED</span></div>
+            <div class="panel-heading"><h2>Execution steps</h2></div>
             <div class="execution-step-list">
             @foreach($steps as $step)
             <div class="execution-step {{ $step->status }} {{ $step->parent_id ? 'nested' : '' }}">
@@ -79,7 +80,7 @@
         </section>
         @endif
         <aside class="panel attempt-context-panel" aria-label="Attempt context">
-            <div class="panel-heading"><h2>{{ $attempt?->exception_class ? 'Failure location' : 'Attempt context' }}</h2>@include('current::icon', ['iconName' => $attempt?->exception_class ? 'alert' : 'info', 'iconClass' => $attempt?->exception_class ? 'context-error-icon' : ''])</div>
+            <div class="panel-heading"><h2>{{ $attempt?->exception_class ? 'Failure location' : 'Attempt context' }}</h2>@unless($attempt?->exception_class)@include('current::icon', ['iconName' => 'info'])@endunless</div>
             <section id="attempt-context" class="step-inspector context-body" data-step-inspector>
                 @if($attempt?->exception_class)
                     @include('current::exception', ['errorRecord' => $attempt, 'errorFrames' => $frames, 'errorLabel' => 'Captured exception'])
@@ -107,13 +108,15 @@
     @include('current::json-panel', ['snapshot' => $metadataSnapshot, 'snapshotTitle' => 'Metadata', 'snapshotId' => 'job-metadata-json', 'snapshotSource' => $metadataSource])
 </div>
 
+@include('current::job-policy')
+
 @if($webhookReceipts->isNotEmpty() || $webhookDeliveries->isNotEmpty())
 @include('current::webhook-relations', ['showReceipts' => true, 'showDeliveries' => true])
 @endif
 @if($relatedBroadcasts->isNotEmpty())@include('current::related-broadcasts')@endif
 @include('current::attempt-history')
-<details class="panel source-panel source-disclosure">
-    <summary class="panel-heading"><h2>Source outline <span class="count-pill">{{ count($operations) }}</span></h2><span class="soft-badge">POSSIBLE OPERATIONS</span>@include('current::icon', ['iconName' => 'chevron-down', 'iconClass' => 'source-toggle'])</summary>
+<details class="panel source-panel source-disclosure" open>
+    <summary class="panel-heading"><h2>Source outline</h2>@include('current::icon', ['iconName' => 'chevron-down', 'iconClass' => 'source-toggle'])</summary>
     <div class="source-intro">Read from <code>{{ $attempt?->source_file ?? 'unavailable source' }}</code> at attempt start. These possible calls may belong to branches or loops; execution is unknown unless separately captured.</div>
     @if($attempt?->source_hash)<div class="source-revision">Source fingerprint <code>{{ substr($attempt->source_hash, 0, 16) }}</code>@if($attempt->source_revision) · Revision <code>{{ $attempt->source_revision }}</code>
 @endif</div>

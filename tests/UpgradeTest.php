@@ -42,7 +42,7 @@ final class UpgradeTest extends TestCase
                 foreach (['jobs', 'attempts', 'tags', 'steps', 'meta'] as $table) { $snapshots[$table] = $database->table('lens_'.$table)->get()->map(fn ($row) => (array) $row)->all(); }
                 $appTables = Schema::connection('app')->getTableListing();
                 $this->assertSame(0, Artisan::call('current:install'));
-                $this->assertSame(19, $database->table('migrations')->count());
+                $this->assertSame(20, $database->table('migrations')->count());
                 $this->assertSame($customConfig, file_get_contents($directory.'/current.php'));
                 foreach ($snapshots as $table => $rows) {
                     foreach ($rows as $before) {
@@ -58,7 +58,7 @@ final class UpgradeTest extends TestCase
                 $this->assertTrue(Schema::connection('upgrade')->hasTable('lens_native_retry_claims'));
                 $this->assertSame($appTables, Schema::connection('app')->getTableListing());
                 $this->assertSame(0, Artisan::call('current:install'));
-                $this->assertSame(19, $database->table('migrations')->count());
+                $this->assertSame(20, $database->table('migrations')->count());
                 $this->assertSame(1, $database->table('lens_jobs')->count());
             } finally {
                 app('db')->purge('upgrade');

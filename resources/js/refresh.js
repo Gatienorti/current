@@ -19,7 +19,7 @@
             || document.querySelector('[data-job-filters] :focus, .filter-dropdown.is-open, .map-panning, .range-picker[open], [data-refresh-picker][open], [data-debug-dialog][open]')
             || window.getSelection()?.toString()
             || [...document.querySelectorAll('[data-live-region] details[open]')].some(details =>
-                !details.matches('[data-payload-panel], [data-json-root]') && !details.parentElement.closest('details:not([open])') && details.getClientRects().length > 0)
+                !details.matches('[data-payload-panel], [data-json-root], .source-disclosure') && !details.parentElement.closest('details:not([open])') && details.getClientRects().length > 0)
         );
         const updateControl = () => {
             toggle.querySelector('[data-refresh-label]').textContent = enabled ? (failures ? 'Retrying…' : `${seconds}s`) : 'Paused';

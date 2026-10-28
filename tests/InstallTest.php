@@ -37,7 +37,7 @@ final class InstallTest extends TestCase
             $this->assertSame('keep', app('db')->connection('current')->table('lens_meta')->where('key', 'installation-proof')->value('value'));
             $this->assertStringContainsString('custom-current', file_get_contents($directory.'/current.php'));
             $this->assertFalse(Schema::connection('app')->hasTable('migrations'));
-            $this->assertSame(19, app('db')->connection('current')->table('migrations')->count());
+            $this->assertSame(20, app('db')->connection('current')->table('migrations')->count());
             $this->assertSame(0, Artisan::call('current:prune'));
             $this->assertSame(0, Artisan::call('lens:prune'));
             $events = app(Schedule::class)->events();
@@ -65,7 +65,7 @@ final class InstallTest extends TestCase
             app('db')->connection('current')->table('lens_meta')->insert(['key' => 'application-upgrade-proof', 'value' => 'keep']);
             $this->assertSame(0, Artisan::call('migrate', ['--database' => 'app', '--force' => true]));
             $this->assertSame('keep', app('db')->connection('current')->table('lens_meta')->where('key', 'application-upgrade-proof')->value('value'));
-            $this->assertSame(19, app('db')->connection('current')->table('migrations')->count());
+            $this->assertSame(20, app('db')->connection('current')->table('migrations')->count());
             $this->assertSame(0, app('db')->connection('app')->table('migrations')->where('migration', 'like', '%horizon_lens%')->count());
         } finally {
             $this->app->useConfigPath($oldPath); config()->set('current.connection', $oldConnection);

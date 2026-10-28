@@ -25,7 +25,7 @@ final class NativeDoctorTest extends TestCase
         config()->set('current.execution_backend', 'native');
         config()->set('queue.connections.redis.driver', 'current-redis');
         config()->set('current.native', ['state_directory' => $this->directory, 'instance' => 'doctor', 'binary' => $this->directory.'/supervisor',
-            'grace_seconds' => 10, 'worker_limit' => 2, 'pools' => ['orders' => ['connection' => 'redis', 'queues' => ['check'], 'workers' => 1, 'timeout' => 2]]]);
+            'memory_limit' => 512, 'grace_seconds' => 10, 'worker_limit' => 2, 'pools' => ['orders' => ['connection' => 'redis', 'queues' => ['check'], 'workers' => 1, 'timeout' => 2]]]);
         config()->set('current.telemetry.driver', 'sync');
         Gate::define('viewCurrent', fn () => false); // Presence is not proof that this user is authorized.
         Gate::define('operateCurrent', fn () => false);
@@ -71,6 +71,21 @@ final class NativeDoctorTest extends TestCase
         $this->assertFalse(Schema::connection('lens')->hasTable('lens_native_retry_claims'));
         $this->assertFalse(is_file($this->directory.'/missing'));
         $this->assertSame(1, Artisan::call('current:doctor', ['--json' => true]));
+    }
+
+    public function test_boot_memory_budget_is_reported_and_rejected_before_starting_a_supervisor(): void
+    {
+        config()->set('current.native.memory_limit', 1);
+        $checks = array_column(app(Readiness::class)->inspect()['checks'], null, 'id');
+        $this->assertSame('error', $checks['launcher_memory']['status']);
+        $this->assertStringContainsString('CURRENT_NATIVE_MEMORY_LIMIT', $checks['launcher_memory']['message']);
+        $this->assertSame(1, Artisan::call('current:supervise'));
+        $this->assertStringContainsString('already allocated', Artisan::output());
+        // This ELF header is deliberately not runnable; no process or state file may be created.
+        $this->assertSame(['supervisor'], array_map('basename', glob($this->directory.'/*')));
+        config()->set('current.native.memory_limit', (int) ceil(memory_get_usage(true) / 1048576) + 8);
+        $checks = array_column(app(Readiness::class)->inspect()['checks'], null, 'id');
+        $this->assertSame('warning', $checks['launcher_memory']['status']);
     }
 
     public function test_absent_storage_is_not_created_and_transport_errors_do_not_expose_credentials(): void
