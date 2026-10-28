@@ -178,7 +178,9 @@ On failure details, select **Debug with AI**. The modal shows the selected attem
 
 ## Updating the beta checkout
 
-After updating the package, run `php artisan current:install` to apply any new package migrations (use `--force` in production), review newly documented settings, rebuild deployment caches and restart long-lived processes. The installer preserves existing configuration; it does not merge new settings into a published file. Existing captured history remains subject to its original retention. The package is `gatienorti/current`; the first release is `v0.1.0-beta.1`. Use `^0.1.0@beta` for compatible beta updates.
+After updating the package, run `php artisan current:install` to apply any new package migrations (use `--force` in production), review newly documented settings, rebuild deployment caches and restart long-lived processes. The installer preserves existing configuration; it does not merge new settings into a published file. Existing captured history remains subject to its original retention. The package is `gatienorti/current`; the current release is `v0.1.0-beta.3`. Use `^0.1.0@beta` for compatible beta updates.
+
+For beta.3, apply migrations 17–20 and use matching binaries for each enabled Go component. Quiesce producers and workers, drain the async buffer with the old collector if enabled, stop supervised processes, back up history, update the package and run `current:install` (`--force` in production). Install the matching binaries, review preserved configuration, rebuild caches, then start the collector before restarting producers/workers. Do not mix old collectors with upgraded producers. See the [async upgrade procedure](ASYNC-TELEMETRY.md) and [native guide](NATIVE-ENGINE.md).
 
 ## Incoming webhook proof of concept
 

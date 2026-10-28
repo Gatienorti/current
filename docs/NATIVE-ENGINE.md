@@ -2,11 +2,11 @@
 
 Current can now boot without Horizon and run native Laravel Redis workers under its Linux Go supervisor. Horizon remains the default backend. This work is not yet a published stable Horizon replacement. Synchronous or optional async telemetry can be selected independently.
 
-The additional notification routes, full-batch retry passes, watching, orphan cleanup, balancing policy and tag-specific retention described below are development changes after beta.2. They require a version containing migrations 17–20 and the matching supervisor binary; the published beta.2 tag is unchanged.
+The additional notification routes, full-batch retry passes, watching, orphan cleanup, balancing policy and tag-specific retention described below are included in beta.3. Apply migrations 17–20 and install matching beta.3 supervisor/collector binaries; the published beta.2 tag is unchanged.
 
 ## Migration preview and setup checks
 
-These commands are development additions after beta.2. In an application with Horizon installed, preview the currently loaded environment:
+These commands are available from beta.3. In an application with Horizon installed, preview the currently loaded environment:
 
 ```sh
 php artisan current:migrate-horizon
@@ -28,7 +28,7 @@ php artisan current:doctor
 php artisan current:doctor --json
 ```
 
-Checks cover Linux/extensions, native pool validation, capture connection names, standalone phpredis PING with bounded private connections, executable ELF architecture, existing private state-directory permissions, access-gate registration, required history tables/core identity columns, failed-provider limits and async collector health when selected. Exit1 means a failed read check; exit0 means those checks passed, with warnings still requiring review. An absent state directory may be reported as a warning when its parent is writable; it is not created by the command. Missing SQLite history is not created or migrated. Configured binaries are inspected without executing them.
+Checks cover Linux/extensions, native pool validation, capture connection names, standalone phpredis or supported Predis PING with bounded private connections, executable ELF architecture, existing private state-directory permissions, access-gate registration, required history tables/core identity columns, failed-provider limits and async collector health when selected. Exit1 means a failed read check; exit0 means those checks passed, with warnings still requiring review. An absent state directory may be reported as a warning when its parent is writable; it is not created by the command. Missing SQLite history is not created or migrated. Configured binaries are inspected without executing them.
 
 These checks do not exercise SQL write permissions, Redis mutation ACLs, a particular user's web authorization, process-manager configuration or release checksum/protocol matching. Database connections use application driver settings/timeouts; file-backed SQLite connections can perform their normal connection initialization. Use the matching trusted release/checksums and `current:collector-install` for collector verification. No jobs, test records, migrations, service controls or configuration edits are issued. Async readiness requires a healthy running collector, so run that check again after starting it separately. Horizon remains the default backend until the operator explicitly switches.
 
@@ -200,7 +200,7 @@ Optional thresholds emit `Current\Events\QueueWaitExceeded` through Laravel's ev
 
 Register an application listener for that event or explicitly enable the routes below. Nothing is sent by default. The event includes the connection, ordered queue list, estimated seconds, configured threshold and observation time. A shared Redis claim suppresses repeat events during the cooldown (60–86400 seconds). Unknown/partial observations never trigger an alert; a failed or ambiguous listener is not automatically retried. This is a notification hook, not guaranteed notification delivery.
 
-Optional built-in routing is available after beta.2:
+Optional built-in routing is available from beta.3:
 
 ```php
 // Inside current.native:
@@ -300,9 +300,9 @@ Replace the user, paths and instance name for your application. Configure native
 The launcher forwards engine output without retaining its full output history. Configure log rotation in your service manager. Healthy worker recycling remains bounded by its short restart delay; repeated crashes exhaust the native restart budget and should be visible through your service-manager failure monitoring. No worker restart mechanism guarantees exactly-once external effects.
 
 
-### Current development capability additions
+### Additional beta.3 capabilities
 
-After updating, run `current:install` for migrations 18–19 and install matching supervisor/collector binaries. Existing beta.2 binaries do not implement the new supervisor options or collector capabilities. The Horizon backend remains available.
+After updating, run `current:install` for migrations 17–20 and install matching supervisor/collector binaries. Existing beta.2 binaries do not implement the new supervisor options or collector capabilities. The Horizon backend remains available.
 
 `current:status --all` lists local instances/pools; `--registry` lists shared host inventory; `--json` emits structured status without control ownership tokens. These checks and `current:control pause|resume|restart|stop` use existing records, so invalid replacement worker settings or a missing new binary do not block deployment controls. Use `--all` for local instances or `--instance=NAME`, and `--pool=NAME` for pause/resume/restart. Stop remains an instance operation. The older `current:supervise --status/--control` flags delegate to these commands.
 

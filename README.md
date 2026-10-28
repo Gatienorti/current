@@ -10,7 +10,7 @@ Find the right job, follow its attempts and recorded steps, inspect a failure, a
 
 **Early beta · MIT licensed · Self-hosted · No frontend build**
 
-> This README describes the development branch, including unreleased improvements. Check the [changelog](CHANGELOG.md) and use the documentation for your installed [release](https://github.com/Gatienorti/current/releases).
+> **v0.1.0-beta.3** · See the [release notes](https://github.com/Gatienorti/current/releases/tag/v0.1.0-beta.3) and [upgrade guidance](docs/INSTALLATION.md#updating-the-beta-checkout). Native execution and async telemetry remain optional and experimental.
 
 ![Current job investigation: recorded execution map and attempt timeline](resources/images/job-investigation.webp)
 
