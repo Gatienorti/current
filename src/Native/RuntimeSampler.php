@@ -13,6 +13,8 @@ final class RuntimeSampler
     private string $output = '';
     private array $routes = [];
 
+    public function __construct(private readonly ?array $readerSource = null) {}
+
     public function tick(array $pools): void
     {
         try {
@@ -35,7 +37,7 @@ final class RuntimeSampler
             $snapshot = app(RuntimeSnapshot::class);
             $this->routes = $snapshot->routes($pools);
             $snapshot->validateRoutes($this->routes);
-            $source = $snapshot->readerSource();
+            $source = $this->readerSource ?? $snapshot->readerSource();
             $autoload = dirname((new \ReflectionClass(\Composer\Autoload\ClassLoader::class))->getFileName(), 2).'/autoload.php';
             $input = json_encode(['source' => $source ?? $snapshot->source(), 'routes' => $this->routes, 'autoload' => $autoload], JSON_THROW_ON_ERROR);
             if (strlen($input) > 262144) { return; }

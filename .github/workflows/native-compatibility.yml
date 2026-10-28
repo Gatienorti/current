@@ -71,6 +71,7 @@ jobs:
           NATIVE_REDIS_HOST: 127.0.0.1
           NATIVE_REDIS_CLIENT: ${{ matrix.client || 'phpredis' }}
           NATIVE_PREDIS_VERSION: ${{ matrix.predis || '' }}
+          NATIVE_REQUIRE_LIGHTWEIGHT: '1'
           NATIVE_PROVISIONING: '1'
           NATIVE_BALANCING: '1'
           NATIVE_OPERATIONS: '1'
@@ -125,6 +126,7 @@ jobs:
       - name: Concurrent native batch retries with server SQL
         env:
           NATIVE_REDIS_HOST: 127.0.0.1
+          NATIVE_REQUIRE_LIGHTWEIGHT: '1'
           NATIVE_PROVISIONING: '1'
           NATIVE_OPERATIONS: '1'
           NATIVE_BATCH_SQL_HOST: 127.0.0.1

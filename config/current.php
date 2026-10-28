@@ -7,6 +7,7 @@ return [
     // Native mode is opt-in; configure current-redis and run current:supervise separately.
     'execution_backend' => env('CURRENT_EXECUTION_BACKEND', 'horizon'),
     'native' => [
+        'lightweight_launcher' => env('CURRENT_NATIVE_LIGHTWEIGHT_LAUNCHER', true), // Eligible CLI calls; custom/programmatic launchers keep Laravel.
         'state_directory' => env('CURRENT_NATIVE_STATE_DIRECTORY'),
         'instance' => env('CURRENT_NATIVE_INSTANCE'),
         'controls' => false,

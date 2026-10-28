@@ -4,6 +4,16 @@ Current can now boot without Horizon and run native Laravel Redis workers under 
 
 The additional notification routes, full-batch retry passes, watching, orphan cleanup, balancing policy and tag-specific retention described below are included in beta.3. Apply migrations 17–20 and install matching beta.3 supervisor/collector binaries; the published beta.2 tag is unchanged.
 
+## Lightweight launcher (unreleased)
+
+Eligible direct `php artisan current:supervise` starts now bootstrap the application once, validate its configuration, then replace the launcher with a smaller PHP process at the same PID. Go supervision, Laravel job workers, autoscaling algorithms, controls and telemetry modes remain the same. This reduces retained application state in the launcher; it does not reduce the memory needed by individual job workers.
+
+The handoff is enabled by default through `native.lightweight_launcher`. Set `CURRENT_NATIVE_LIGHTWEIGHT_LAUNCHER=false` in the default configuration to retain the original Laravel launcher. Rebuild your configuration cache after changing it. Programmatic invocation, explicit `--env`, PHP startup flags such as `-d`/`-c`/`-n`, unsupported/custom connection services, nontransferable configuration, and custom command/termination hooks retain the original launcher automatically. Pending Laravel deferred callbacks also prevent handoff. `--environment` and `--instance` remain supported. The existing launcher is retained if the bounded preflight or exec fails.
+
+The lightweight controller uses a validated configuration snapshot and does not boot application providers again. Applications that rely on PHP `register_shutdown_function`, runtime interpreter changes, or custom launcher bootstrap behavior should explicitly disable it; arbitrary PHP shutdown callbacks cannot be inspected reliably. Laravel job workers still boot the full application normally. Dotenv environment values are preserved for child processes.
+
+The handoff temporarily stores connection settings, including credentials, in a random owner-only `0600` file within the required private `0700` state directory. It is read and deleted before the controller starts workers; credentials are never command arguments or error output. A hard kill during the brief transfer can leave a `controller-*` file. Exclude the state directory from public artifacts/backups and remove abandoned handoff files only after stopping that instance. The preflight caps transferred configuration at 256 KiB and retains the original launcher when that limit is exceeded.
+
 ## Migration preview and setup checks
 
 These commands are available from beta.3. In an application with Horizon installed, preview the currently loaded environment:
@@ -220,7 +230,7 @@ Laravel's scheduler invokes `current:monitor` every minute only when native thre
 
 ### Runtime observations
 
-Each native launcher refreshes runtime estimates approximately every ten seconds through an isolated sampler. For standard Laravel SQL connections, the sampler loads Composer and Laravel’s database connector directly, without booting the application or its service providers. History configuration travels over a private stdin pipe. Custom connections, connectors or query grammars retain the application-bootstrap sampler. Both paths query the previous five minutes of completed/failed attempt durations and publish only queue names, aggregate durations and observation times. SQL credentials never appear in command arguments or generated configuration files.
+Each native launcher refreshes runtime estimates approximately every ten seconds through an isolated sampler. For standard Laravel SQL connections, the sampler loads Composer and Laravel’s database connector directly, without booting the application or its service providers. History configuration travels over a private stdin pipe. Custom connections, connectors or query grammars retain the application-bootstrap sampler. Both paths query the previous five minutes of completed/failed attempt durations and publish only queue names, aggregate durations and observation times. Sampler SQL credentials never appear in command arguments; they travel over stdin. The lightweight launcher’s short-lived private handoff file is described above.
 
 The Go supervisor binary bounds each sample to four seconds, limits input/output to 256 KiB, and kills/reaps the sampling PHP process group on timeout, cancellation or launcher loss. At most one sample per launcher runs at once. Rebuild/install the matching supervisor binary when upgrading; older binaries leave runtime observations unavailable rather than substituting zero.
 

@@ -133,7 +133,7 @@ function startMode(string $mode): array {
         $commands = [[dirname(__DIR__, 3).'/supervisor/current-supervisor', '-config', $root.'/supervisor.json']];
     }
     if (getenv('NATIVE_PACKAGE') === '1') { $commands = [[PHP_BINARY, $root.'/artisan', 'current:supervise']];
-        if (getenv('NATIVE_PROVISIONING') === '1') { $commands[0][] = '--env=local'; }
+        if (getenv('NATIVE_PROVISIONING') === '1') { $commands[0][] = getenv('NATIVE_REQUIRE_LIGHTWEIGHT') === '1' ? '--environment=local' : '--env=local'; }
     }
     $processes = [];
     try {
@@ -194,6 +194,10 @@ try {
         $checks['standalone_install'] = 'PASS: clean Composer vendor without Horizon; public current:install and current-redis connector';
     }
     $active = startMode('go');
+    if (getenv('NATIVE_REQUIRE_LIGHTWEIGHT') === '1') {
+        ensure(str_contains(file_get_contents('/proc/'.$active[0]->getPid().'/cmdline'), '/src/Native/controller.php'), 'packaged lightweight launcher is active');
+        $checks['lightweight_launcher'] = 'PASS: same PID exec into packaged controller';
+    }
     // Standard and delayed dispatch, retry, release and terminal failure.
     foreach (['ok', 'retry', 'release', 'fail'] as $scenario) { Queue::push(new FixtureJob($scenario, 5000, $scenario)); }
     Queue::later(1, new FixtureJob('delayed'));

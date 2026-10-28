@@ -40,9 +40,16 @@ $output = runNative([PHP_BINARY, $root.'/tests/native/fixtures/history.php'], $r
 $result = json_decode($output, true, 512, JSON_THROW_ON_ERROR);
 if (!$result['accepted']) { throw new RuntimeException('Native execution failed'); }
 $environment['EXPERIMENT_ROOT'] = $result['root'];
+if (getenv('NATIVE_REQUIRE_LIGHTWEIGHT') === '1') {
+    $output = runNative([PHP_BINARY, $root.'/tests/native/fixtures/lightweight.php'], $root, $environment);
+    try { $lightweight = json_decode($output, true, 512, JSON_THROW_ON_ERROR); }
+    catch (JsonException $error) { throw new RuntimeException('Invalid lightweight fixture response: '.substr($output, 0, 4096), 0, $error); }
+    if (! $lightweight['accepted']) { throw new RuntimeException('Native lightweight compatibility failed'); }
+}
 $http = json_decode(runNative([PHP_BINARY, $root.'/tests/native/fixtures/standalone-http.php'], $root, $environment), true, 512, JSON_THROW_ON_ERROR);
 if (!$http['accepted']) { throw new RuntimeException('Native HTTP failed'); }
 $results[$driver] = ['execution' => $result, 'http' => $http];
+if (isset($lightweight)) { $results[$driver]['lightweight'] = $lightweight; }
 if (getenv('NATIVE_BALANCING') === '1') {
     $results[$driver]['balancing'] = json_decode(runNative([PHP_BINARY, $root.'/tests/native/fixtures/balancing.php'], $root, $environment), true, 512, JSON_THROW_ON_ERROR);
     if (! $results[$driver]['balancing']['accepted']) { throw new RuntimeException('Native balancing failed'); }
