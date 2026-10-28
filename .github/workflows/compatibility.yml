@@ -137,12 +137,12 @@ jobs:
           done
       - name: Prepare disposable test storage
         run: mkdir -p prototype/bootstrap/cache prototype/storage/data prototype/storage/logs prototype/storage/framework/{views,cache,sessions}
-      - name: Verify maintenance locking with a READ COMMITTED session default
+      - name: Verify maintenance locking and deferred summary parity
         working-directory: collector
         env:
           CURRENT_TEST_SQL_HOST: 127.0.0.1
           CURRENT_TEST_SQL_PASSWORD: current-test-only
-        run: go test -race -count=1 -run TestSQLMaintenanceAbsenceLock ./...
+        run: go test -race -count=1 -run 'TestSQLMaintenanceAbsenceLock|TestDeferredSummariesOnServerSQL' ./...
       - run: vendor/bin/phpunit -c phpunit.xml --filter 'AsyncTelemetryTest|SynchronousSqlTest'
   dynamodb:
     runs-on: ubuntu-latest

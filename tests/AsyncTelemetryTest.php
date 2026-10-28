@@ -806,6 +806,39 @@ final class AsyncTelemetryTest extends TestCase
         $this->assertSame('completed', $this->store()->table('jobs')->sole()->status);
     }
 
+    public function test_summary_failure_keeps_the_whole_batch_pending_until_replay(): void
+    {
+        dispatch(new PaymentJob('success'));
+        $this->work();
+        $db = $this->store()->connection();
+        $trigger = $this->serverDatabase
+            ? "CREATE TRIGGER current_test_fail BEFORE UPDATE ON lens_jobs FOR EACH ROW BEGIN IF NEW.attempt_count <> OLD.attempt_count THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='test deferred summary rollback'; END IF; END"
+            : "CREATE TRIGGER current_test_fail BEFORE UPDATE OF attempt_count ON lens_jobs WHEN NEW.attempt_count <> OLD.attempt_count BEGIN SELECT RAISE(ABORT, 'test deferred summary rollback'); END";
+        $db->unprepared($trigger);
+        $transport = app(Transport::class)->client();
+        $pending = $transport->xLen('events:v2');
+        try {
+            $p = $this->collector();
+            $p->wait();
+            $this->assertFalse($p->isSuccessful());
+            foreach (['jobs', 'attempts', 'steps', 'async_receipts', 'async_versions', 'async_aliases'] as $table) {
+                $this->assertSame(0, $this->store()->table($table)->count(), $table);
+            }
+            $this->assertGreaterThan(0, $pending);
+            $this->assertSame($pending, $transport->xLen('events:v2'));
+            $this->assertSame(0, (int) $transport->hGet('health', 'processed'));
+        } finally {
+            $db->unprepared('DROP TRIGGER current_test_fail');
+        }
+        $this->drain();
+        $job = $this->store()->table('jobs')->sole();
+        $this->assertSame('completed', $job->status);
+        $this->assertSame(1, (int) $job->attempt_count);
+        $this->assertSame(1, $this->store()->table('attempts')->count());
+        $this->assertSame(0, $transport->xLen('events:v2'));
+        $this->assertSame((int) $transport->hGet('health', 'accepted'), (int) $transport->hGet('health', 'processed'));
+    }
+
     public function test_server_database_connection_loss_exits_and_restart_recovers(): void
     {
         if (! $this->serverDatabase) {
