@@ -99,13 +99,24 @@ final class NativeDoctorTest extends TestCase
         file_put_contents($this->directory.'/script', '#!/bin/sh'."\n".'touch '.$this->directory.'/executed');
         chmod($this->directory.'/script', 0700);
         config()->set('current.execution_backend', 'horizon');
-        config()->set('database.redis.client', 'predis');
+        config()->set('database.redis.client', 'unsupported-client');
         config()->set('current.native.binary', $this->directory.'/script');
         $report = app(Readiness::class)->inspect();
         $this->assertFalse($report['ready']);
         $checks = array_column($report['checks'], 'status', 'id');
         foreach (['backend', 'redis_client', 'supervisor_binary'] as $key) { $this->assertSame('error', $checks[$key]); }
         $this->assertFileDoesNotExist($this->directory.'/executed');
+    }
+
+    public function test_installed_predis_is_ready_with_the_real_standalone_connection(): void
+    {
+        if (! class_exists(\Predis\Client::class)) { $this->markTestSkipped('Optional Predis package is not installed.'); }
+        config()->set('database.redis.client', 'predis');
+        $report = app(Readiness::class)->inspect();
+        $checks = array_column($report['checks'], 'status', 'id');
+        $this->assertSame('pass', $checks['redis_client']);
+        $this->assertSame('pass', $checks['redis_1']);
+        $this->assertTrue($report['ready'], json_encode($report));
     }
 
     public function test_a_file_or_non_traversable_private_directory_is_not_reported_ready(): void

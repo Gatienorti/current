@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Native worker identity capture can retry temporarily unavailable `/proc` evidence within a bounded100ms budget while checking the original spawn pidfd. Wrong tokens, exited processes and missing proof remain ineligible for purge.
+
 - Optional Predis 2.3/3.x native queue and async telemetry support, with complete-acknowledgement handling, bounded observation connections, and verified custom Redis CA/mutual TLS for matching collectors.
 - Native monitored-tag controls retain full matching job details with bounded retention; wrapper-aware class/tag silencing recognizes Current and installed Horizon markers.
 - Queue history includes point-in-time wait/load/capacity samples without invented backfill.

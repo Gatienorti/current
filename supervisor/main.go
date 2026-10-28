@@ -70,14 +70,7 @@ func managedWorkerIdentity(ctx context.Context, command []string, grace time.Dur
 		}
 		identity = nil
 		if pidfd >= 0 {
-			// The descriptor supplied at spawn must still describe a live child
-			// after /proc is read. Bind the proof to the token we generated, never
-			// adopt the identity of a process that has already reused its PID.
-			proof, err := processIdentity(cmd.Process.Pid)
-			exited, pollErr := processFDExited(pidfd)
-			if err == nil && pollErr == nil && !exited && proof.Token == token {
-				identity = proof
-			}
+			identity = spawnedProcessIdentity(ctx, cmd.Process.Pid, pidfd, token, processIdentity)
 			syscall.Close(pidfd)
 		}
 		starts++
@@ -127,6 +120,47 @@ func managedWorkerIdentity(ctx context.Context, command []string, grace time.Dur
 			if delay > 5*time.Second {
 				delay = 5 * time.Second
 			}
+		}
+	}
+}
+
+// A transient /proc read must not permanently discard an otherwise provable
+// spawn. Retry unavailable proof for at most 100 ms; the normal path never waits.
+// Keep the spawn pidfd live before and after each read, and never adopt a token
+// belonging to another process. Missing proof still leaves purge unavailable.
+func spawnedProcessIdentity(ctx context.Context, pid, pidfd int, token string, read func(int) (*ProcessIdentity, error)) *ProcessIdentity {
+	deadline := time.Now().Add(100 * time.Millisecond)
+	for {
+		if ctx.Err() != nil || time.Now().After(deadline) {
+			return nil
+		}
+		exited, err := processFDExited(pidfd)
+		if err != nil || exited {
+			return nil
+		}
+		proof, readErr := read(pid)
+		exited, err = processFDExited(pidfd)
+		if ctx.Err() != nil || err != nil || exited {
+			return nil
+		}
+		if readErr == nil && proof != nil {
+			if proof.Token == token {
+				return proof
+			}
+			return nil
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return nil
+		}
+		timer := time.NewTimer(min(5*time.Millisecond, remaining))
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return nil
+		case <-timer.C:
 		}
 	}
 }

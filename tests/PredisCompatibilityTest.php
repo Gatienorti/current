@@ -477,6 +477,9 @@ final class PredisCompatibilityTest extends TestCase
     public function test_explicit_url_tls_scheme_cannot_fall_back_to_plaintext(string $client): void
     {
         $this->selectClient($client);
+        $plain = ObservationRedis::connect('default');
+        $this->assertNotFalse($plain->ping(), 'The plaintext fixture endpoint must be reachable for the no-fallback regression.');
+        $plain->disconnect();
         $source = config('database.redis.default');
         config()->set('database.redis.default', ['url' => 'redis://'.$source['host'].':'.($source['port'] ?? 6379).'/0?scheme=tls']);
         try {

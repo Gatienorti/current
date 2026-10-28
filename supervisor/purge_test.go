@@ -101,13 +101,20 @@ func TestPurgeRejectsStaleSiblingAndMissingProcessIdentities(t *testing.T) {
 		t.Fatal(err)
 	}
 	lock.Close()
-	token, _ := processToken()
+	token, err := processToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(t.TempDir(), "sibling")
 	sibling := exec.Command(os.Args[0], "-test.run=^TestFixture$")
-	sibling.Env = append(os.Environ(), processTokenKey+"="+token, "SUPERVISOR_TEST_PIDS="+filepath.Join(t.TempDir(), "sibling"))
+	sibling.Env = append(os.Environ(), processTokenKey+"="+token, "SUPERVISOR_TEST_PIDS="+marker)
 	if err := sibling.Start(); err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = sibling.Process.Kill(); _ = sibling.Wait() }()
+	if ids := waitPIDs(t, marker, 1); ids[0] != sibling.Process.Pid {
+		t.Fatal("sibling readiness marker belongs to another process")
+	}
 	actual, err := processIdentity(sibling.Process.Pid)
 	if err != nil {
 		t.Fatal(err)
