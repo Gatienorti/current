@@ -2,8 +2,10 @@
 
 // Isolated consumer fixture: confirm optimization and compatibility fallbacks.
 if (getenv('NATIVE_PACKAGE') !== '1' || getenv('NATIVE_REQUIRE_LIGHTWEIGHT') !== '1') { exit(1); }
-foreach (['CURRENT_SUPERVISOR_NATIVE', 'CURRENT_SUPERVISOR_HISTORY'] as $flag) { putenv($flag.'=1'); }
+foreach (['CURRENT_SUPERVISOR_NATIVE', 'CURRENT_SUPERVISOR_HISTORY'] as $flag) { putenv($flag.'=1'); $_ENV[$flag] = $_SERVER[$flag] = '1'; }
+putenv('APP_ENV=local'); $_ENV['APP_ENV'] = $_SERVER['APP_ENV'] = 'local';
 $app = require __DIR__.'/boot.php';
+set_exception_handler(function (Throwable $e) { fwrite(STDERR, $e->getMessage()."\n".$e->getTraceAsString()."\n"); exit(1); });
 $root = getenv('EXPERIMENT_ROOT');
 $file = $root.'/config/current.php'; $original = file_get_contents($file);
 $configuration = require $file;

@@ -41,7 +41,7 @@ final class NativeLightweightLauncherTest extends TestCase
 
     private function controller(): Process
     {
-        return new Process([PHP_BINARY, dirname(__DIR__).'/src/Native/controller.php'], base_path());
+        return new Process([PHP_BINARY, dirname((new \ReflectionClass(LightweightLauncher::class))->getFileName()).'/controller.php'], base_path());
     }
 
     public function test_transfer_preserves_resolved_reader_and_raw_history_identity(): void
@@ -156,7 +156,7 @@ final class NativeLightweightLauncherTest extends TestCase
         $marker = $this->directory.'/exec-audit'; $autoload = $this->directory.'/exec-autoload.php';
         file_put_contents($autoload, '<?php file_put_contents('.var_export($marker, true).', json_encode([getmypid(), getenv("CURRENT_HANDOFF_TEST"), file_get_contents("/proc/self/cmdline")])); return require '.var_export($request['autoload'], true).';');
         $script = $this->directory.'/replace.php';
-        file_put_contents($script, '<?php $loader = require '.var_export($request['autoload'], true).'; $loader->addPsr4('.var_export('Current\\', true).', '.var_export(dirname(__DIR__).'/src/', true).'); $_ENV["CURRENT_HANDOFF_TEST"]="private-env-value"; (new \Current\Native\LightweightLauncher)->replace(json_decode(stream_get_contents(STDIN), true)); exit(99);');
+        file_put_contents($script, '<?php $loader = require '.var_export($request['autoload'], true).'; $loader->addPsr4('.var_export('Current\\', true).', '.var_export(dirname((new \ReflectionClass(LightweightLauncher::class))->getFileName(), 2).'/', true).'); $_ENV["CURRENT_HANDOFF_TEST"]="private-env-value"; (new \Current\Native\LightweightLauncher)->replace(json_decode(stream_get_contents(STDIN), true)); exit(99);');
         $request['autoload'] = $autoload;
         $process = new Process([PHP_BINARY, $script]);
         $process->setInput(LightweightLauncher::encode($request))->setTimeout(5)->start();
@@ -176,12 +176,12 @@ final class NativeLightweightLauncherTest extends TestCase
         $request = $this->request(); $this->assertIsArray($request);
         $request['pools'][0]['workers'] = 1; // Fail closed before starting Go after secure consumption.
         file_put_contents($path, LightweightLauncher::encode($request)); chmod($path, 0644);
-        $process = new Process([PHP_BINARY, dirname(__DIR__).'/src/Native/controller.php', $path]);
+        $process = new Process([PHP_BINARY, dirname((new \ReflectionClass(LightweightLauncher::class))->getFileName()).'/controller.php', $path]);
         $process->run();
         $this->assertSame(1, $process->getExitCode()); $this->assertFileExists($path);
         $this->assertSame('', $process->getOutput().$process->getErrorOutput());
         $link = $this->directory.'/controller-link'; symlink($path, $link);
-        $linked = new Process([PHP_BINARY, dirname(__DIR__).'/src/Native/controller.php', $link]); $linked->run();
+        $linked = new Process([PHP_BINARY, dirname((new \ReflectionClass(LightweightLauncher::class))->getFileName()).'/controller.php', $link]); $linked->run();
         $this->assertSame(1, $linked->getExitCode()); $this->assertFileExists($path); unlink($link);
         chmod($path, 0600); $process->run();
         $this->assertSame(1, $process->getExitCode()); $this->assertFileDoesNotExist($path);
