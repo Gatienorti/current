@@ -60,6 +60,42 @@ final class SynchronousSqlTest extends TestCase
         parent::tearDown();
     }
 
+    public function test_lightweight_launcher_transfers_sql_reader_and_publishes_runtime(): void
+    {
+        $binary = dirname(__DIR__).'/supervisor/current-supervisor';
+        if (! is_executable($binary)) { $this->markTestSkipped('Requires the built Linux supervisor.'); }
+        dispatch(new PaymentJob('success')); $this->work();
+        $end = microtime(true) - 1;
+        $this->store()->table('attempts')->update(['started_at' => $end - 2, 'finished_at' => $end]);
+        $directory = sys_get_temp_dir().'/current-sql-controller-'.bin2hex(random_bytes(6)); mkdir($directory, 0700);
+        $file = tempnam($directory, 'config-');
+        // Use a new native queue connection; the existing worker connection belongs to Horizon.
+        config()->set('queue.connections.native_test', array_replace(config('queue.connections.redis'), ['driver' => 'current-redis']));
+        config()->set('current.execution_backend', 'native');
+        config()->set('current.native', ['binary' => $binary, 'state_directory' => $directory, 'instance' => 'test', 'grace_seconds' => 10,
+            'pools' => ['test' => ['connection' => 'native_test', 'queues' => ['lens-demo'], 'workers' => 1, 'timeout' => 2]]]);
+        $sampler = null;
+        try {
+            $request = (new \Current\Native\LightweightLauncher)->configuration(['state_directory' => $directory, 'memory_limit_mb' => 256, 'grace_seconds' => 10], $file);
+            $this->assertIsArray($request);
+            $this->assertSame($this->store()->connection()->getConfig(), $request['reader']);
+            $probe = new Process([$binary, '-runtime-sample', PHP_BINARY, dirname(__DIR__).'/src/Native/controller.php']);
+            $probe->setInput(\Current\Native\LightweightLauncher::encode($request))->setTimeout(6)->run();
+            $this->assertSame(0, $probe->getExitCode(), $probe->getErrorOutput());
+            $this->assertSame("ready\n", $probe->getOutput());
+            $sampler = new \Current\Native\RuntimeSampler($request['reader']);
+            $snapshot = app(\Current\Native\RuntimeSnapshot::class);
+            $redis = \Current\Native\ObservationRedis::connect('default');
+            $key = $snapshot->key('redis', 'lens-demo');
+            $deadline = microtime(true) + 7;
+            do { $sampler->tick([['connection' => 'redis', 'queues' => ['lens-demo']]]); if ($redis->get($key)) { break; } usleep(20000); } while (microtime(true) < $deadline);
+            $this->assertIsString($redis->get($key));
+            $this->assertEqualsWithDelta(6, (new \Current\Native\RuntimeEstimate)->workSeconds('redis', ['lens-demo' => 3]), .01);
+        } finally {
+            $sampler?->stop(); unlink($file); rmdir($directory);
+        }
+    }
+
     public function test_native_metric_snapshot_queries_replacement_and_pruning_on_sql_server(): void
     {
         dispatch(new PaymentJob('success')); $this->work();

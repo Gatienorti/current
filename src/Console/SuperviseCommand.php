@@ -45,6 +45,10 @@ final class SuperviseCommand extends Command
             $file = tempnam($directory, 'config-');
             chmod($file, 0600);
             file_put_contents($file, json_encode($config, JSON_THROW_ON_ERROR));
+            $lightweight = new \Current\Native\LightweightLauncher;
+            if ($request = $lightweight->prepare($this->input, $config, $file)) {
+                $lightweight->replace($request);
+            }
             $command = [$binary, '-config', $file, '-parent-pid', (string) getmypid()];
             if ($this->option('status')) { $command[] = '-status'; }
             if ($action = $this->option('control')) {
