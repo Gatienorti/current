@@ -92,10 +92,10 @@ final class NativeMigrationTest extends TestCase
         config()->set('horizon.environments', ['testing' => []]);
         foreach ([
             ['timeout' => 10], // Above the actual queue retry_after.
-            ['maxProcesses' => 257], ['minProcesses' => 3, 'maxProcesses' => 4],
+            ['maxProcesses' => 4097], ['minProcesses' => 3, 'maxProcesses' => 4],
             ['minProcesses' => 'one'], ['balance' => 'unrecognized'],
             ['queue' => ['duplicate', 'duplicate']], ['backoff' => ['not-a-number']],
-            ['workersName' => 'custom-worker'], ['directory' => '/private/other-app'],
+            ['workersName' => '../invalid-worker'], ['directory' => '/private/other-app'],
             ['max_processes' => 7], // Ambiguous alias duplicates maxProcesses.
         ] as $override) {
             config()->set('horizon.defaults', ['orders' => array_replace($base['orders'], $override)]);

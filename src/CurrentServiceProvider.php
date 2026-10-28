@@ -32,6 +32,7 @@ final class CurrentServiceProvider extends ServiceProvider
             ]);
         }
         $this->app->singleton(Store::class);
+        $this->app->singleton(Native\MonitoredTags::class);
         $this->app->singleton(Recorder::class);
         $this->app->singleton(SourceOutline::class);
     }
@@ -66,13 +67,16 @@ final class CurrentServiceProvider extends ServiceProvider
             $view->with('lensCssVersion', filemtime(__DIR__.'/../resources/css/lens.css'));
         });
         $this->publishes([__DIR__.'/../config/current.php' => config_path('current.php')], 'current-config');
-        Route::prefix(config('current.path'))->name('current.')->middleware(array_merge(config('current.middleware'), [Http\BackendCapabilities::class, Http\RefreshResponse::class]))->group(function () {
+        Route::domain(config('current.domain'))->prefix(config('current.path'))->name('current.')->middleware(array_merge(config('current.middleware'), [Http\BackendCapabilities::class, Http\RefreshResponse::class]))->group(function () {
             Route::post('/native/control', Http\NativeControlController::class)->name('native.control');
             Route::get('/', [Http\JobsController::class, 'index'])->name('index');
             foreach (['dashboard', 'recent', 'pending', 'processing', 'completed', 'failed', 'silenced'] as $section) {
                 $path = in_array($section, ['dashboard', 'silenced'], true) ? '/'.$section : '/jobs/'.$section;
                 Route::get($path, [Http\JobsController::class, 'index'])->defaults('section', $section)->name($section);
             }
+            Route::post('/monitoring/tags', [Http\MonitoredTagsController::class, 'store'])->name('monitoring.tags.store');
+            Route::post('/monitoring/tags/remove', [Http\MonitoredTagsController::class, 'destroy'])->name('monitoring.tags.destroy');
+            Route::get('/monitoring/tags/history', [Http\MonitoredTagsController::class, 'history'])->name('monitoring.tags.history');
             Route::get('/monitoring', [Http\JobsController::class, 'index'])->defaults('section', 'monitoring')->name('monitoring');
             Route::get('/queues', Http\QueuesController::class)->name('queues');
             Route::get('/schedule', Http\ScheduleController::class)->name('schedule');
@@ -141,7 +145,7 @@ final class CurrentServiceProvider extends ServiceProvider
                 }
             });
         }
-        $this->commands([Console\DoctorCommand::class, Console\MigrateHorizonCommand::class, Console\ListenCommand::class, Console\PurgeCommand::class, Console\ClearCommand::class, Console\ForgetCommand::class, Console\ClearMetricsCommand::class, Console\TerminateCommand::class, Console\RuntimeSnapshotCommand::class, Console\MonitorCommand::class, Console\SnapshotCommand::class, Console\SuperviseCommand::class, Console\PruneCommand::class, Console\CollectCommand::class, Console\CollectorConfigCommand::class, Console\InstallCollectorCommand::class, Console\TelemetryStatusCommand::class, Console\InstallCommand::class]);
+        $this->commands([Console\StatusCommand::class, Console\ControlCommand::class, Console\DoctorCommand::class, Console\MigrateHorizonCommand::class, Console\ListenCommand::class, Console\PurgeCommand::class, Console\ClearCommand::class, Console\ForgetCommand::class, Console\ClearMetricsCommand::class, Console\TerminateCommand::class, Console\RuntimeSnapshotCommand::class, Console\MonitorCommand::class, Console\SnapshotCommand::class, Console\SuperviseCommand::class, Console\PruneCommand::class, Console\CollectCommand::class, Console\CollectorConfigCommand::class, Console\InstallCollectorCommand::class, Console\TelemetryStatusCommand::class, Console\InstallCommand::class]);
         $this->app->afterResolving(Schedule::class, function (Schedule $schedule) {
             $schedule->command('current:prune')->hourly();
             $schedule->command('current:monitor')->everyMinute()->withoutOverlapping(2)

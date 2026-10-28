@@ -1,8 +1,58 @@
 {
-    "laravel-11-floor": {"framework": "11.44.0", "horizon": "5.30.0", "php": "8.2", "dependencies": {"symfony/console": "~7.3.0"}},
-    "laravel-11": {"framework": "^11.44", "horizon": "^5.30", "php": "8.2", "historical": true},
-    "laravel-12-floor": {"framework": "12.0.0", "horizon": "5.31.0", "php": "8.2", "dependencies": {"symfony/console": "~7.3.0"}},
-    "adapt": {"framework": "12.62.0", "horizon": "5.47.2", "php": "8.3"},
-    "vehify": {"framework": "12.69.3", "horizon": "5.47.2", "php": "8.4"},
-    "laravel-13": {"framework": "^13.0", "horizon": "^5.0", "php": "8.3"}
+    "laravel-11-floor": {
+        "framework": "11.44.0",
+        "horizon": "5.30.0",
+        "php": "8.2",
+        "dependencies": {
+            "symfony/console": "~7.3.0"
+        }
+    },
+    "laravel-11": {
+        "framework": "^11.44",
+        "horizon": "^5.30",
+        "php": "8.2",
+        "historical": true
+    },
+    "laravel-12-floor": {
+        "framework": "12.0.0",
+        "horizon": "5.31.0",
+        "php": "8.2",
+        "dependencies": {
+            "symfony/console": "~7.3.0"
+        }
+    },
+    "adapt": {
+        "framework": "12.62.0",
+        "horizon": "5.47.2",
+        "php": "8.3"
+    },
+    "vehify": {
+        "framework": "12.69.3",
+        "horizon": "5.47.2",
+        "php": "8.4"
+    },
+    "laravel-13": {
+        "framework": "^13.0",
+        "horizon": "^5.0",
+        "php": "8.3"
+    },
+    "predis-2-floor": {
+        "framework": "11.44.0",
+        "horizon": "5.30.0",
+        "php": "8.2",
+        "dependencies": {
+            "symfony/console": "~7.3.0",
+            "predis/predis": "2.3.0"
+        },
+        "predis": true
+    },
+    "predis-3": {
+        "framework": "^13.0",
+        "horizon": "^5.0",
+        "php": "8.3",
+        "dependencies": {
+            "predis/predis": "3.3.0"
+        },
+        "predis": true
+    }
 }

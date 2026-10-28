@@ -42,4 +42,29 @@ $width = 600 / count($series);
 @endif
 <div class="panel-footnote">Captured attempts only. Missing snapshots are gaps; zero means no captured finishes. The latest three closed windows are corrected for late telemetry.</div>
 </section>
+@if($metricKind === 'queues')
+<section class="panel" data-live-region="native-queue-waits">
+<div class="panel-heading"><h2>Estimated queue wait</h2></div>
+@if(!$waitAvailable)
+<div class="empty-state"><h3>Queue wait history unavailable</h3><p>Check Current migrations and history storage.</p></div>
+@elseif(!$waits)
+<div class="empty-state"><h3>No queue wait snapshots yet</h3></div>
+@else
+@php $maxWait = max(1, max(array_column($waits, 'wait'))); $start = $waitStart; $span = ($range === '24h' ? 24 : 1) * 3600 + 300; @endphp
+<div class="activity-trend">
+<svg viewBox="0 0 600 100" role="img" aria-label="Queue wait estimates at observation time; missing points are unknown">
+@foreach($waits as $point)
+@if($point['wait'] !== null)
+<g><title>{{ gmdate('M j H:i', $point['observed_at']) }} UTC: {{ number_format($point['wait'], 1) }} seconds · {{ $point['ready'] }} ready · {{ $point['workers'] }} consuming workers</title><rect class="activity-bar" x="{{ ($point['at']-$start)/$span*600+1 }}" y="{{ 85-$point['wait']/$maxWait*75 }}" width="{{ max(1, 300/$span*600-2) }}" height="{{ max(1, $point['wait']/$maxWait*75) }}" rx="1"/></g>
+@endif
+@endforeach
+</svg>
+<details><summary>Queue wait data</summary><div class="table-scroll"><table><thead><tr><th>Observed · UTC</th><th>Ready</th><th>Consuming workers</th><th>Estimated wait</th></tr></thead><tbody>
+@foreach($waits as $point)<tr><td>{{ gmdate('M j H:i:s', $point['observed_at']) }}</td><td>{{ $point['ready'] ?? 'Unknown' }}</td><td>{{ $point['workers'] ?? 'Unknown' }}</td><td>{{ $point['wait'] !== null ? number_format($point['wait'], 1).' s' : 'Unknown' }}</td></tr>@endforeach
+</tbody></table></div></details>
+</div>
+@endif
+<div class="panel-footnote">Point-in-time estimates use ready jobs, recent captured runtime and consuming workers. Priority queues can share the same capacity. Missing evidence remains unknown.</div>
+</section>
+@endif
 @endsection

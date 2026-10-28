@@ -39,6 +39,7 @@
         "test:compatibility": "php tests/compatibility/run.php"
     },
     "suggest": {
+        "predis/predis": "Optional alternative Redis client for native execution and async telemetry (^2.3 || ^3.0).",
         "laravel/horizon": "Required for the default Horizon execution backend (^5.30).",
         "illuminate/notifications": "Optional native queue wait notifications; match your Laravel major version.",
         "laravel/slack-notification-channel": "Optional native queue wait alerts through Slack (^3.0).",

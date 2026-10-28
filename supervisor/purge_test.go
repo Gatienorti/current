@@ -239,3 +239,22 @@ func TestPurgeUnavailablePidfdDoesNotPreventWorkerStartup(t *testing.T) {
 		t.Fatalf("pidfd compatibility fixture: %v\n%s", err, output)
 	}
 }
+
+func TestPurgeReadsHealthAboveLegacyOneMiBBound(t *testing.T) {
+	c := fixtureConfig(t)
+	lock, err := lockOwner(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock.Close()
+	h := Health{Version: 1, Instance: c.Instance, Owner: strings.Repeat("a", 32), State: "stopped", Pools: []PoolHealth{{Slots: []SlotHealth{{State: "stopped", PID: 0}}}}}
+	data, _ := json.Marshal(h)
+	data = append([]byte(strings.Repeat(" ", 1048580)), data...)
+	if err := os.WriteFile(healthPath(c), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := purgeInstance(c.StateDirectory, c.Instance, syscall.SIGKILL, 0)
+	if err != nil || result.Signaled != 0 || result.Unconfirmed != 0 {
+		t.Fatalf("large valid health refused: %+v %v", result, err)
+	}
+}

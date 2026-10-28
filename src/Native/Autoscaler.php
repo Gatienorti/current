@@ -2,6 +2,7 @@
 
 namespace Current\Native;
 
+use RuntimeException;
 use Throwable;
 
 /** Conservative per-pool size/time strategies. Unknown Redis data never scales workers down. */
@@ -9,6 +10,10 @@ final class Autoscaler
 {
     private array $next = [];
     private float $nextTick = 0;
+    private array $dueConnections = [];
+    private array $dueFailed = [];
+    private array $dueObserved = [];
+    private float $dueDeadline = 0;
 
     public static function target(float $work, int $current, array $pool): int
     {
@@ -21,6 +26,8 @@ final class Autoscaler
         $now = microtime(true);
         if ($now < $this->nextTick) { return; }
         $this->nextTick = $now + 1;
+        $this->dueConnections = $this->dueFailed = $this->dueObserved = [];
+        $this->dueDeadline = $now + 1;
         try {
             $pools = app(Plan::class)->workerPools();
             if (! array_filter($pools, fn ($p) => ! in_array($p['balance'], ['fixed', 'simple'], true))) { return; }
@@ -48,10 +55,22 @@ final class Autoscaler
                 if (in_array($pool['balance'], ['fixed', 'simple', 'auto'], true) || ! $state || in_array($state['state'], ['paused', 'pausing', 'unknown'], true) || ($this->next[$name] ?? 0) > $now) { continue; }
                 $this->next[$name] = $now + $pool['balance_cooldown'];
                 try {
-                    $counts = $load->counts($pool['connection'], $pool['queues'], reserved: true);
+                    $cold = $state['workers'] === 0;
+                    $counts = $load->counts($pool['connection'], $pool['queues'], reserved: ! $cold);
                     $work = array_sum($counts);
-                    if ($pool['balance'] === 'time') { $work = $runtime->workSeconds($pool['connection'], $counts); }
-                    $target = self::target($work, $state['workers'], $pool);
+                    if ($pool['min_workers'] === 0 && $state['workers'] <= 1 && $work === 0) {
+                        $target = $this->dueCount($pool['connection'], $pool['queues']) > 0 ? 1 : self::target(0, $state['workers'], $pool);
+                    } else {
+                        try {
+                            if ($pool['balance'] === 'time') { $work = $runtime->workSeconds($pool['connection'], $counts); }
+                            $target = self::target($work, $state['workers'], $pool);
+                            // A valid zero duration still needs a consumer for known work.
+                            if (array_sum($counts) > 0) { $target = max(1, $target); }
+                        } catch (Throwable $e) {
+                            if (! $cold) { throw $e; }
+                            $target = 1;
+                        }
+                    }
                     if ($target !== $state['workers']) { $changes[] = ['name' => $name, 'current' => $state['workers'], 'target' => $target]; }
                 } catch (Throwable) {
                     // Keep the current allocation on an outage or uncertain control outcome.
@@ -86,21 +105,45 @@ final class Autoscaler
         if (($this->next['group:'.$group] ?? 0) > $now) { return []; }
         $this->next['group:'.$group] = $now + $members[0]['balance_cooldown'];
         try {
-            $budget = $members[0]['group_limit']; $active = []; $weights = [];
+            $budget = $members[0]['group_limit']; $active = []; $weights = []; $counts = []; $probes = []; $dueConsumers = []; $unknown = false;
             foreach ($members as $pool) {
                 $state = $live->get($pool['name']);
                 if (! $state || $state['state'] === 'unknown') { return []; }
                 if (in_array($state['state'], ['paused', 'pausing'], true)) { $budget -= $state['workers']; continue; }
                 $count = $load->counts($pool['connection'], $pool['queues'])[$pool['queues'][0]];
-                $weights[$pool['name']] = match ($pool['auto_scale_strategy']) {
-                    'size' => $count,
-                    'log' => log1p($count),
-                    'time' => $runtime->workSeconds($pool['connection'], [$pool['queues'][0] => $count]),
-                };
+                $counts[$pool['name']] = $count;
+                if ($pool['min_workers'] === 0 && $state['workers'] <= 1 && $count === 0 && $this->dueCount($pool['connection'], $pool['queues']) > 0) { $dueConsumers[$pool['name']] = true; }
+                if ($state['workers'] === 0 && ($count > 0 || isset($dueConsumers[$pool['name']]))) { $probes[$pool['name']] = true; }
+                try {
+                    $weights[$pool['name']] = match ($pool['auto_scale_strategy']) {
+                        'size' => $count,
+                        'log' => log1p($count),
+                        'time' => $runtime->workSeconds($pool['connection'], [$pool['queues'][0] => $count]),
+                    };
+                } catch (Throwable) { $unknown = true; }
                 $active[] = $pool;
             }
             $allocator = ($members[0]['balance_policy'] ?? 'horizon') === 'horizon' ? HorizonAllocation::class : Allocation::class;
-            $targets = $allocator::targets($active, $weights, $budget);
+            if ($unknown) {
+                if (! $probes) { return []; }
+                // Keep busy allocations whose duration is unknown. Confirmed idle
+                // members may release capacity so one cold consumer can observe work.
+                $targets = [];
+                foreach ($active as $pool) {
+                    $name = $pool['name']; $current = $live->get($name)['workers'];
+                    $targets[$name] = isset($probes[$name]) ? max(1, $pool['min_workers'])
+                        : ($counts[$name] === 0 ? $pool['min_workers'] : $current);
+                    if (isset($dueConsumers[$name])) { $targets[$name] = max(1, $targets[$name]); }
+                }
+            } else {
+                // The explicit bounded policy uses ready demand for the degenerate
+                // measured-zero case, without recording a synthetic duration.
+                if ($allocator === Allocation::class && (float) array_sum($weights) === 0.0 && array_sum($counts) > 0) { $weights = $counts; }
+                $targets = $allocator === HorizonAllocation::class
+                    ? $allocator::targets($active, $weights, $budget, $counts)
+                    : $allocator::targets($active, $weights, $budget);
+                foreach ($probes + $dueConsumers as $name => $_) { $targets[$name] = max(1, $targets[$name]); }
+            }
             $changes = [];
             foreach ($active as $pool) {
                 $current = $live->get($pool['name'])['workers'];
@@ -109,8 +152,39 @@ final class Autoscaler
             }
             return $changes;
         } catch (Throwable) {
-            // Missing queue data or runtime evidence holds the entire group's allocation.
+            // Missing queue counts or due-work evidence holds the group's allocation.
             return [];
+        }
+    }
+
+    /** Separate from LLEN: wake or retain one consumer until Laravel migrates due work. */
+    private function dueCount(string $connection, array $queues): int
+    {
+        $name = config('queue.connections.'.$connection.'.connection', 'default');
+        if (! is_string($name) || isset($this->dueFailed[$name])) { throw new RuntimeException('Queue connection unavailable.'); }
+        try {
+            if (microtime(true) > $this->dueDeadline) { throw new RuntimeException('Due-work observation time budget exceeded.'); }
+            $redis = $this->dueConnections[$name] ??= ObservationRedis::connect($name);
+            $driver = app('queue')->connection($connection); $total = 0;
+            foreach ($queues as $queue) {
+                $cache = json_encode([$connection, $queue], JSON_THROW_ON_ERROR);
+                if (! array_key_exists($cache, $this->dueObserved)) {
+                    if (microtime(true) > $this->dueDeadline) { throw new RuntimeException('Due-work observation time budget exceeded.'); }
+                    $key = $driver->getQueue($queue); $due = 0; $cutoff = time();
+                    foreach ([':delayed', ':reserved'] as $suffix) {
+                        if (microtime(true) > $this->dueDeadline) { throw new RuntimeException('Due-work observation time budget exceeded.'); }
+                        $count = $redis->zcount($key.$suffix, '-inf', $cutoff);
+                        if (! is_int($count) || $count < 0) { throw new RuntimeException('Due queue load unavailable.'); }
+                        $due += $count;
+                    }
+                    $this->dueObserved[$cache] = $due;
+                }
+                $total += $this->dueObserved[$cache];
+            }
+            return $total;
+        } catch (Throwable $e) {
+            unset($this->dueConnections[$name]); $this->dueFailed[$name] = true;
+            throw $e;
         }
     }
 

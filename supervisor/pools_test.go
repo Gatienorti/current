@@ -161,7 +161,7 @@ func TestConfigRejectsUnsafeOrAmbiguousInputs(t *testing.T) {
 	c := fixtureConfig(t)
 	b, _ := json.Marshal(c)
 	path := filepath.Join(t.TempDir(), "config.json")
-	for _, data := range []string{string(b[:len(b)-1]) + `,"unknown":1}`, string(b) + ` {}`, string(b) + strings.Repeat(" ", 65536)} {
+	for _, data := range []string{string(b[:len(b)-1]) + `,"unknown":1}`, string(b) + ` {}`, string(b) + strings.Repeat(" ", maxConfigBytes)} {
 		os.WriteFile(path, []byte(data), 0600)
 		if _, err := readConfig(path); err == nil {
 			t.Fatal("invalid JSON configuration accepted")

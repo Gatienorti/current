@@ -29,15 +29,15 @@ final class Readiness
         $redisNames = [];
         $captured = $pools && ! array_filter($pools, fn ($pool) => ! in_array($pool['connection'], (array) config('current.queue_connections', []), true));
         $add('capture_connections', $captured ? 'pass' : 'error', 'Every validated native queue connection must be included in current.queue_connections.');
-        $phpredis = extension_loaded('redis') && config('database.redis.client', 'phpredis') === 'phpredis';
-        $add('redis_client', $phpredis ? 'pass' : 'error', 'Native confirmation currently requires standalone phpredis.');
+        $phpredis = ObservationRedis::supportedClient();
+        $add('redis_client', $phpredis ? 'pass' : 'error', 'Native confirmation requires standalone phpredis or installed Predis 2.3/3.x.');
         foreach ($pools as $pool) { $redisNames[] = config('queue.connections.'.$pool['connection'].'.connection', 'default'); }
         if (config('current.native.registry.enabled', true)) { $redisNames[] = config('current.native.registry.redis_connection', 'default'); }
         if ($phpredis) {
-            foreach (array_slice(array_unique($redisNames, SORT_REGULAR), 0, 33) as $index => $name) {
+            foreach (array_slice(array_unique($redisNames, SORT_REGULAR), 0, 257) as $index => $name) {
                 $connection = null;
                 try {
-                    if ($index >= 32 || ! is_string($name) || ! preg_match('/^[a-zA-Z0-9_-]{1,64}$/D', $name)) { throw new \RuntimeException; }
+                    if ($index >= 256 || ! is_string($name) || ! preg_match('/^[a-zA-Z0-9_-]{1,64}$/D', $name)) { throw new \RuntimeException; }
                     $connection = ObservationRedis::connect($name);
                     if (! $connection->ping()) { throw new \RuntimeException; }
                     $add('redis_'.($index + 1), 'pass', 'Redis connection '.$name.' responds to a bounded PING.');
@@ -70,13 +70,20 @@ final class Readiness
             if (! is_array($cfg)) { throw new \RuntimeException; }
             if (($cfg['driver'] ?? null) === 'sqlite' && (! is_string($cfg['database'] ?? null) || ! is_file($cfg['database']))) { throw new \RuntimeException; }
             $db = app(Store::class)->connection(); $schema = $db->getSchemaBuilder();
-            foreach (['lens_jobs', 'lens_attempts', 'lens_steps', 'lens_tags', 'lens_meta', 'lens_native_retry_claims', 'lens_native_metrics', 'lens_job_actions',
+            foreach (['lens_jobs', 'lens_attempts', 'lens_steps', 'lens_tags', 'lens_meta', 'lens_native_retry_claims', 'lens_native_metrics', 'lens_native_queue_samples', 'lens_maintenance_operations', 'lens_job_actions',
                 'lens_async_receipts', 'lens_async_versions', 'lens_async_aliases', 'lens_webhook_receipts', 'lens_webhook_jobs', 'lens_webhook_deliveries',
                 'lens_broadcasts', 'lens_broadcast_auth_failures'] as $table) { if (! $schema->hasTable($table)) { throw new \RuntimeException; } }
             foreach (['dispatch_id', 'cleared_at', 'arguments_state'] as $column) { if (! $schema->hasColumn('lens_jobs', $column)) { throw new \RuntimeException; } }
             $add('history_schema', 'pass', 'Current history tables and core identity columns are present (schema reads; SQL write permissions are not exercised).');
         } catch (Throwable) { $add('history_schema', 'error', 'History storage is unavailable or migrations are incomplete. Run current:install separately and confirm the dedicated connection and permissions.'); }
-        $add('failed_provider', config('queue.failed.driver') === 'database-uuids' ? 'pass' : 'warning', 'Verified atomic native retry cleanup requires Laravel database-uuids failed storage; custom providers have unconfirmed cleanup limits.');
+        try {
+            $failedProvider = app('queue.failer');
+            $atomic = $failedProvider instanceof \Current\Contracts\FailedJobMaintenance || in_array(get_class($failedProvider), [
+                \Illuminate\Queue\Failed\DatabaseUuidFailedJobProvider::class, \Illuminate\Queue\Failed\DatabaseFailedJobProvider::class,
+                \Illuminate\Queue\Failed\FileFailedJobProvider::class, \Illuminate\Queue\Failed\DynamoDbFailedJobProvider::class,
+            ], true);
+            $add('failed_provider', $atomic ? 'pass' : 'warning', 'Atomic failed-payload adapters cover built-in database UUID/numeric, locked File and DynamoDB providers, or the custom FailedJobMaintenance contract. Connectivity/permissions are not exercised here.');
+        } catch (Throwable) { $add('failed_provider', 'warning', 'Failed-job provider could not be resolved. Review its dependencies and atomic-maintenance support.'); }
         $driver = config('current.telemetry.driver', 'sync');
         if ($driver === 'redis') {
             $add('collector_binary', $this->binary(config('current.telemetry.binary')) ? 'pass' : 'error', 'Collector executable must match Linux architecture. Use current:collector-install with the trusted checksum for release/protocol verification.');

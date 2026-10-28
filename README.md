@@ -85,7 +85,7 @@ Released under the [MIT license](LICENSE).
 
 ### Optional async job telemetry
 
-Current keeps synchronous recording by default. An opt-in Redis transport and Go collector can batch job/attempt/step writes. The opt-in path supports Linux, phpredis, standalone Redis 7 and either local SQLite or MySQL 8.4/MariaDB 11.4 InnoDB connections. See [setup, collector health, recovery and switching modes](docs/ASYNC-TELEMETRY.md). Webhooks and broadcasts stay synchronous. Static Linux binaries and checksums are built by CI; the setup guide covers verified installation and TLS. Available from beta.2.
+Current keeps synchronous recording by default. An opt-in Redis transport and Go collector can batch job/attempt/step writes. The opt-in path supports Linux, phpredis or optional Predis 2.3/3.x, standalone Redis 7 and either local SQLite or MySQL 8.4/MariaDB 11.4 InnoDB connections. See [setup, collector health, recovery and switching modes](docs/ASYNC-TELEMETRY.md). Webhooks and broadcasts stay synchronous. Static Linux binaries and checksums are built by CI; the setup guide covers verified installation and TLS. Available from beta.2.
 
 ## Experimental native execution
 

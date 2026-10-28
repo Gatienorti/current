@@ -3,6 +3,7 @@
 use Current\Http\Authorize;
 
 return [
+    'domain' => env('CURRENT_DOMAIN'),
     // Native mode is opt-in; configure current-redis and run current:supervise separately.
     'execution_backend' => env('CURRENT_EXECUTION_BACKEND', 'horizon'),
     'native' => [
@@ -11,9 +12,12 @@ return [
         'controls' => false,
         'binary' => env('CURRENT_SUPERVISOR_BINARY', storage_path('current/current-supervisor')),
         'grace_seconds' => 90,
+        'memory_limit' => 64, // MiB per launcher/supervisor, excluding PHP worker children; drain on excess.
+        'worker_output' => 'quiet', // quiet, cli, or json (when Laravel supports it).
         'worker_limit' => 256, // Total live workers across this instance, including draining workers.
         'pools' => [], // Named pools: connection, queues, workers, min_workers, max_workers, timeout, memory, tries.
         'defaults' => [], // Named pool defaults, merged with pools or the selected environment.
+        'environment' => env('CURRENT_NATIVE_ENVIRONMENT'), // Optional provisioning selection; application environment stays unchanged.
         'environments' => [], // Optional environment patterns => named pool overrides; put '*' last.
         'registry' => ['enabled' => true, 'redis_connection' => 'default', 'namespace' => 'current'],
         'waits' => [], // Opt-in connection:queue => estimated clearance threshold in seconds.
@@ -22,6 +26,7 @@ return [
         'watch' => ['app', 'bootstrap', 'config', 'database', 'routes', 'composer.json', 'composer.lock', '.env'],
         'tag_retention_days' => [], // Exact approved tag => days, capped by max_retention_days; new job histories only.
         'metrics' => ['enabled' => true, 'retention_hours' => 24],
+        'monitoring' => ['redis_connection' => 'default', 'namespace' => 'current', 'retention_days' => 7, 'max_tags' => 128],
         'silenced' => [], // Explicit job class names.
         'silenced_tags' => [], // Explicit tag values.
     ],

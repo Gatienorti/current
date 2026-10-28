@@ -46,7 +46,12 @@ final class Registry
         $record = ['id' => $id, 'host' => $host, 'instance' => $health['instance'], 'state' => $health['state'],
             'updated_at' => $health['updated_at'], 'pools' => $health['pools']];
         $json = json_encode($record, JSON_THROW_ON_ERROR);
-        if (strlen($json) > 32768) { return; }
+        if (strlen($json) > Plan::MAX_REGISTRY_BYTES) {
+            // Preserve an explicit invalid observation in the index. Omitting a
+            // host entirely would make the rest of the fleet look complete.
+            $record['pools'] = []; $record['state'] = 'partial'; $record['unavailable'] = 'size_limit';
+            $json = json_encode($record, JSON_THROW_ON_ERROR);
+        }
         // Use Redis time, not clocks from different hosts. Retain stale observations
         // briefly and cap the index even when hosts repeatedly change identity.
         $redis->eval(<<<'LUA'
@@ -82,7 +87,7 @@ LUA, 1, $prefix.':index');
             $records = $ids ? $redis->mget(array_map(fn ($id) => $prefix.':record:'.$id, array_keys($ids))) : [];
             foreach (array_keys($ids) as $i => $id) {
                 $json = $records[$i] ?? null;
-                if (! is_string($json) || strlen($json) > 32768) { $invalid++; continue; }
+                if (! is_string($json) || strlen($json) > 2097152) { $invalid++; continue; }
                 $record = json_decode($json, true, 16);
                 if (! $this->valid($record, $id)) { $invalid++; continue; }
                 $age = (float) $rows[0] - $ids[$id];
@@ -90,7 +95,7 @@ LUA, 1, $prefix.':index');
                     $record['state'] = 'stale';
                 }
                 if ($record['state'] === 'stale') {
-                    foreach ($record['pools'] as &$pool) { $pool['running'] = null; $pool['state'] = 'unknown'; }
+                    foreach ($record['pools'] as &$pool) { $pool['running'] = null; $pool['consuming'] = null; $pool['state'] = 'unknown'; }
                     unset($pool);
                 }
                 $instances[] = $record;
@@ -113,10 +118,10 @@ LUA, 1, $prefix.':index');
             throw new \RuntimeException('Invalid native registry configuration.');
         }
         $source = config('database.redis.'.$name);
-        if (config('database.redis.client', 'phpredis') !== 'phpredis' || (! is_array($source) && ! is_string($source))) {
-            throw new \RuntimeException('Registry requires a standalone phpredis connection.');
+        if (! ObservationRedis::supportedClient() || (! is_array($source) && ! is_string($source))) {
+            throw new \RuntimeException('Registry requires a supported standalone Redis connection.');
         }
-        $settings = [$source, config('database.redis.options', [])];
+        $settings = [config('database.redis.client', 'phpredis'), $source, config('database.redis.options', [])];
         if ($this->redis === null || $settings !== $this->settings) {
             $this->redis = ObservationRedis::connect($name);
             $this->settings = $settings;
@@ -131,23 +136,25 @@ LUA, 1, $prefix.':index');
             || ! is_string($record['instance'] ?? null) || ! preg_match('/^[a-z][a-z0-9_-]{0,63}$/D', $record['instance'])
             || ! in_array($record['state'] ?? null, ['starting', 'running', 'degraded', 'partial', 'pausing', 'paused', 'stopping', 'stopped', 'failed', 'stale'], true)
             || ! is_string($record['updated_at'] ?? null) || strlen($record['updated_at']) > 64
-            || ! is_array($record['pools'] ?? null) || ! array_is_list($record['pools']) || ! $record['pools'] || count($record['pools']) > 32) { return false; }
+            || ! is_array($record['pools'] ?? null) || ! array_is_list($record['pools']) || ! $record['pools'] || count($record['pools']) > Plan::MAX_POOLS) { return false; }
         $total = 0; $names = [];
         foreach ($record['pools'] as $pool) {
             if (! is_array($pool) || ! is_string($pool['name'] ?? null) || ! preg_match('/^[a-z][a-z0-9_-]{0,63}$/D', $pool['name']) || isset($names[$pool['name']])
                 || ! is_int($pool['workers'] ?? null) || ! is_int($pool['min'] ?? null) || ! is_int($pool['max'] ?? null)
-                || $pool['min'] < 1 || $pool['max'] > 256 || $pool['workers'] < $pool['min'] || $pool['workers'] > $pool['max']
+                || $pool['min'] < 0 || $pool['max'] < 1 || $pool['max'] > Plan::MAX_WORKERS || $pool['workers'] < $pool['min'] || $pool['workers'] > $pool['max']
                 || ! array_key_exists('running', $pool) || ($pool['running'] !== null && (! is_int($pool['running']) || $pool['running'] < 0 || $pool['running'] > $pool['max']))
                 || ! in_array($pool['state'] ?? null, ['starting', 'running', 'degraded', 'pausing', 'paused', 'stopping', 'stopped', 'failed', 'unknown'], true)) { return false; }
             if (isset($pool['group']) && (! is_string($pool['group']) || ($pool['group'] !== '' && ! preg_match('/^[a-z][a-z0-9_-]{0,63}$/D', $pool['group'])))) { return false; }
+            if (array_key_exists('consuming', $pool) && $pool['consuming'] !== null
+                && (! is_int($pool['consuming']) || $pool['consuming'] < 0 || $pool['running'] === null || $pool['consuming'] > $pool['running'])) { return false; }
             if (isset($pool['queue']) && (! is_string($pool['queue']) || strlen($pool['queue']) > 128)) { return false; }
             if (isset($pool['connection']) && (! is_string($pool['connection']) || ($pool['connection'] !== '' && ! preg_match('/^[a-zA-Z0-9_-]{1,64}$/D', $pool['connection'])))) { return false; }
             if (isset($pool['queues'])) {
-                if (! is_array($pool['queues']) || ! array_is_list($pool['queues']) || count($pool['queues']) > 32) { return false; }
+                if (! is_array($pool['queues']) || ! array_is_list($pool['queues']) || count($pool['queues']) > Plan::MAX_QUEUES) { return false; }
                 foreach ($pool['queues'] as $queue) { if (! is_string($queue) || ! preg_match('/^[a-zA-Z0-9_.:{}-]{1,128}$/D', $queue)) { return false; } }
             }
             $total += $pool['workers']; $names[$pool['name']] = true;
         }
-        return $total <= 256;
+        return $total <= Plan::MAX_WORKERS;
     }
 }

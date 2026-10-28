@@ -195,12 +195,12 @@ func purgeInstance(directory, instance string, signal syscall.Signal, wait time.
 		return result, errors.New("private health record unavailable")
 	}
 	defer file.Close()
-	data, err := io.ReadAll(io.LimitReader(file, 1048577))
-	if err != nil || len(data) > 1048576 {
+	data, err := io.ReadAll(io.LimitReader(file, 8*1024*1024+1))
+	if err != nil || len(data) > 8*1024*1024 {
 		return result, errors.New("invalid health record")
 	}
 	var health Health
-	if json.Unmarshal(data, &health) != nil || health.Version != 1 || health.Instance != instance || len(health.Owner) != 32 || len(health.Pools) < 1 || len(health.Pools) > 32 {
+	if json.Unmarshal(data, &health) != nil || health.Version != 1 || health.Instance != instance || len(health.Owner) != 32 || len(health.Pools) < 1 || len(health.Pools) > maxPools {
 		return result, errors.New("invalid health record")
 	}
 	if _, err := hex.DecodeString(health.Owner); err != nil {
@@ -219,7 +219,7 @@ func purgeInstance(directory, instance string, signal syscall.Signal, wait time.
 	seen := map[int]bool{}
 	slots := 0
 	for pi := range health.Pools {
-		if len(health.Pools[pi].Slots) < 1 || len(health.Pools[pi].Slots) > 256 {
+		if len(health.Pools[pi].Slots) > maxWorkers {
 			return result, errors.New("invalid worker records")
 		}
 		for si := range health.Pools[pi].Slots {
@@ -232,7 +232,7 @@ func purgeInstance(directory, instance string, signal syscall.Signal, wait time.
 				continue
 			}
 			seen[slot.PID] = true
-			if len(seen) > 256 {
+			if len(seen) > maxWorkers {
 				return result, errors.New("invalid live worker count")
 			}
 			// Hold the descriptor BEFORE /proc validation: exit/reuse cannot redirect the signal.

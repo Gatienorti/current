@@ -37,12 +37,12 @@ final class HorizonMigration
         }
         if ($report['matched_environment'] === null) { return $this->issue($report, 'error', 'environment', 'No Horizon environment pattern matches.'); }
         $selected = $environments[$report['matched_environment']];
-        if (! is_array($selected) || count($selected) > 32 || count($defaults) > 32) {
-            return $this->issue($report, 'error', 'pools', 'Select at most 32 supervisors per native instance.');
+        if (! is_array($selected) || count($selected) > Plan::MAX_POOLS || count($defaults) > Plan::MAX_POOLS) {
+            return $this->issue($report, 'error', 'pools', 'Select at most 256 supervisors per native instance.');
         }
         // Horizon uses recursive replacement here, including numeric queue/backoff list keys.
         $raw = array_replace_recursive($defaults, $selected);
-        $allowed = ['connection', 'queue', 'balance', 'autoScalingStrategy', 'maxProcesses', 'minProcesses', 'balanceMaxShift', 'balanceCooldown', 'backoff', 'maxJobs', 'maxTime', 'memory', 'timeout', 'sleep', 'maxTries', 'force', 'nice', 'rest'];
+        $allowed = ['connection', 'queue', 'balance', 'autoScalingStrategy', 'maxProcesses', 'minProcesses', 'balanceMaxShift', 'balanceCooldown', 'backoff', 'maxJobs', 'maxTime', 'memory', 'timeout', 'sleep', 'maxTries', 'force', 'nice', 'rest', 'workersName', 'json'];
         foreach ($raw as $name => $options) {
             if (! is_string($name) || ! preg_match('/^[a-z][a-z0-9_-]{0,63}$/D', $name) || ! is_array($options) || count($options) > 40) {
                 return $this->issue($report, 'error', 'pools', 'Supervisor names/options cannot be represented by a native pool.');
@@ -63,7 +63,7 @@ final class HorizonMigration
         }
         if ($this->errors($report)) { return $report; }
         $native = ['state_directory' => storage_path('current/supervisor'), 'instance' => 'app-worker-a', 'binary' => storage_path('current/current-supervisor'),
-            'grace_seconds' => 90, 'worker_limit' => 1, 'defaults' => [], 'environments' => [], 'pools' => []];
+            'grace_seconds' => 90, 'memory_limit' => config('horizon.memory_limit', 64), 'worker_limit' => 1, 'defaults' => [], 'environments' => [], 'pools' => []];
         try {
             $options = (new ProvisioningPlan('current-preview', [$report['matched_environment'] => $selected], $defaults))->parsed[$report['matched_environment']];
             $budget = 0;
@@ -101,6 +101,7 @@ final class HorizonMigration
                     'timeout' => $option->timeout, 'memory' => $option->memory, 'tries' => $option->maxTries,
                     'sleep' => $option->sleep, 'backoff' => $backoff, 'max_jobs' => $option->maxJobs, 'max_time' => $option->maxTime,
                     'force' => $option->force, 'nice' => $option->nice, 'rest' => $option->rest,
+                    'worker_name' => $option->workersName, 'output' => property_exists($option, 'json') && $option->json ? 'json' : 'cli',
                     'balance_cooldown' => $option->balanceCooldown, 'balance_shift' => $option->balanceMaxShift];
                 if ($pool['timeout'] < 0 || $pool['timeout'] > Plan::MAX_TIMEOUT_SECONDS) {
                     $report = $this->issue($report, 'error', 'timeout', 'Supervisor '.$name.' has a timeout outside the native 0–86400 second range. It has not been shortened. Zero disables the Laravel worker alarm and requires operator review.');
@@ -123,7 +124,7 @@ final class HorizonMigration
             }
             $native['worker_limit'] = $budget;
             if (! $native['pools']) { throw new \InvalidArgumentException; }
-            if ($budget > 256) { $report = $this->issue($report, 'error', 'worker_budget', 'The selected supervisors exceed the 256-worker native instance budget. Split them into reviewed separate instances; no maximum is silently reduced.'); }
+            if ($budget > Plan::MAX_WORKERS) { $report = $this->issue($report, 'error', 'worker_budget', 'The selected supervisors exceed the 4096-worker native instance budget. Split them into reviewed separate instances; no maximum is silently reduced.'); }
             if ($this->errors($report)) { $report['queue_changes'] = []; return $report; }
             // Validate with the same native contract as startup. Restore every touched config value.
             $keys = ['current.native', 'current.execution_backend'];

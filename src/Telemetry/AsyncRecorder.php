@@ -40,10 +40,12 @@ final class AsyncRecorder
         $cycle = $this->transport->cycle($p['uuid'], $connection, $dispatchId, $p);
         $now = $cycle['first_observed_at'];
         $id = $cycle['id'];
+        $monitoredExpiry = \Current\ExecutionBackend::native() ? app(\Current\Native\MonitoredTags::class)->expiresAt($p) : null;
 
         return array_merge($dispatchId ? ['dispatch_id' => $dispatchId] : [], ['id' => $id, 'external_id' => mb_substr($p['uuid'], 0, 100), 'connection' => mb_substr($connection, 0, 100), 'queue' => mb_substr($queue, 0, 100),
             'job_class' => mb_substr((string) data_get($p, 'data.commandName', 'Unknown command'), 0, 240), 'status' => 'pending', 'coverage' => $coverage,
-            'first_observed_at' => $now, 'observed_at' => $now, 'expires_at' => $cycle['expires_at'],
+            'first_observed_at' => $now, 'observed_at' => $now, 'expires_at' => max($cycle['expires_at'], $monitoredExpiry ?? 0),
+            '_monitored_expires_at' => $monitoredExpiry,
             'silenced' => is_bool($p['silenced'] ?? null) ? (int) $p['silenced'] : null, 'retry_of' => isset($p['retry_of']) ? mb_substr((string) $p['retry_of'], 0, 100) : null,
             'display_name' => is_string($p['displayName'] ?? null) ? mb_substr($p['displayName'], 0, 240) : null, 'max_tries' => is_int($p['maxTries'] ?? null) && $p['maxTries'] >= 0 ? $p['maxTries'] : null,
             'timeout' => is_int($p['timeout'] ?? null) && $p['timeout'] >= 0 ? $p['timeout'] : null, 'backoff' => is_string($p['backoff'] ?? null) || is_int($p['backoff'] ?? null) ? mb_substr((string) $p['backoff'], 0, 240) : null,
@@ -98,7 +100,8 @@ final class AsyncRecorder
             }
             $job = $this->base($event->job->payload(), $event->connectionName, $event->job->getQueue(), 'start_only');
             $a = array_merge(['id' => (string) Str::ulid(), 'job_id' => $job['id'], 'worker_id' => $this->worker, 'reported_attempt' => $event->job->attempts(), 'status' => 'processing', 'started_at' => microtime(true)], app(SourceOutline::class)->capture(data_get($event->job->payload(), 'data.commandName', '')));
-            $this->current = ['job' => $job, 'attempt' => $a, 'revision' => 1];
+            $this->current = ['job' => $job, 'attempt' => $a, 'revision' => 1,
+                '_monitoring_tags' => $this->sanitizer->tags($event->job->payload()['tags'] ?? [])];
             $this->executions[$event->job] = $this->current;
             $this->emit($this->current);
         });
@@ -141,6 +144,13 @@ final class AsyncRecorder
             return;
         }$ctx = $this->executions[$job];
         $this->guard(function () use ($ctx, $status) {
+            if (\Current\ExecutionBackend::native()) {
+                $expires = app(\Current\Native\MonitoredTags::class)->expiresAt(['tags' => $ctx['_monitoring_tags'] ?? []]);
+                if ($expires !== null) {
+                    $ctx['job']['_monitored_expires_at'] = max($ctx['job']['_monitored_expires_at'] ?? 0, $expires);
+                    $ctx['job']['expires_at'] = max($ctx['job']['expires_at'], $expires);
+                }
+            }
             $ctx['attempt']['status'] = $status;
             $ctx['attempt']['finished_at'] = microtime(true);
             $ctx['revision']++;
@@ -185,6 +195,9 @@ final class AsyncRecorder
 
     private function emit(array $event): void
     {
+        $expires = $event['job']['_monitored_expires_at'] ?? null;
+        unset($event['job']['_monitored_expires_at'], $event['enqueue']['_monitored_expires_at'], $event['_monitoring_tags']);
+        if ($expires !== null && app(Health::class)->supportsMonitoredRetention()) { $event['monitored_expires_at'] = $expires; }
         $this->transport->emit($event);
     }
 

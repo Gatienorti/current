@@ -18,7 +18,7 @@ file_put_contents($root.'/artisan', "<?php\nrequire ".var_export(__DIR__.'/artis
 file_put_contents($root.'/bootstrap/providers.php', '<?php return [];');
 $config = [
     'app' => ['name' => 'Supervisor Experiment', 'env' => 'local', 'debug' => false, 'key' => 'base64:'.base64_encode(random_bytes(32)), 'timezone' => 'UTC', 'url' => 'http://localhost'],
-    'database' => ['default' => 'sqlite', 'connections' => ['sqlite' => ['driver' => 'sqlite', 'database' => $root.'/history.sqlite', 'busy_timeout' => 5000, 'journal_mode' => 'WAL', 'foreign_key_constraints' => true]], 'redis' => ['client' => 'phpredis', 'options' => ['prefix' => $prefix], 'default' => ['host' => getenv('NATIVE_REDIS_HOST') ?: 'lens-redis', 'port' => 6379, 'database' => 0]]],
+    'database' => ['default' => 'sqlite', 'connections' => ['sqlite' => ['driver' => 'sqlite', 'database' => $root.'/history.sqlite', 'busy_timeout' => 5000, 'journal_mode' => 'WAL', 'foreign_key_constraints' => true]], 'redis' => ['client' => getenv('NATIVE_REDIS_CLIENT') ?: 'phpredis', 'options' => ['prefix' => $prefix], 'default' => ['host' => getenv('NATIVE_REDIS_HOST') ?: 'lens-redis', 'port' => 6379, 'database' => 0]]],
     'queue' => ['default' => 'redis', 'connections' => ['redis' => ['driver' => 'current-experiment', 'connection' => 'default', 'queue' => 'experiment', 'retry_after' => 6, 'block_for' => 1, 'after_commit' => false]], 'failed' => ['driver' => 'database-uuids', 'database' => 'sqlite', 'table' => 'failed_jobs']],
     'cache' => ['default' => 'redis', 'stores' => ['redis' => ['driver' => 'redis', 'connection' => 'default']], 'prefix' => 'cache:'],
     'logging' => ['default' => 'single', 'channels' => ['single' => ['driver' => 'single', 'path' => $root.'/storage/logs/experiment.log']]],

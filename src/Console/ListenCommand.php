@@ -10,7 +10,7 @@ use Throwable;
 
 final class ListenCommand extends Command
 {
-    protected $signature = 'current:listen {--instance= : Override the configured unique instance name} {--interval=1000 : Polling interval in milliseconds (100-60000)}';
+    protected $signature = 'current:listen {--instance= : Override the configured unique instance name} {--environment= : Select native provisioning environment} {--interval=1000 : Polling interval in milliseconds (100-60000)}';
     protected $description = 'Run the native supervisor and restart its workers when application source changes.';
 
     public function handle(DeveloperListener $listener): int
@@ -27,7 +27,8 @@ final class ListenCommand extends Command
                 if (! is_string($instance) || ! preg_match('/^[a-z][a-z0-9_-]{0,63}$/D', $instance)) { throw new \RuntimeException('Invalid native instance name.'); }
                 $command[] = '--instance='.$instance;
             }
-            if ($environment = $this->option('env')) { $command[] = '--env='.$environment; }
+            if (($selected = $this->option('environment')) !== null) { $command[] = '--environment='.$selected; }
+            if (($environment = $this->option('env')) !== null) { $command[] = '--env='.$environment; }
             $grace = config('current.native.grace_seconds', 90);
             if (! is_int($grace) || $grace < 1 || $grace > \Current\Native\Plan::MAX_GRACE_SECONDS) { throw new \RuntimeException('Configure a valid native grace period before watching.'); }
             $this->trap([SIGINT, SIGTERM, SIGQUIT], fn () => $listener->stop());

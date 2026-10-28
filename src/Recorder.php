@@ -226,14 +226,19 @@ final class Recorder
             return;
         }
         $context = $this->executions[$job];
-        $this->guard(function () use ($context, $status, $job) {
-            $this->store->cycleTransaction($job->uuid(), $job->getConnectionName(), function () use ($context, $status) {
+        $monitoredExpiry = ExecutionBackend::native() ? app(Native\MonitoredTags::class)->expiresAt($job->payload()) : null;
+        $this->guard(function () use ($context, $status, $job, $monitoredExpiry) {
+            $this->store->cycleTransaction($job->uuid(), $job->getConnectionName(), function () use ($context, $status, $monitoredExpiry) {
                 $this->store->table('attempts')->where('id', $context['attempt_id'])->whereNull('finished_at')->update([
                     'status' => $status, 'finished_at' => microtime(true),
                 ]);
                 $this->store->table('jobs')->where('id', $context['job_id'])->update([
                     'status' => $this->store->latestOutcome($context['job_id']), 'observed_at' => microtime(true),
                 ]);
+                if ($monitoredExpiry !== null) {
+                    $this->store->table('jobs')->where('id', $context['job_id'])->where('expires_at', '<', $monitoredExpiry)
+                        ->update(['expires_at' => $monitoredExpiry]);
+                }
             });
         });
         unset($this->executions[$job]);

@@ -117,7 +117,7 @@ func TestInstanceWorkerLimitRejectsOversubscribedScale(t *testing.T) {
 
 func TestInstanceWorkerLimitValidation(t *testing.T) {
 	c := fixtureConfig(t)
-	for _, limit := range []int{-1, 2, 257} {
+	for _, limit := range []int{-1, 2, maxWorkers + 1} {
 		c.WorkerLimit = limit
 		if c.validate() == nil {
 			t.Fatalf("accepted invalid instance limit %d", limit)

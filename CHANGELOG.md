@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Optional Predis 2.3/3.x native queue and async telemetry support, with complete-acknowledgement handling, bounded observation connections, and verified custom Redis CA/mutual TLS for matching collectors.
+- Native monitored-tag controls retain full matching job details with bounded retention; wrapper-aware class/tag silencing recognizes Current and installed Horizon markers.
+- Queue history includes point-in-time wait/load/capacity samples without invented backfill.
+- Native status, shared inventory and local controls no longer depend on validating replacement worker configuration; paused startup, zero-worker floors, custom worker names/output, provisioning environment selection, dashboard domains and orchestration memory limits are supported.
+- Zero-floor time balancing can wake one bounded consumer for confirmed ready or due work without inventing runtime data; measured-zero recommendations follow Horizon’s busy-queue fallback.
+- Larger reviewed native budgets support4096 live workers and 256 expanded pools while retaining explicit default limits.
+- Queue clearing works through resumable snapshot chunks with an explicit reservation-removal option; bulk failed-job maintenance supports bounded continuation and additional failed-storage adapters.
+
 - Synchronous recorder heartbeats use an atomic upsert, avoiding a first-heartbeat insertion race that could pause subsequent observation without affecting job execution.
 - Native worker timeouts now preserve 0 (disabled Laravel alarm) and deadlines through 24 hours, with finite shutdown grace through 86,430 seconds. Watch/deployment commands honor the longer grace. Install the matching rebuilt supervisor.
 - Horizon migration previews account for Horizon's effective one-process-pool-per-queue maximum and report that adjustment explicitly; native instance/group caps remain enforced. Unsafe queue reservation deadlines still block migration.
@@ -15,7 +23,7 @@
 - `current:listen` watches application source and drains workers before restart. `current:purge` uses recorded process identity and Linux pidfds to clean up proven orphan workers while preserving active instances.
 - Native automatic balancing defaults to Horizon-style proportional recommendations; the previous bounded rounding remains available. Approved exact tags can extend new history retention within the configured global cap.
 
-Run `current:install` for migration 17 and install the matching supervisor binary before using these changes. Published beta.2 is unchanged. Native execution remains experimental; finite tests do not establish production reliability across every topology.
+Run `current:install` for migrations 17–19 and install the matching supervisor binary before using these changes. Published beta.2 is unchanged. Native execution remains experimental; finite tests do not establish production reliability across every topology.
 
 ## v0.1.0-beta.2 — 2026-10-27
 

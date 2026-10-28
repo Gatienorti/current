@@ -31,7 +31,9 @@ final class Workload
                     $groups[$key]['running'] += $pool['running'];
                     if (in_array($pool['state'], ['running', 'degraded'], true)
                         && ! in_array($instance['state'], ['starting', 'pausing', 'paused', 'stopping', 'stopped', 'failed'], true)) {
-                        $groups[$key]['consuming'] += $pool['running'];
+                        $consuming = array_key_exists('consuming', $pool) ? $pool['consuming'] : ($pool['state'] === 'running' ? $pool['running'] : null);
+                        if ($consuming === null) { $groups[$key]['uncertain'] = true; }
+                        else { $groups[$key]['consuming'] += $consuming; }
                     }
                 }
             }

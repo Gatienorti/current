@@ -23,6 +23,7 @@ final class Metrics
             $cutoff = max($now, $this->resetAt());
             $store->table('meta')->updateOrInsert(['key' => 'native_metrics_reset_at'], ['value' => (string) $cutoff]);
             $store->table('native_metrics')->delete();
+            $store->table('native_queue_samples')->delete();
         });
     }
 
@@ -38,14 +39,27 @@ final class Metrics
         if (! is_int($hours) || $hours < 1 || $hours > 168) { throw new InvalidArgumentException('Native metric retention_hours must be between 1 and 168.'); }
         $end = intdiv($now, 300) * 300;
         $store = app(Store::class);
+        // Redis observation happens outside the SQL lock/transaction. A failed
+        // sample cannot prevent closed attempt aggregates from being stored.
+        $samples = [];
+        try { $samples = app(QueueSamples::class)->observe(); } catch (\Throwable) {}
         // Recompute three closed windows to include recently arriving async records.
         // One history-owned lock makes retries/multiple schedulers replace, not add.
-        return $store->cycleTransaction('native-metrics', 'snapshot', function () use ($store, $now, $end, $hours) {
+        return $store->cycleTransaction('native-metrics', 'snapshot', function () use ($store, $now, $end, $hours, $samples) {
             $count = 0; $reset = $this->resetAt();
+            if ($now >= $reset) {
+                foreach ($samples as $sample) {
+                    $previous = $store->table('native_queue_samples')->where('metric_key', $sample['metric_key'])->where('bucket', $end)->value('observed_at');
+                    if ($previous === null || (float) $previous <= $now) {
+                        $store->table('native_queue_samples')->upsert([$sample + ['bucket' => $end, 'observed_at' => $now, 'expires_at' => $now + $hours * 3600]], ['metric_key', 'bucket']);
+                    }
+                }
+            }
             for ($bucket = $end - 900; $bucket < $end; $bucket += 300) {
                 if ($bucket + 300 <= $reset) { continue; }
                 $rows = [];
                 foreach (['jobs', 'queues'] as $kind) {
+                    $groupLimit = $kind === 'queues' ? RuntimeSnapshot::MAX_PAIRS : 1000;
                     $fields = $kind === 'jobs' ? ['j.job_class'] : ['j.connection', 'j.queue'];
                     $groups = $store->table('attempts as a')->join('lens_jobs as j', 'j.id', '=', 'a.job_id')
                         ->where('j.expires_at', '>', $now)->where('a.finished_at', '>=', max($bucket, $reset))->where('a.finished_at', '<', $bucket + 300)
@@ -53,8 +67,8 @@ final class Metrics
                         ->selectRaw("SUM(CASE WHEN a.status = 'completed' THEN 1 ELSE 0 END) AS completed, SUM(CASE WHEN a.status = 'failed' THEN 1 ELSE 0 END) AS failed")
                         ->selectRaw('COUNT(CASE WHEN a.started_at IS NOT NULL AND a.finished_at >= a.started_at THEN 1 END) AS duration_samples')
                         ->selectRaw('AVG(CASE WHEN a.started_at IS NOT NULL AND a.finished_at >= a.started_at THEN (a.finished_at - a.started_at) * 1000 END) AS runtime_ms')
-                        ->groupBy($fields)->limit(1001)->get();
-                    if ($groups->count() > 1000) { throw new RuntimeException('Native metric group limit exceeded; no partial snapshot was saved.'); }
+                        ->groupBy($fields)->limit($groupLimit + 1)->get();
+                    if ($groups->count() > $groupLimit) { throw new RuntimeException('Native metric group limit exceeded; no partial snapshot was saved.'); }
                     foreach ($groups as $group) {
                         $dimensions = $kind === 'jobs' ? [$group->job_class] : [$group->connection, $group->queue];
                         $rows[] = ['metric_key' => self::key($kind, $dimensions), 'bucket' => $bucket, 'kind' => $kind,

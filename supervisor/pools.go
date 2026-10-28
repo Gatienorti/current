@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -20,8 +21,13 @@ import (
 )
 
 const maxGraceSeconds = 86430
+const maxWorkers = 4096
+const maxPools = 256
+const maxQueues = 256
+const maxConfigBytes = 4 * 1024 * 1024
 
 type Pool struct {
+	Paused     bool     `json:"paused,omitempty"`
 	Connection string   `json:"connection,omitempty"`
 	Queues     []string `json:"queues,omitempty"`
 	Group      string   `json:"group,omitempty"`
@@ -40,6 +46,7 @@ type Config struct {
 	StateDirectory string `json:"state_directory"`
 	GraceSeconds   int    `json:"grace_seconds"`
 	WorkerLimit    int    `json:"worker_limit,omitempty"`
+	MemoryLimitMB  int    `json:"memory_limit_mb,omitempty"`
 	Pools          []Pool `json:"pools"`
 }
 
@@ -56,10 +63,10 @@ func readConfig(path string) (Config, error) {
 	if err != nil {
 		return c, err
 	}
-	if info.Size() > 65536 {
-		return c, errors.New("configuration exceeds 64 KiB")
+	if info.Size() > maxConfigBytes {
+		return c, errors.New("configuration exceeds 4 MiB")
 	}
-	d := json.NewDecoder(io.LimitReader(f, 65537))
+	d := json.NewDecoder(io.LimitReader(f, maxConfigBytes+1))
 	d.DisallowUnknownFields()
 	if err := d.Decode(&c); err != nil {
 		return c, err
@@ -77,7 +84,10 @@ func (c Config) workerLimit() int {
 	return c.WorkerLimit
 }
 func (c Config) validate() error {
-	if c.WorkerLimit < 0 || c.WorkerLimit > 256 || c.Version != 1 || !validName.MatchString(c.Instance) || !filepath.IsAbs(c.StateDirectory) || strings.ContainsRune(c.StateDirectory, 0) || c.GraceSeconds < 1 || c.GraceSeconds > maxGraceSeconds || len(c.Pools) == 0 || len(c.Pools) > 32 {
+	if c.MemoryLimitMB < 0 || c.MemoryLimitMB > 65536 {
+		return errors.New("invalid supervisor memory limit")
+	}
+	if c.WorkerLimit < 0 || c.WorkerLimit > maxWorkers || c.Version != 1 || !validName.MatchString(c.Instance) || !filepath.IsAbs(c.StateDirectory) || strings.ContainsRune(c.StateDirectory, 0) || c.GraceSeconds < 1 || c.GraceSeconds > maxGraceSeconds || len(c.Pools) == 0 || len(c.Pools) > maxPools {
 		return errors.New("invalid supervisor configuration")
 	}
 	names := map[string]bool{}
@@ -85,16 +95,16 @@ func (c Config) validate() error {
 	groupTotals := map[string]int{}
 	total := 0
 	for _, p := range c.Pools {
-		if !validName.MatchString(p.Name) || names[p.Name] || p.MinWorkers < 1 || p.MaxWorkers > 256 || p.MinWorkers > p.Workers || p.Workers > p.MaxWorkers || !filepath.IsAbs(p.Directory) || strings.ContainsRune(p.Directory, 0) || len(p.Command) == 0 || len(p.Command) > 64 || !filepath.IsAbs(p.Command[0]) {
+		if !validName.MatchString(p.Name) || names[p.Name] || p.MinWorkers < 0 || p.MaxWorkers < 1 || p.MaxWorkers > maxWorkers || p.MinWorkers > p.Workers || p.Workers > p.MaxWorkers || !filepath.IsAbs(p.Directory) || strings.ContainsRune(p.Directory, 0) || len(p.Command) == 0 || len(p.Command) > 64 || !filepath.IsAbs(p.Command[0]) {
 			return fmt.Errorf("invalid pool %q", p.Name)
 		}
 		for _, arg := range p.Command {
-			if len(arg) > 4096 || strings.ContainsRune(arg, 0) {
+			if len(arg) > 32768 || strings.ContainsRune(arg, 0) {
 				return errors.New("worker argument exceeds bound")
 			}
 		}
 		if p.Connection != "" {
-			if len(p.Connection) > 64 || len(p.Queues) < 1 || len(p.Queues) > 32 {
+			if len(p.Connection) > 64 || len(p.Queues) < 1 || len(p.Queues) > maxQueues {
 				return errors.New("invalid pool routing metadata")
 			}
 			for _, queue := range p.Queues {
@@ -110,7 +120,7 @@ func (c Config) validate() error {
 				return errors.New("ungrouped pool has group options")
 			}
 		} else {
-			if !validName.MatchString(p.Group) || p.GroupLimit < 1 || p.GroupLimit > 256 || len(p.Queue) < 1 || len(p.Queue) > 128 || strings.ContainsRune(p.Queue, 0) {
+			if !validName.MatchString(p.Group) || p.GroupLimit < 1 || p.GroupLimit > maxWorkers || len(p.Queue) < 1 || len(p.Queue) > 128 || strings.ContainsRune(p.Queue, 0) {
 				return errors.New("invalid pool group")
 			}
 			if limit, ok := groupLimits[p.Group]; ok && limit != p.GroupLimit {
@@ -277,7 +287,7 @@ func readHealth(c Config, now time.Time) ([]byte, error) {
 	}
 	defer f.Close()
 	var v Health
-	if err := json.NewDecoder(io.LimitReader(f, 1048576)).Decode(&v); err != nil {
+	if err := json.NewDecoder(io.LimitReader(f, 8*1024*1024)).Decode(&v); err != nil {
 		return nil, err
 	}
 	if v.Version != 1 || v.Instance != c.Instance || v.Owner == "" {
@@ -307,7 +317,7 @@ func runConfig(parent context.Context, c Config) error {
 		for i := range slots {
 			slots[i].State = "starting"
 		}
-		h.value.Pools = append(h.value.Pools, PoolHealth{Connection: p.Connection, Queues: p.Queues, Group: p.Group, GroupLimit: p.GroupLimit, Queue: p.Queue, Name: p.Name, State: "starting", Workers: p.Workers, Min: p.MinWorkers, Max: p.MaxWorkers, Slots: slots})
+		h.value.Pools = append(h.value.Pools, PoolHealth{Connection: p.Connection, Queues: p.Queues, Group: p.Group, GroupLimit: p.GroupLimit, Queue: p.Queue, Name: p.Name, State: "starting", Paused: p.Paused, Workers: p.Workers, Min: p.MinWorkers, Max: p.MaxWorkers, Slots: slots})
 	}
 	if err := h.publish(c); err != nil {
 		return err
@@ -317,6 +327,7 @@ func runConfig(parent context.Context, c Config) error {
 	controls := make(map[string]*poolControl)
 	for _, p := range c.Pools {
 		controls[p.Name] = newPoolControl(p.Workers)
+		controls[p.Name].setPaused(p.Paused)
 	}
 	closeControl, err := listenControl(c, ctx, func(request controlRequest) error {
 		if request.Owner != h.value.Owner {
@@ -338,7 +349,7 @@ func runConfig(parent context.Context, c Config) error {
 			selectedControls[request.Pool] = control
 		} else {
 			for _, p := range c.Pools {
-				if p.Group == request.Pool {
+				if request.Pool == "" || p.Group == request.Pool {
 					selectedControls[p.Name] = controls[p.Name]
 				}
 			}
@@ -453,6 +464,14 @@ func runConfig(parent context.Context, c Config) error {
 			h.phase("stopping")
 			cancelled = nil
 		case <-ticker.C:
+			if c.MemoryLimitMB > 0 && healthErr == nil {
+				var memory runtime.MemStats
+				runtime.ReadMemStats(&memory)
+				if memory.HeapInuse+memory.StackInuse > uint64(c.MemoryLimitMB)*1024*1024 {
+					healthErr = errors.New("supervisor memory limit exceeded")
+					cancel()
+				}
+			}
 			if healthErr == nil {
 				healthErr = h.publish(c)
 				if healthErr != nil {

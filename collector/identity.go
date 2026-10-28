@@ -68,6 +68,22 @@ func canonicalIdentity(tx *sql.Tx, v Event) (Event, error) {
 	if expiry <= float64(time.Now().UnixMilli())/1000 || expiry <= v.Observed {
 		return v, expiredIdentity
 	}
+	// Only the explicitly validated monitored-retention observation can extend
+	// a retained canonical dispatch. Ordinary cache candidates never slide expiry.
+	if v.MonitoredExpires > expiry {
+		expiry = v.MonitoredExpires
+		if _, err = tx.Exec("UPDATE lens_jobs SET expires_at="+sqlFor("MAX(expires_at,?)", "GREATEST(expires_at,?)")+" WHERE id=?", expiry, canonical); err != nil {
+			return v, err
+		}
+		if _, err = tx.Exec("UPDATE lens_async_aliases SET job_expires_at="+sqlFor("MAX(job_expires_at,?)", "GREATEST(job_expires_at,?)")+",expires_at="+sqlFor("MAX(expires_at,?)", "GREATEST(expires_at,?)")+" WHERE canonical_id=? AND identity_hash=?", expiry, expiry+86400, canonical, identity); err != nil {
+			return v, err
+		}
+		// Earlier attempts and steps must keep their revision fences throughout
+		// the extended history window, even if this event has no child snapshot.
+		if _, err = tx.Exec("UPDATE lens_async_versions SET expires_at="+sqlFor("MAX(expires_at,?)", "GREATEST(expires_at,?)")+" WHERE entity IN (SELECT "+sqlFor("'lens_attempts:' || id", "CONCAT('lens_attempts:',id)")+" FROM lens_attempts WHERE job_id=? UNION ALL SELECT "+sqlFor("'lens_steps:' || s.id", "CONCAT('lens_steps:',s.id)")+" FROM lens_steps s JOIN lens_attempts a ON a.id=s.attempt_id WHERE a.job_id=?)", expiry+86400, canonical, canonical); err != nil {
+			return v, err
+		}
+	}
 	clone := func(row map[string]interface{}) map[string]interface{} {
 		copy := map[string]interface{}{}
 		for k, value := range row {
