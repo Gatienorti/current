@@ -187,6 +187,7 @@ func run() error {
 			continue
 		}
 		actions := map[string]*JobAction{}
+		summaries := map[string]float64{}
 		var ids []interface{}
 		var newest float64
 		bad, expired := 0, 0
@@ -204,7 +205,7 @@ func run() error {
 				ids = append(ids, m.ID)
 				continue
 			}
-			if err = project(tx, v, actions); err != nil {
+			if err = projectWithSummaries(tx, v, summaries, actions); err != nil {
 				// A tombstoned or mismatched identity is not a database outage.
 				// Commit its receipt/alias and discard only this envelope.
 				if errors.Is(err, expiredIdentity) || errors.Is(err, conflictingIdentity) {
@@ -223,6 +224,9 @@ func run() error {
 			if v.Observed > newest {
 				newest = v.Observed
 			}
+		}
+		if err == nil {
+			err = flushSummaries(tx, summaries)
 		}
 		if err != nil {
 			tx.Rollback()

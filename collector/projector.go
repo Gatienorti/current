@@ -118,6 +118,10 @@ func versioned(tx *sql.Tx, t string, row map[string]interface{}, revision int, e
 	return e
 }
 func project(tx *sql.Tx, v Event, actionCaches ...map[string]*JobAction) error {
+	return projectWithSummaries(tx, v, nil, actionCaches...)
+}
+
+func projectWithSummaries(tx *sql.Tx, v Event, summaries map[string]float64, actionCaches ...map[string]*JobAction) error {
 	if v.ID == "" || len(v.Job) == 0 {
 		return fmt.Errorf("invalid event")
 	}
@@ -213,14 +217,41 @@ func project(tx *sql.Tx, v Event, actionCaches ...map[string]*JobAction) error {
 	if e = versioned(tx, "lens_steps", v.Step, v.StepRevision, v.Job["expires_at"].(float64)+86400); e != nil {
 		return e
 	}
-	_, e = tx.Exec(`UPDATE lens_jobs SET attempt_count=(SELECT COUNT(*) FROM lens_attempts WHERE job_id=lens_jobs.id), status=COALESCE((SELECT CASE status WHEN 'released' THEN 'pending' WHEN 'exception' THEN 'unknown' WHEN 'timed_out' THEN 'unknown' ELSE status END FROM lens_attempts WHERE job_id=lens_jobs.id ORDER BY started_at DESC,id DESC LIMIT 1),'pending'), exception_class=(SELECT exception_class FROM lens_attempts WHERE job_id=lens_jobs.id AND exception_class IS NOT NULL ORDER BY started_at DESC,id DESC LIMIT 1), observed_at=`+sqlFor("MAX(observed_at,?)", "GREATEST(observed_at,?)")+` WHERE id=?`, v.Observed, v.Job["id"])
-	if e != nil {
-		return e
+	if summaries == nil {
+		if e = refreshSummary(tx, v.Job["id"].(string), v.Observed); e != nil {
+			return e
+		}
+	} else {
+		id := v.Job["id"].(string)
+		if previous, found := summaries[id]; !found || v.Observed > previous {
+			summaries[id] = v.Observed
+		}
 	}
+
 	_, e = tx.Exec(sqlFor("INSERT INTO lens_meta VALUES ('collection_started_at',?) ON CONFLICT(key) DO UPDATE SET value=CAST(MIN(CAST(value AS REAL),?) AS TEXT)", "INSERT INTO lens_meta VALUES ('collection_started_at',?) ON DUPLICATE KEY UPDATE value=LEAST(value+0,?)"), v.Job["first_observed_at"], v.Job["first_observed_at"])
 	if e != nil {
 		return e
 	}
 	_, e = tx.Exec(sqlFor("INSERT INTO lens_meta VALUES ('last_observed_at',?) ON CONFLICT(key) DO UPDATE SET value=CAST(MAX(CAST(value AS REAL),?) AS TEXT)", "INSERT INTO lens_meta VALUES ('last_observed_at',?) ON DUPLICATE KEY UPDATE value=GREATEST(value+0,?)"), v.Observed, v.Observed)
 	return e
+}
+
+// Transaction-scoped derived fields only. All observations, revisions and
+// retention/maintenance fences are still written before committing the batch.
+func refreshSummary(tx *sql.Tx, id string, observed float64) error {
+	_, err := tx.Exec(`UPDATE lens_jobs SET attempt_count=(SELECT COUNT(*) FROM lens_attempts WHERE job_id=lens_jobs.id), status=COALESCE((SELECT CASE status WHEN 'released' THEN 'pending' WHEN 'exception' THEN 'unknown' WHEN 'timed_out' THEN 'unknown' ELSE status END FROM lens_attempts WHERE job_id=lens_jobs.id ORDER BY started_at DESC,id DESC LIMIT 1),'pending'), exception_class=(SELECT exception_class FROM lens_attempts WHERE job_id=lens_jobs.id AND exception_class IS NOT NULL ORDER BY started_at DESC,id DESC LIMIT 1), observed_at=`+sqlFor("MAX(observed_at,?)", "GREATEST(observed_at,?)")+` WHERE id=?`, observed, id)
+	return err
+}
+func flushSummaries(tx *sql.Tx, summaries map[string]float64) error {
+	ids := make([]string, 0, len(summaries))
+	for id := range summaries {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		if err := refreshSummary(tx, id, summaries[id]); err != nil {
+			return err
+		}
+	}
+	return nil
 }

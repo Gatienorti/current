@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Async telemetry refreshes each affected job summary once per transaction batch, reducing repeated SQL work while retaining every observation. Summary failures roll back the batch and leave events pending for replay. Rebuild/update and restart the collector to use this change; no schema migration is required.
+
 ## v0.1.0-beta.3 — 2026-10-28
 
 - Native runtime sampling uses a small isolated Laravel database reader for standard connections, avoiding a full provider boot. Custom connections retain the guarded bootstrap path. New launcher configurations default to 128 MiB with an environment override and startup/doctor memory diagnostics.
