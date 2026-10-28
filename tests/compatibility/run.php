@@ -72,6 +72,7 @@ foreach ($names as $name) {
     $environment['APP_CONFIG_CACHE'] = $directory.'/prototype/bootstrap/cache/config.php';
     $environment['APP_ROUTES_CACHE'] = $directory.'/prototype/bootstrap/cache/routes.php';
     $environment['APP_ENV'] = 'testing';
+    $environment['CURRENT_REQUIRE_PREDIS_TESTS'] = ! empty($row['predis']) ? '1' : '0';
     $environment['HORIZON_PREFIX'] = 'lens_compat_'.bin2hex(random_bytes(8)).':';
     echo "\nCompatibility row: {$name}; PHP ".PHP_VERSION."; artifacts: {$directory}\n";
     $install = ['composer', 'update', '--no-interaction', '--prefer-dist', '--no-progress', '--no-scripts', '--no-plugins'];

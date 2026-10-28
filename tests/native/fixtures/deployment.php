@@ -11,6 +11,9 @@ use SupervisorExperiment\FixtureJob;
 use Symfony\Component\Process\Process;
 
 $root = getenv('EXPERIMENT_ROOT'); $original = file_get_contents($root.'/config/current.php');
+$originalQueue = file_get_contents($root.'/config/queue.php');
+$queueDefinition = require $root.'/config/queue.php';
+$originalRetry = $queueDefinition['connections']['redis']['retry_after'];
 $config = require $root.'/config/current.php';
 $config['native'] = ['state_directory' => $root.'/deployment-state', 'instance' => 'deployment', 'binary' => dirname(__DIR__, 3).'/supervisor/current-supervisor',
     'grace_seconds' => 4, 'worker_limit' => 1, 'pools' => ['deployment' => ['connection' => 'redis', 'queues' => ['deployment'], 'workers' => 1,
@@ -52,14 +55,26 @@ try {
         $collector = new Process([PHP_BINARY, $root.'/artisan', 'current:collect'], $root); $collector->setTimeout(null); $collector->start();
         deploymentWait(fn () => app(Current\Telemetry\Health::class)->snapshot()['running'] ?? false, 'collector ownership');
     }
-    foreach (($argv[1] ?? '') === 'output-only' ? [] : ['graceful', 'forced', 'launcher-loss'] as $scenario) {
-        $config['native']['grace_seconds'] = 4;
+    foreach (($argv[1] ?? '') === 'output-only' ? [] : ['graceful', 'long-deadline', 'job-deadline', 'no-worker-timeout', 'forced', 'launcher-loss'] as $scenario) {
+        $recovery = in_array($scenario, ['forced', 'launcher-loss'], true);
+        $long = $scenario === 'long-deadline';
+        $jobOverride = $scenario === 'job-deadline';
+        $timeout = $long ? 2500 : ($scenario === 'no-worker-timeout' ? 0 : 3);
+        $config['native']['grace_seconds'] = $long || $jobOverride ? 2530 : 4;
+        $config['native']['pools']['deployment']['timeout'] = $timeout;
+        $queueDefinition['connections']['redis']['retry_after'] = $long || $jobOverride ? 2700 : $originalRetry;
+        file_put_contents($root.'/config/queue.php', '<?php return '.var_export($queueDefinition, true).';');
+        config()->set('queue.connections.redis.retry_after', $queueDefinition['connections']['redis']['retry_after']);
         [$go, $worker] = deploymentStart();
+        $args = explode("\0", file_get_contents('/proc/'.$worker.'/cmdline'));
+        deploymentEnsure(in_array('--timeout='.$timeout, $args, true), 'actual worker receives the preserved timeout');
         $id = 'deployment-'.$run.'-'.$scenario;
-        Queue::push(new FixtureJob($id, $scenario === 'graceful' ? 2000000 : 2500000), '', 'deployment');
+        $job = new FixtureJob($id, $jobOverride ? 4000000 : ($recovery ? 2500000 : 2000000));
+        if ($jobOverride) { $job->timeout = 2500; }
+        Queue::push($job, '', 'deployment');
         $uuid = Queue::connection()->lastEnqueued['uuid'];
         deploymentWait(fn () => Redis::hexists('started', $id), 'handler started');
-        if ($scenario !== 'graceful') { deploymentEnsure(posix_kill($worker, SIGSTOP), 'stop only the owned busy worker'); }
+        if ($recovery) { deploymentEnsure(posix_kill($worker, SIGSTOP), 'stop only the owned busy worker'); }
         if ($scenario === 'launcher-loss') {
             $process->signal(SIGKILL); $process->wait(); $process = null;
             deploymentWait(fn () => ! deploymentLive($go) && ! deploymentLive($worker), 'parent-loss descendants stopped', 8);
@@ -67,18 +82,19 @@ try {
         } else { deploymentStop(); }
         deploymentEnsure(! deploymentLive($worker), 'owned worker exited');
         deploymentWait(fn () => $store->table('attempts')->whereIn('job_id', $store->table('jobs')->where('external_id', $uuid)->select('id'))->exists(), 'captured first attempt');
-        if ($scenario !== 'graceful') {
+        if ($recovery) {
             deploymentEnsure((int) Redis::hget('completed', $id) === 0, 'interrupted handler has no business completion');
             deploymentWait(fn () => $store->table('attempts')->whereIn('job_id', $store->table('jobs')->where('external_id', $uuid)->select('id'))->whereNull('finished_at')->count() === 1, 'interrupted attempt remains incomplete');
             deploymentStart();
         }
         deploymentWait(fn () => (int) Redis::hget('completed', $id) === 1, 'exact recovered effect');
         deploymentWait(fn () => $store->table('jobs')->where('external_id', $uuid)->where('status', 'completed')->count() === 1, 'one completed dispatch history');
+        if ($jobOverride) { deploymentEnsure((int) $store->table('jobs')->where('external_id', $uuid)->value('timeout') === 2500, 'job-level timeout override is retained'); }
         $attempts = $store->table('attempts')->whereIn('job_id', $store->table('jobs')->where('external_id', $uuid)->select('id'));
-        deploymentEnsure($attempts->count() === ($scenario === 'graceful' ? 1 : 2), 'exact observed attempts');
-        deploymentEnsure((int) Redis::hget('attempts', $id) === ($scenario === 'graceful' ? 1 : 2), 'exact handler invocations');
+        deploymentEnsure($attempts->count() === ($recovery ? 2 : 1), 'exact observed attempts');
+        deploymentEnsure((int) Redis::hget('attempts', $id) === ($recovery ? 2 : 1), 'exact handler invocations');
         if ($process) { deploymentStop(); }
-        $checks[$scenario] = ['business_effects' => (int) Redis::hget('completed', $id), 'attempts' => $attempts->count(),
+        $checks[$scenario] = ['timeout' => $timeout, 'grace_seconds' => $config['native']['grace_seconds'], 'business_effects' => (int) Redis::hget('completed', $id), 'attempts' => $attempts->count(),
             'incomplete_attempts' => (clone $attempts)->whereNull('finished_at')->count(), 'worker_exited' => ! deploymentLive($worker)];
     }
     // Recycling workers can emit logs for months. The PHP relay must forward
@@ -106,4 +122,5 @@ try {
 } finally {
     foreach ([$process, $collector] as $p) { if ($p && $p->isRunning()) { $p->stop(10, SIGTERM); } }
     file_put_contents($root.'/config/current.php', $original);
+    file_put_contents($root.'/config/queue.php', $originalQueue);
 }

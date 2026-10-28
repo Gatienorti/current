@@ -5,14 +5,28 @@ namespace Current\Tests;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Redis;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 final class NativeEnqueueDisconnectTest extends TestCase
 {
-    public function test_lost_exec_reply_does_not_fabricate_enqueue_and_workers_can_recover_history(): void
+    public static function clients(): array { return [['phpredis'], ['predis']]; }
+
+    #[DataProvider('clients')]
+    public function test_lost_exec_reply_does_not_fabricate_enqueue_and_workers_can_recover_history(string $redisClient): void
     {
         if (! function_exists('pcntl_fork')) { $this->markTestSkipped('Requires the Linux process integration environment.'); }
+        if ($redisClient === 'phpredis' && ! extension_loaded('redis')) { $this->markTestSkipped('Optional phpredis extension is not installed.'); }
+        if ($redisClient === 'predis' && ! class_exists(\Predis\Client::class)) {
+            if (getenv('CURRENT_REQUIRE_PREDIS_TESTS') === '1') { $this->fail('Install optional Predis for its required lost-acknowledgement test.'); }
+            $this->markTestSkipped('Optional Predis package is not installed.');
+        }
         config()->set('current.execution_backend', 'native');
         config()->set('queue.connections.redis.driver', 'current-redis');
+        if ($redisClient === 'predis') {
+            config()->set('database.redis.client', 'predis');
+            app()->instance('redis', new \Illuminate\Redis\RedisManager(app(), 'predis', config('database.redis')));
+            Redis::clearResolvedInstance('redis');
+        }
         $source = config('database.redis.default');
         $prefix = config('database.redis.options.prefix');
         $server = stream_socket_server('tcp://127.0.0.1:0', $errno, $error);
@@ -41,12 +55,16 @@ final class NativeEnqueueDisconnectTest extends TestCase
                             if (! $written) { exit(4); } $offset += $written;
                         }
                         if (str_contains(strtoupper($seen), "*1\r\n$4\r\nEXEC\r\n")) {
-                            $probe = new \Redis;
-                            $probe->connect($source['host'], $source['port'] ?? 6379, 1);
-                            if (! empty($source['password'])) { $probe->auth($source['password']); }
-                            $probe->select($source['database'] ?? 0);
+                            if ($redisClient === 'predis') {
+                                $probe = new \Predis\Client(array_replace($source, ['timeout' => 1, 'read_write_timeout' => 1]), ['prefix' => $prefix]);
+                            } else {
+                                $probe = new \Redis;
+                                $probe->connect($source['host'], $source['port'] ?? 6379, 1);
+                                if (! empty($source['password'])) { $probe->auth($source['password']); }
+                                $probe->select($source['database'] ?? 0);
+                            }
                             $deadline = microtime(true) + 2;
-                            do { $count = $probe->lLen($prefix.'queues:lens-demo'); if ($count === 2) { break; } usleep(5000); } while (microtime(true) < $deadline);
+                            do { $count = $probe->lLen(($redisClient === 'predis' ? '' : $prefix).'queues:lens-demo'); if ($count === 2) { break; } usleep(5000); } while (microtime(true) < $deadline);
                             if ($count !== 2) { exit(5); }
                             file_put_contents($marker, 'committed');
                             fclose($client); fclose($upstream); fclose($server); exit(0);
@@ -62,12 +80,12 @@ final class NativeEnqueueDisconnectTest extends TestCase
         try {
             $redisConfig = config('database.redis');
             $redisConfig['default'] = array_replace($source, ['host' => '127.0.0.1', 'port' => $port, 'read_timeout' => 3, 'max_retries' => 0]);
-            $manager = new \Illuminate\Redis\RedisManager(app(), 'phpredis', $redisConfig);
+            $manager = new \Illuminate\Redis\RedisManager(app(), $redisClient, $redisConfig);
             $queue = new \Current\Native\RedisQueue($manager, 'lens-demo', 'default', 5, null, false);
             $queue->setContainer(app()); $queue->setConnectionName('redis');
             try {
                 $queue->bulk([new LostAckJob('one'), new LostAckJob('two')], '', 'lens-demo');
-            } catch (\RedisException) { /* phpredis may return false or throw after EOF. */ }
+            } catch (\RedisException|\Predis\CommunicationException) { /* The committed EXEC reply was deliberately discarded. */ }
             pcntl_waitpid($pid, $status); $pid = null;
             $this->assertSame(0, pcntl_wexitstatus($status));
             $this->assertSame('committed', file_get_contents($marker));

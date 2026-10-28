@@ -131,3 +131,31 @@ func TestExpiredMaintenanceAndRetryClaimsPruneAtomicallyInBoundedBatches(t *test
 		t.Fatalf("live/unrelated data changed: actions=%d meta=%d", actions, meta)
 	}
 }
+
+func TestForgottenLegacyDispatchCannotBeRecreatedButNewNativeDispatchRemainsVisible(t *testing.T) {
+	db := fixture(t)
+	v := identityEvent(980)
+	delete(v.Job, "dispatch_id")
+	apply(t, db, v)
+	_, err := db.Exec("INSERT INTO lens_job_actions VALUES(?,?,?,?,?)", actionFingerprint("uuid", "redis", ""), "forgotten", v.Job["id"], v.Observed, v.Observed+86400)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Exec("DELETE FROM lens_jobs")
+	late := identityEvent(981)
+	delete(late.Job, "dispatch_id")
+	apply(t, db, late)
+	var count int
+	db.QueryRow("SELECT COUNT(*) FROM lens_jobs").Scan(&count)
+	if count != 0 {
+		t.Fatal("forgotten legacy history recreated")
+	}
+	next := identityEvent(982)
+	next.Job["id"] = "01MMMMMMMMMMMMMMMMMMMMMMMM"
+	next.Job["dispatch_id"] = "new-native-dispatch"
+	apply(t, db, next)
+	db.QueryRow("SELECT COUNT(*) FROM lens_jobs").Scan(&count)
+	if count != 1 {
+		t.Fatal("fresh native dispatch was suppressed by a legacy marker")
+	}
+}

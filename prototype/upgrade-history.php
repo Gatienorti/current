@@ -12,7 +12,9 @@ return static function (): void {
     ] as $file => [$table, $column]) {
         if ($column ? ! $schema->hasColumn($table, $column) : ! $schema->hasTable($table)) { (require $migrations.$file)->up(); }
     }
+    if (!$schema->hasColumn('lens_attempts', 'policy_json')) { (require $migrations.'2026_10_28_000020_add_attempt_policy.php')->up(); }
     $column = $schema->hasColumn('lens_jobs', 'cleared_at'); $actions = $schema->hasTable('lens_job_actions');
     if ($column !== $actions) { throw new RuntimeException('Preview maintenance migration is partial; restore its backup before retrying.'); }
     if (! $column) { (require $migrations.'2026_10_28_000016_add_native_maintenance.php')->up(); }
+    if (! $schema->hasTable('lens_native_retry_claims')) { (require $migrations.'2026_10_28_000017_add_native_retry_claims.php')->up(); }
 };

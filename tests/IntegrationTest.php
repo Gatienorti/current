@@ -32,7 +32,7 @@ final class IntegrationTest extends TestCase
         $this->assertSame(4, $this->store()->table('steps')->where('status', 'completed')->count());
         $this->assertSame(2, $this->store()->table('tags')->count());
         $this->assertFalse($this->store()->table('tags')->where('tag', 'like', 'private:%')->exists());
-        $this->get('/current/jobs/'.$job->id)->assertOk()->assertSee('Validate order')->assertSee('POSSIBLE OPERATIONS', false);
+        $this->get('/current/jobs/'.$job->id)->assertOk()->assertSee('Validate order')->assertSee('Source outline')->assertSee('execution is unknown unless separately captured');
     }
 
     public function test_late_enqueue_observation_reuses_an_already_completed_worker_cycle(): void

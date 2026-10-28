@@ -109,6 +109,7 @@ final class JobsController
         $nativeDashboard = $section === 'dashboard' && \Current\ExecutionBackend::native();
         $nativeRegistry = $nativeDashboard ? app(\Current\Native\Registry::class)->all() : null;
         $nativeHealth = $nativeDashboard ? app(\Current\Native\Supervisor::class)->snapshot() : null;
+        $nativeWorkload = $nativeDashboard ? app(\Current\Native\Workload::class)->snapshot($nativeHealth, $nativeRegistry) : null;
         return view(match ($section) {
             'dashboard' => \Current\ExecutionBackend::native() ? 'current::native-dashboard' : 'current::dashboard',
             'monitoring' => 'current::monitoring',
@@ -128,7 +129,8 @@ final class JobsController
             'health' => $this->health(),
             'nativeRegistry' => $nativeRegistry,
             'nativeHealth' => $nativeHealth,
-            'nativeWorkload' => $nativeHealth !== null ? app(\Current\Native\Workload::class)->snapshot($nativeHealth, $nativeRegistry) : null,
+            'nativeWorkload' => $nativeWorkload,
+            'nativeSummary' => $nativeDashboard ? app(\Current\Native\Dashboard::class)->snapshot($nativeHealth, $nativeRegistry, $nativeWorkload) : null,
             'horizon' => $section === 'dashboard' && ! \Current\ExecutionBackend::native() ? app(HorizonAdapter::class)->dashboard() : null,
             'silencedCoverage' => $section === 'silenced' ? $this->store->table('meta')->where('key', 'silenced_capture_started_at')->value('value') : null,
         ]);

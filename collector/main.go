@@ -4,7 +4,6 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -27,6 +26,7 @@ type Settings struct {
 	Password string      `json:"password"`
 	Database int         `json:"database"`
 	TLS      bool        `json:"tls"`
+	RedisTLS RedisTLS    `json:"redis_tls"`
 	Prefix   string      `json:"prefix"`
 	File     string      `json:"file"`
 	MaxAge   int         `json:"max_age"`
@@ -42,7 +42,7 @@ var version = "dev"
 
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == "--version" {
-		json.NewEncoder(os.Stdout).Encode(map[string]interface{}{"name": "current-collector", "version": version, "protocol": 1, "identity_protocol": 2, "maintenance_protocol": 1, "laravel_bootstrap": bootstrapCapability(), "os": runtime.GOOS, "arch": runtime.GOARCH})
+		json.NewEncoder(os.Stdout).Encode(map[string]interface{}{"name": "current-collector", "version": version, "protocol": 1, "identity_protocol": 2, "maintenance_protocol": 1, "monitored_retention": 1, "redis_tls": 1, "laravel_bootstrap": bootstrapCapability(), "os": runtime.GOOS, "arch": runtime.GOARCH})
 		return
 	}
 	if e := run(); e != nil {
@@ -80,8 +80,9 @@ func run() error {
 		return errors.New("invalid collector configuration")
 	}
 	opts := &redis.Options{Addr: s.Address, Username: s.Username, Password: s.Password, DB: s.Database, DialTimeout: time.Second, ReadTimeout: time.Second, WriteTimeout: time.Second, MaxRetries: -1}
-	if s.TLS {
-		opts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	opts.TLSConfig, e = redisTLS(s.TLS, s.RedisTLS)
+	if e != nil {
+		return e
 	}
 	r := redis.NewClient(opts)
 	defer r.Close()
@@ -126,7 +127,7 @@ func run() error {
 			if err != nil || ok != 1 {
 				return stopOrError(ctx, "collector ownership lost; restart after Redis recovers")
 			}
-			r.HSet(ctx, health, "heartbeat_at", float64(time.Now().UnixMilli())/1000, "protocol", s.Protocol, "owner_token", token, "maintenance_protocol", 1)
+			r.HSet(ctx, health, "heartbeat_at", float64(time.Now().UnixMilli())/1000, "protocol", s.Protocol, "owner_token", token, "maintenance_protocol", 1, "monitored_retention", 1, "redis_tls_protocol", 1)
 			nextHeartbeat = time.Now().Add(3 * time.Second)
 		}
 		if time.Now().After(nextPrune) {

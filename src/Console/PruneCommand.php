@@ -25,10 +25,12 @@ final class PruneCommand extends Command
         }
         $this->info("Removed {$count} expired jobs and their attempts/steps.");
 
-        if ($store->connection()->getSchemaBuilder()->hasTable('lens_native_metrics')) {
-            do {
-                $removed = $store->table('native_metrics')->where('expires_at', '<=', microtime(true))->limit(500)->delete();
-            } while ($removed > 0);
+        foreach (['native_metrics', 'native_queue_samples'] as $metricTable) {
+            if ($store->connection()->getSchemaBuilder()->hasTable('lens_'.$metricTable)) {
+                do {
+                    $removed = $store->table($metricTable)->where('expires_at', '<=', microtime(true))->limit(500)->delete();
+                } while ($removed > 0);
+            }
         }
 
         do {
@@ -41,14 +43,14 @@ final class PruneCommand extends Command
             }, 3);
         } while ($removed > 0);
 
-        foreach (['async_receipts' => 'id', 'async_versions' => 'entity', 'async_aliases' => 'id'] as $table => $key) {
+        foreach (['async_receipts' => 'id', 'async_versions' => 'entity', 'async_aliases' => 'id', 'native_retry_claims' => 'identity_hash', 'maintenance_operations' => 'id'] as $table => $key) {
             if (! $store->connection()->getSchemaBuilder()->hasTable('lens_'.$table)) {
                 continue;
             }
             do {
                 $keys = $store->table($table)->where('expires_at', '<=', microtime(true))->limit(500)->pluck($key);
                 if ($keys->isNotEmpty()) {
-                    $store->table($table)->whereIn($key, $keys)->delete();
+                    $store->table($table)->whereIn($key, $keys)->where('expires_at', '<=', microtime(true))->delete();
                 }
             } while ($keys->isNotEmpty());
         }

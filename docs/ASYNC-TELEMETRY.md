@@ -4,7 +4,7 @@ Current defaults to synchronous recording. An optional Redis transport and Go co
 
 ## Initial support boundary
 
-The opt-in implementation targets **Linux, PHP with phpredis and standalone Redis 7**, with one of:
+The opt-in implementation targets **Linux, PHP with phpredis or optional Predis 2.3/3.x and standalone Redis 7**, with one of:
 
 - **SQLite** on a local Linux filesystem.
 - **MySQL 8.4 or MariaDB 11.4**, with Current tables using InnoDB and one explicit server connection.
@@ -57,7 +57,7 @@ Use one collector per Current database/namespace. Async collection and the optio
    CURRENT_TELEMETRY_NAMESPACE=my_application
    ```
 
-   The selected `database.redis` connection must use explicit `host`, `port`, `database` and optional `username`, `password`, `scheme=tls` fields. URL-style connections are rejected. Use the normal system trust store for TLS; custom TLS options are not implemented. Authentication/TLS configuration is wired but the local tests use unauthenticated Redis, so those deployment modes require your own connection verification.
+   The selected `database.redis` connection must use explicit `host`, `port`, `database` and optional `username`, `password`, `scheme=tls` fields. URL-style connections are rejected. TLS verifies the peer and hostname using the system trust store, or approved custom CA/client-certificate options (`context.stream` for phpredis, `ssl` for Predis). Certificate paths must be readable by PHP and the matching collector; a collector advertising Redis TLS support is required. Disabling verification and unsupported TLS options are rejected. Isolated authentication, custom CA, mutual TLS, and IPv6 checks are recorded in the [compatibility evidence](COMPATIBILITY.md); verify your own deployment credentials and certificate names.
 
    Choose a unique namespace per application/database. The application Redis prefix also contributes to isolation. A dedicated Redis connection with short timeouts is created; Current does not change Laravel's existing Redis connection. The transport's connect/read timeout is 200 ms. The collector has separate one-second Redis timeouts.
 
@@ -153,3 +153,10 @@ The 35-second startup window lets a restarted collector encounter an expired own
 The PHP transport keeps one validated settings snapshot per Transport instance. Each access compares the relevant SQL/Redis/telemetry configuration values; a change invalidates the snapshot and cached Redis client. Explicit disconnect also clears both. Publications use one consistent settings/client selection, so runtime namespace changes cannot keep sending through the previous cached prefix. Application code holding an already returned Redis client should not reuse it after changing transport configuration.
 
 SQL PDO TLS options deliberately bypass the validation fast path because certificate readability is a filesystem input. Certificate and verification checks still run on each settings access. This optimization does not alter stream envelopes, queue limits, step boundaries, redaction, acknowledgement or collector durability.
+
+
+### Optional Redis client and custom TLS
+
+Development versions after beta.2 support standalone Predis 2.3/3.x as well as phpredis. Install `predis/predis` yourself and select Laravel's `database.redis.client=predis`; it remains an optional dependency. Native direct/delayed/bulk acknowledgement checks distinguish complete replies from caller-owned MULTI/pipelines and partial/ambiguous replies.
+
+A matching collector supports private CAs, client certificate/key and verified peer names from the selected Laravel Redis connection. phpredis uses `context.stream`; Predis uses `ssl`. Supported settings include `cafile`, `local_cert`, `local_pk` and `peer_name`; certificate/key are paired and paths must be readable by PHP and Go. TLS 1.2+, peer verification and hostname verification remain required; unsupported/insecure options are rejected. The private collector config normalizes these into `redis_tls{ca,cert,key,server_name}`. CustomTLS requires binary `redis_tls:1` and fresh owner-bound heartbeat `redis_tls_protocol:1`; older collectors are rejected/unconfirmed rather than silently ignoring settings. Monitored-tag retention additionally requires `monitored_retention:1`. Upgrade matching binaries before enabling these features.

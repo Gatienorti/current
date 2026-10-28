@@ -1,11 +1,7 @@
 @if(config('current.native.registry.enabled', true) === true)
 <div data-live-region="native-inventory">
 @php
-$instances = $nativeRegistry['instances'];
-if ($nativeHealth['available']) {
-    $localId = hash('sha256', (gethostname() ?: 'unknown-host')."\0".$nativeHealth['instance']."\0".$nativeHealth['owner']);
-    $instances = array_values(array_filter($instances, fn ($instance) => $instance['id'] !== $localId));
-}
+$instances = \Current\Native\Registry::withoutLocal($nativeRegistry['instances'], $nativeHealth);
 @endphp
 @if(!$nativeRegistry['available'] || $instances || !$nativeHealth['available'] || $nativeRegistry['invalid'])
 <section class="panel">

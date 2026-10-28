@@ -1,5 +1,7 @@
 <?php
 // Explicitly opt-in, disposable lab only. Never uses a host application or global Redis clear.
+// Unit regressions load only the declared fixture helpers, without booting a lab.
+if (defined('CURRENT_HISTORY_FIXTURE_HELPERS_ONLY') && CURRENT_HISTORY_FIXTURE_HELPERS_ONLY) { return; }
 if (getenv('CURRENT_SUPERVISOR_EXPERIMENT') !== '1') { exit("Set CURRENT_SUPERVISOR_EXPERIMENT=1 in the isolated lab.\n"); }
 foreach (['CURRENT_SUPERVISOR_NATIVE', 'CURRENT_SUPERVISOR_HISTORY'] as $flag) { putenv($flag.'=1'); $_ENV[$flag] = $_SERVER[$flag] = '1'; }
 require getenv('EXPERIMENT_AUTOLOAD') ?: '/opt/vehify/vendor/autoload.php';
@@ -18,7 +20,7 @@ file_put_contents($root.'/artisan', "<?php\nrequire ".var_export(__DIR__.'/artis
 file_put_contents($root.'/bootstrap/providers.php', '<?php return [];');
 $config = [
     'app' => ['name' => 'Supervisor Experiment', 'env' => 'local', 'debug' => false, 'key' => 'base64:'.base64_encode(random_bytes(32)), 'timezone' => 'UTC', 'url' => 'http://localhost'],
-    'database' => ['default' => 'sqlite', 'connections' => ['sqlite' => ['driver' => 'sqlite', 'database' => $root.'/history.sqlite', 'busy_timeout' => 5000, 'journal_mode' => 'WAL', 'foreign_key_constraints' => true]], 'redis' => ['client' => 'phpredis', 'options' => ['prefix' => $prefix], 'default' => ['host' => getenv('NATIVE_REDIS_HOST') ?: 'lens-redis', 'port' => 6379, 'database' => 0]]],
+    'database' => ['default' => 'sqlite', 'connections' => ['sqlite' => ['driver' => 'sqlite', 'database' => $root.'/history.sqlite', 'busy_timeout' => 5000, 'journal_mode' => 'WAL', 'foreign_key_constraints' => true]], 'redis' => ['client' => getenv('NATIVE_REDIS_CLIENT') ?: 'phpredis', 'options' => ['prefix' => $prefix], 'default' => ['host' => getenv('NATIVE_REDIS_HOST') ?: 'lens-redis', 'port' => 6379, 'database' => 0]]],
     'queue' => ['default' => 'redis', 'connections' => ['redis' => ['driver' => 'current-experiment', 'connection' => 'default', 'queue' => 'experiment', 'retry_after' => 6, 'block_for' => 1, 'after_commit' => false]], 'failed' => ['driver' => 'database-uuids', 'database' => 'sqlite', 'table' => 'failed_jobs']],
     'cache' => ['default' => 'redis', 'stores' => ['redis' => ['driver' => 'redis', 'connection' => 'default']], 'prefix' => 'cache:'],
     'logging' => ['default' => 'single', 'channels' => ['single' => ['driver' => 'single', 'path' => $root.'/storage/logs/experiment.log']]],
@@ -51,13 +53,51 @@ $app = require __DIR__.'/boot.php';
 set_exception_handler(function (Throwable $e) { fwrite(STDERR, $e->getMessage()."\n".$e->getTraceAsString()."\n"); exit(1); });
 $r = Redis::connection();
 function until(callable $condition, string $label, float $seconds = 30): void {
+    global $stage; $stage = $label;
     $end = microtime(true) + $seconds;
     do { global $collector; if ($collector && !$collector->isRunning()) { throw new RuntimeException('Collector exited: '.$collector->getOutput().$collector->getErrorOutput()); } if ($condition()) { return; } usleep(10000); } while (microtime(true) < $end);
     global $r;
-    if (isset($r)) fwrite(STDERR, json_encode(['timeout' => $label, 'started' => $r->hgetall('started'), 'completed' => $r->hgetall('completed'), 'attempts' => $r->hgetall('attempts'), 'terminal' => $r->hgetall('terminal'), 'queue_size' => Queue::connection()->size('experiment')])."\n");
+    try {
+        if (isset($r)) fwrite(STDERR, json_encode(['timeout' => $label, 'started' => $r->hgetall('started'), 'completed' => $r->hgetall('completed'), 'attempts' => $r->hgetall('attempts'), 'terminal' => $r->hgetall('terminal'), 'queue_size' => Queue::connection()->size('experiment')])."\n");
+    } catch (Throwable $diagnosticError) { reportFixtureFailure($diagnosticError, 'timeout-diagnostics'); }
     throw new RuntimeException('Timeout: '.$label);
 }
-function ensure(bool $condition, string $label): void { if (! $condition) { throw new RuntimeException('FAIL '.$label); } }
+function ensure(bool $condition, string $label): void { if (! $condition) { global $stage; $stage = $label; throw new RuntimeException('FAIL '.$label); } }
+function reportFixtureFailure(Throwable $e, string $phase, array $processes = []): void {
+    global $root, $stage, $checks;
+    try {
+        $report = ['fixture_failure' => $phase, 'driver' => config('current.telemetry.driver'), 'stage' => $stage ?? 'initialization',
+            'error_class' => get_class($e), 'completed_checks' => array_keys($checks ?? []), 'processes' => []];
+        foreach ($processes as $p) {
+            try { $report['processes'][] = ['status' => $p->getStatus(), 'running' => $p->isRunning(), 'exit_code' => $p->getExitCode()]; }
+            catch (Throwable $statusError) { $report['processes'][] = ['status_error_class' => get_class($statusError)]; }
+        }
+        $diagnostic = $root.'/diagnostics.json';
+        if (is_file($diagnostic) && filesize($diagnostic) <= 65536) {
+            $record = json_decode(file_get_contents($diagnostic), true);
+            $report['recorder_error_class'] = is_string($record['error_class'] ?? null) ? substr($record['error_class'], 0, 256) : null;
+        }
+        // Keep private owner tokens, process proof, payloads and command lines out of diagnostics.
+        $path = $root.'/supervisor-state/history.json';
+        if (is_file($path) && filesize($path) <= 262144) {
+            $health = json_decode(file_get_contents($path), true);
+            if (is_array($health)) {
+                $report['health'] = ['state' => $health['state'] ?? null, 'updated_at' => $health['updated_at'] ?? null, 'pools' => []];
+                foreach (array_slice($health['pools'] ?? [], 0, 16) as $pool) {
+                    $report['health']['pools'][] = ['name' => $pool['name'] ?? null, 'state' => $pool['state'] ?? null,
+                        'workers' => $pool['workers'] ?? null, 'slot_states' => array_column(array_slice($pool['slots'] ?? [], 0, 128), 'state')];
+                }
+            }
+        }
+        fwrite(STDERR, json_encode($report, JSON_UNESCAPED_SLASHES|JSON_INVALID_UTF8_SUBSTITUTE)."\n");
+    } catch (Throwable $diagnosticError) {
+        fwrite(STDERR, json_encode(['fixture_failure' => $phase, 'error_class' => get_class($e), 'diagnostic_error_class' => get_class($diagnosticError)])."\n");
+    }
+}
+function stopModePreserving(array $processes, ?Throwable $original): void {
+    try { stopMode($processes); }
+    catch (Throwable $cleanup) { reportFixtureFailure($cleanup, 'cleanup', $processes); if ($original === null) { throw $cleanup; } }
+}
 function descendants(int $pid): array {
     $result = [$pid];
     for ($i = 0; $i < count($result); $i++) {
@@ -108,7 +148,7 @@ function startMode(string $mode): array {
             return $r->hlen('workers') === $workers;
         }, $mode.' worker readiness');
         return $processes;
-    } catch (Throwable $e) { stopMode($processes); throw $e; }
+    } catch (Throwable $e) { reportFixtureFailure($e, 'startup', $processes); stopModePreserving($processes, $e); throw $e; }
 }
 function stopMode(array $processes): void {
     $pids = [];
@@ -117,10 +157,12 @@ function stopMode(array $processes): void {
         $pid = $p->getPid();
         if ($pid !== null && $p->isRunning()) {
             $pids = array_merge($pids, descendants($pid));
-            try { $p->signal(SIGTERM); } catch (\Symfony\Component\Process\Exception\RuntimeException $e) { if ($p->isRunning()) { throw $e; } }
+            try { $p->signal(SIGTERM); } catch (\Symfony\Component\Process\Exception\ExceptionInterface $e) { if ($p->isRunning()) { throw $e; } }
         }
     }
-    foreach ($processes as $p) { $p->stop(12, SIGKILL); }
+    foreach ($processes as $p) {
+        try { $p->stop(12, SIGKILL); } catch (\Symfony\Component\Process\Exception\ExceptionInterface $e) { if ($p->isRunning()) { throw $e; } }
+    }
     // Detect and clean only descendants of this experiment's processes.
     $survivors = array_filter($pids, fn ($pid) => is_dir('/proc/'.$pid));
     foreach ($survivors as $pid) { @posix_kill($pid, SIGKILL); }
@@ -138,7 +180,7 @@ Illuminate\Support\Facades\Schema::create('failed_jobs', function ($table) {
 });
 $store = app(Current\Store::class);
 $active = []; $collector = null;
-$checks = [];
+$checks = []; $failure = null; $stage = 'startup';
 try {
     if (config('current.telemetry.driver') === 'redis') {
         $collector = new Process([PHP_BINARY, $root.'/artisan', 'current:collect'], $root);
@@ -158,7 +200,12 @@ try {
     until(fn () => $store->table('jobs')->whereIn('status', ['completed', 'failed'])->count() === 5, 'complete history', 45);
     ensure($store->table('attempts')->count() === 9, 'exact attempt count');
     ensure($store->table('steps')->count() === 9, 'instrumented steps');
-    ensure($store->table('jobs')->where('coverage', 'observed_enqueue')->count() === 5, 'all enqueues captured');
+    $enqueueCoverage = $store->table('jobs')->where('coverage', 'observed_enqueue')->count();
+    if ($enqueueCoverage !== 5) {
+        $diagnostic = is_file($root.'/diagnostics.json') ? json_decode(file_get_contents($root.'/diagnostics.json'), true) : [];
+        ensure(false, 'all enqueues captured: '.json_encode(['driver' => config('current.telemetry.driver'),
+            'jobs' => $store->table('jobs')->select('status', 'coverage')->get(), 'recorder_error_class' => $diagnostic['error_class'] ?? null]));
+    }
     ensure($store->table('jobs')->where('arguments_state', 'captured')->count() === 5, 'arguments captured');
     ensure($store->table('jobs')->where('metadata_state', 'captured')->count() === 5, 'metadata captured');
     ensure(!str_contains(json_encode($store->table('jobs')->get()), 'fixture-secret'), 'arguments redacted before persistence');
@@ -288,6 +335,7 @@ try {
     if (getenv('NATIVE_PACKAGE') === '1') {
         $second = new Process([PHP_BINARY, $root.'/artisan', 'current:supervise', '--instance=inventory-second'], $root);
         $second->setTimeout(null); $second->start();
+        $secondFailure = null;
         try {
             until(function () use ($second) {
                 ensure($second->isRunning(), 'second inventory launcher stays running');
@@ -300,8 +348,10 @@ try {
             ensure($instances->get('inventory-second')['state'] === 'stopped', 'second instance publishes stopped');
             ensure($instances->get('history')['state'] === 'running', 'stopping second instance leaves first running');
             $checks['multiple_instance_registry'] = 'PASS: two actual independent launchers visible; stopping one preserves the other';
+        } catch (Throwable $e) {
+            $secondFailure = $e; reportFixtureFailure($e, 'second-instance', [$second]); throw $e;
         } finally {
-            if ($second->isRunning()) { stopMode([$second]); }
+            if ($second->isRunning()) { stopModePreserving([$second], $secondFailure); }
         }
     }
     ensure(!is_file($root.'/diagnostics.json'), 'no recorder diagnostics');
@@ -324,12 +374,23 @@ try {
     file_put_contents(__DIR__.'/'.$resultName.'.json', json_encode($result, JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES)."\n");
     echo json_encode($result, JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES)."\n";
     ensure($retryCycles === 1, 'native backend acceptance blocked by same-UUID retry identity');
+} catch (Throwable $e) {
+    $failure = $e; reportFixtureFailure($e, 'original', array_merge($active, $collector ? [$collector] : [])); throw $e;
 } finally {
-    if ($active) { stopMode($active); }
-    if ($collector && $collector->isRunning()) { $collector->stop(5); }
-    $raw = new \Redis; $raw->connect(getenv('NATIVE_REDIS_HOST') ?: 'lens-redis'); $cursor = null;
-    foreach ([$prefix.'*', '{current:'.basename($root).':*'] as $pattern) {
-        $cursor = null;
-        do { $keys = $raw->scan($cursor, $pattern, 1000); if ($keys) { $raw->del($keys); } } while ($cursor !== 0);
+    $cleanupFailure = null;
+    foreach ([
+        function () use ($active) { if ($active) { stopMode($active); } },
+        function () use ($collector) { if ($collector && $collector->isRunning()) { $collector->stop(5); } },
+        function () use ($prefix, $root) {
+            $raw = new \Redis; $raw->connect(getenv('NATIVE_REDIS_HOST') ?: 'lens-redis');
+            foreach ([$prefix.'*', '{current:'.basename($root).':*'] as $pattern) {
+                $cursor = null;
+                do { $keys = $raw->scan($cursor, $pattern, 1000); if ($keys) { $raw->del($keys); } } while ($cursor !== 0);
+            }
+        },
+    ] as $cleanup) {
+        try { $cleanup(); }
+        catch (Throwable $e) { reportFixtureFailure($e, 'cleanup'); $cleanupFailure ??= $e; }
     }
+    if ($failure === null && $cleanupFailure !== null) { throw $cleanupFailure; }
 }

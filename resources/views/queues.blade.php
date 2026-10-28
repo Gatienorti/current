@@ -1,14 +1,17 @@
 @extends('current::layout')
 @section('title', 'Queues')
 @section('content')
+@if(request()->header('X-Current-Refresh') !== '1')
 <div class="page-heading"><h1>Queues</h1><span class="soft-badge">{{ $environment }}</span></div>
+@endif
+<div data-live-region="queue-architecture">
 @if(!$available)<p class="observation-notice">Queue configuration is unavailable.</p>@endif
 @if($partial)<p class="observation-notice">Some source files could not be inspected. Job assignments may be incomplete.</p>@endif
 @foreach($supervisorTables as $supervisor)
 <section class="panel supervisor-queues">
     <div class="panel-heading">
         <div><h2>{{ $supervisor['name'] }}</h2><span class="subtle">{{ $supervisor['connection'] }} · {{ ucfirst($supervisor['balance']) }} balancing</span></div>
-        <div class="supervisor-allocation"><strong>{{ $supervisor['workers'] }}</strong>@if($supervisor['allocated'] !== null)<span class="subtle">Currently allocated: {{ $supervisor['allocated'] }}</span>@endif</div>
+        <div class="supervisor-allocation"><strong>{{ $supervisor['workers'] }}</strong>@if($supervisor['allocated'] !== null)<span class="subtle">{{ $supervisor['allocation_label'] ?? 'Currently allocated' }}: {{ $supervisor['allocated'] }}</span>@endif</div>
     </div>
     <div class="table-scroll"><table><thead><tr><th>Queue</th><th title="Static declarations and default routes. Dispatch-time overrides may change the destination.">Assigned job classes</th><th></th></tr></thead><tbody>
     @foreach($supervisor['queues'] as $queue)
@@ -28,4 +31,5 @@
 @foreach($unmapped as $job)<tr><td title="{{ $job['class'] }}">{{ class_basename($job['class']) }}</td><td>{{ $job['dynamic'] ? 'Dynamic / inherited — unresolved' : $job['connection'].' · '.implode(', ', $job['queues']) }}</td></tr>@endforeach
 </tbody></table></div></section>
 @endif
+</div>
 @endsection

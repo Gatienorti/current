@@ -80,7 +80,7 @@ final class QueuesController
                 $allocation = $members->isNotEmpty() && $members->every(fn ($entry) => $entry['running'] !== null) ? $members->sum('running') : null;
                 $tables[] = ['name' => $pool['name'], 'connection' => $pool['connection'], 'queues' => $rows,
                     'workers' => $balanced ? 'Min '.$pool['min_workers'].' / queue · Max '.$pool['max_workers'].' total' : $pool['workers'].' workers · Limits '.$pool['min_workers'].'–'.$pool['max_workers'], 'balance' => $pool['balance'],
-                    'allocated' => $allocation];
+                    'allocated' => $allocation, 'allocation_label' => 'Live workers'];
             }
         } catch (Throwable) { $available = false; }
         return view('current::queues', ['section' => 'queues', 'supervisorTables' => $tables, 'environment' => app()->environment(),

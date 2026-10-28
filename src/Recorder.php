@@ -125,6 +125,7 @@ final class Recorder
                 $this->store->table('attempts')->insert(array_merge([
                     'id' => $attemptId, 'job_id' => $jobId, 'worker_id' => $this->workerId,
                     'reported_attempt' => $job->attempts(), 'status' => 'processing', 'started_at' => microtime(true),
+                    'policy_json' => app(Support\AttemptPolicy::class)->capture($event),
                 ], $outline));
                 $this->store->table('jobs')->where('id', $jobId)->update([
                     'status' => $this->store->latestOutcome($jobId), 'observed_at' => microtime(true),
@@ -226,14 +227,19 @@ final class Recorder
             return;
         }
         $context = $this->executions[$job];
-        $this->guard(function () use ($context, $status, $job) {
-            $this->store->cycleTransaction($job->uuid(), $job->getConnectionName(), function () use ($context, $status) {
+        $monitoredExpiry = ExecutionBackend::native() ? app(Native\MonitoredTags::class)->expiresAt($job->payload()) : null;
+        $this->guard(function () use ($context, $status, $job, $monitoredExpiry) {
+            $this->store->cycleTransaction($job->uuid(), $job->getConnectionName(), function () use ($context, $status, $monitoredExpiry) {
                 $this->store->table('attempts')->where('id', $context['attempt_id'])->whereNull('finished_at')->update([
                     'status' => $status, 'finished_at' => microtime(true),
                 ]);
                 $this->store->table('jobs')->where('id', $context['job_id'])->update([
                     'status' => $this->store->latestOutcome($context['job_id']), 'observed_at' => microtime(true),
                 ]);
+                if ($monitoredExpiry !== null) {
+                    $this->store->table('jobs')->where('id', $context['job_id'])->where('expires_at', '<', $monitoredExpiry)
+                        ->update(['expires_at' => $monitoredExpiry]);
+                }
             });
         });
         unset($this->executions[$job]);
@@ -302,7 +308,9 @@ final class Recorder
             $result = $callback();
             $now = hrtime(true) / 1e9;
             if ($now >= $this->nextHeartbeatAt) {
-                $this->store->table('meta')->updateOrInsert(['key' => 'last_observed_at'], ['value' => (string) microtime(true)]);
+                // Producers/workers can publish their first heartbeat together.
+                // One atomic statement avoids a duplicate-key race opening the circuit.
+                $this->store->table('meta')->upsert([['key' => 'last_observed_at', 'value' => (string) microtime(true)]], ['key'], ['value']);
                 $this->nextHeartbeatAt = $now + 5;
             }
 

@@ -22,9 +22,6 @@ func actionFingerprint(uuid, connection, dispatch string) string {
 }
 func jobAction(tx *sql.Tx, v Event, cache map[string]*JobAction) (*JobAction, error) {
 	dispatch, _ := v.Job["dispatch_id"].(string)
-	if dispatch == "" {
-		return nil, nil
-	}
 	hash := actionFingerprint(v.Job["external_id"].(string), v.Job["connection"].(string), dispatch)
 	if action, found := cache[hash]; found {
 		return action, nil

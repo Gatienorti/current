@@ -11,6 +11,61 @@ use RuntimeException;
 
 final class NativeRuntimeSamplerTest extends TestCase
 {
+    public function test_light_reader_samples_history_without_booting_laravel_or_providers(): void
+    {
+        dispatch(new PaymentJob('success')); $this->work();
+        $end = microtime(true) - 1;
+        $this->store()->table('attempts')->update(['started_at' => $end - 2, 'finished_at' => $end]);
+        $snapshot = app(RuntimeSnapshot::class);
+        $source = $snapshot->readerSource();
+        $this->assertIsArray($source);
+        $marker = tempnam(sys_get_temp_dir(), 'runtime-autoload-audit-'); unlink($marker);
+        $autoload = tempnam(sys_get_temp_dir(), 'runtime-autoload-');
+        $vendor = dirname((new \ReflectionClass(\Composer\Autoload\ClassLoader::class))->getFileName(), 2).'/autoload.php';
+        file_put_contents($autoload, '<?php require '.var_export($vendor, true).'; register_shutdown_function(function () { file_put_contents('.var_export($marker, true).', json_encode(["application" => class_exists(\\Illuminate\\Foundation\\Application::class, false), "recorder" => class_exists(\\Current\\Recorder::class, false), "peak" => memory_get_peak_usage(true)])); });');
+        $reader = new \Symfony\Component\Process\Process([PHP_BINARY, dirname((new \ReflectionClass(RuntimeSnapshot::class))->getFileName()).'/runtime-sample.php']);
+        $reader->setInput(json_encode(['autoload' => $autoload, 'source' => $source, 'routes' => ['redis' => ['lens-demo', 'missing']]]))->setTimeout(5);
+        try {
+            $reader->run();
+            $this->assertSame(0, $reader->getExitCode(), $reader->getErrorOutput());
+            $rows = json_decode($reader->getOutput(), true, flags: JSON_THROW_ON_ERROR)['rows'];
+            $this->assertEqualsWithDelta(2, $rows[0]['runtime'], .001);
+            $this->assertNull($rows[1]['runtime']);
+            $audit = json_decode(file_get_contents($marker), true);
+            $this->assertFalse($audit['application'], 'The lightweight reader booted Laravel.');
+            $this->assertFalse($audit['recorder']);
+            $this->assertSame('', $reader->getErrorOutput());
+            $reader->setInput(json_encode(['autoload' => $autoload, 'source' => ['driver' => 'invalid-private-password'], 'routes' => ['redis' => ['lens-demo']]]))->run();
+            $this->assertSame(1, $reader->getExitCode());
+            $this->assertSame('', $reader->getOutput());
+            $this->assertSame('', $reader->getErrorOutput());
+            foreach (['{invalid', str_repeat('x', 262145)] as $bad) {
+                $reader->setInput($bad)->run();
+                $this->assertSame(1, $reader->getExitCode());
+                $this->assertSame('', $reader->getOutput().$reader->getErrorOutput());
+            }
+        } finally {
+            foreach ([$marker, $autoload] as $file) { if (is_file($file)) { unlink($file); } }
+        }
+    }
+
+    public function test_custom_grammar_keeps_the_application_bootstrap_sampler(): void
+    {
+        $snapshot = app(RuntimeSnapshot::class);
+        $this->assertIsArray($snapshot->readerSource());
+        $connection = $this->store()->connection();
+        $connection->setQueryGrammar(new class($connection) extends \Illuminate\Database\Query\Grammars\SQLiteGrammar {});
+        $this->assertNull($snapshot->readerSource());
+    }
+
+    public function test_database_manager_extensions_keep_the_application_bootstrap_sampler(): void
+    {
+        $snapshot = app(RuntimeSnapshot::class);
+        $this->assertIsArray($snapshot->readerSource());
+        app('db')->extend('lens', fn () => $this->store()->connection());
+        $this->assertNull($snapshot->readerSource());
+    }
+
     private function supervisorBinary(): string
     {
         $binary = dirname(__DIR__).'/supervisor/current-supervisor';

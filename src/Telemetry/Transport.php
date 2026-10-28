@@ -9,7 +9,7 @@ use RuntimeException;
 /** Dedicated, bounded connection; never mutates the application's Redis client. */
 final class Transport
 {
-    private ?\Redis $client = null;
+    private \Redis|PredisClient|null $client = null;
 
     private ?array $settingsInput = null;
 
@@ -25,16 +25,20 @@ final class Transport
         $database = $config->get('database', []);
         $telemetry = $current['telemetry'] ?? [];
         $sql = Arr::get($database, 'connections.'.($current['connection'] ?? ''));
-        $redis = Arr::get($database, 'redis.'.($telemetry['redis_connection'] ?? ''));
+        $redisSource = Arr::get($database, 'redis.'.($telemetry['redis_connection'] ?? ''));
         $prefix = Arr::get($database, 'redis.options.prefix', '');
-        $input = [$sql, $redis, $telemetry, $prefix];
+        $client = Arr::get($database, 'redis.client', 'phpredis');
+        $options = Arr::get($database, 'redis.options', []);
+        $redis = $this->redisConfiguration($redisSource, $options, $client);
+        $input = [$sql, $redisSource, $telemetry, $prefix, $client, $options];
         if ($input !== $this->settingsInput) {
             $this->disconnect();
-        } elseif ($this->validatedSettings !== null && empty($sql['options'])) {
+        } elseif ($this->validatedSettings !== null && empty($sql['options'])
+            && empty($this->validatedSettings['redis_tls']['ca']) && empty($this->validatedSettings['redis_tls']['cert']) && empty($this->validatedSettings['redis_tls']['key'])) {
             return $this->validatedSettings;
         }
-        // PDO TLS options include mutable filesystem inputs. Revalidate those on
-        // each access, preserving certificate readability and verification checks.
+        // SQL/Redis TLS options include mutable filesystem inputs. Revalidate
+        // those on each access, preserving readability and verification checks.
         $driver = $sql['driver'] ?? '';
         if (! in_array($driver, ['sqlite', 'mysql', 'mariadb'], true) || empty($sql['database']) || ! empty($sql['prefix'])) {
             throw new RuntimeException('Async telemetry requires SQLite, MySQL or MariaDB without a table prefix.');
@@ -48,25 +52,37 @@ final class Transport
         if ($driver !== 'sqlite' && (! is_string($sql['host'] ?? null) || ! is_string($sql['database']) || ! is_string($sql['username'] ?? null))) {
             throw new RuntimeException('Configure an explicit SQL host, database and username for async telemetry.');
         }
-        if (! extension_loaded('redis') || ! is_array($redis) || isset($redis['url']) || ! isset($redis['host'])) {
-            throw new RuntimeException('Async telemetry requires phpredis and a named standalone Redis host connection (no URL/cluster).');
+        if (! \Current\Native\ObservationRedis::supportedClient() || ! is_array($redis) || isset($redis['url']) || ! isset($redis['host'])) {
+            throw new RuntimeException('Async telemetry requires phpredis or installed Predis 2.3/3.x and a named standalone Redis host connection (no URL/cluster).');
         }
         $host = $redis['host'];
         if (! is_string($host) || str_contains($host, '://') || str_contains($host, '/')) {
             throw new RuntimeException('Configure the Redis hostname and optional scheme=tls separately.');
         }
+        if (str_contains($host, ':') && ! filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            throw new RuntimeException('Configure Redis with an unbracketed IPv6 literal and a separate port.');
+        }
+        $address = str_contains($host, ':') ? '['.$host.']:'.($redis['port'] ?? 6379) : $host.':'.($redis['port'] ?? 6379);
+        $scheme = $redis['scheme'] ?? 'tcp';
+        if (! is_string($scheme) || ! in_array(strtolower($scheme), ['tcp', 'tls'], true)) {
+            throw new RuntimeException('Async Redis requires scheme=tcp or scheme=tls.');
+        }
+        $redis['scheme'] = strtolower($scheme);
+        $redisTls = $this->redisTls($redis, $client);
         $namespace = $telemetry['namespace'] ?? null;
         if (! is_string($namespace) || ! preg_match('/^[a-zA-Z0-9_-]{1,60}$/D', $namespace)) {
             throw new RuntimeException('Invalid telemetry namespace.');
         }
 
         $settings = [
+            'client' => $client,
             'protocol' => 2,
             'sql' => ['driver' => $driver, 'host' => $sql['host'] ?? '', 'port' => (int) ($sql['port'] ?? 3306), 'socket' => $sql['unix_socket'] ?? '', 'database' => $sql['database'], 'username' => $sql['username'] ?? '', 'password' => $sql['password'] ?? '', 'tls' => $this->sqlTls($sql['options'] ?? [])],
-            'address' => $host.':'.($redis['port'] ?? 6379), 'host' => $host,
+            'address' => $address, 'host' => $host,
             'port' => (int) ($redis['port'] ?? 6379), 'database' => (int) ($redis['database'] ?? 0),
             'username' => $redis['username'] ?? '', 'password' => $redis['password'] ?? '',
             'tls' => ($redis['scheme'] ?? 'tcp') === 'tls',
+            'redis_tls' => $redisTls,
             'prefix' => '{current:'.$namespace.':'.substr(hash('sha256', (string) $prefix), 0, 16).'}:', 'file' => $sql['database'],
             'max_age' => max(60, min(86400, (int) ($telemetry['max_age_seconds'] ?? 3600))),
             'max_bytes' => max(4096, min(262144, (int) ($telemetry['max_event_bytes'] ?? 131072))),
@@ -75,6 +91,43 @@ final class Transport
         $this->settingsInput = $input;
 
         return $this->validatedSettings = $settings;
+    }
+
+    private function redisConfiguration(mixed $source, array $options, string $client): mixed
+    {
+        if (! is_array($source)) { return $source; }
+        if ($client === 'predis') {
+            $defaults = $source['options']['parameters'] ?? $options['parameters'] ?? [];
+            return array_replace(is_array($defaults) ? $defaults : [], $source);
+        }
+        return array_replace($source, $options, $source['options'] ?? []);
+    }
+
+    private function redisTls(array $redis, string $client): array
+    {
+        $tls = ['ca' => '', 'cert' => '', 'key' => '', 'server_name' => ''];
+        $ssl = $client === 'predis' ? ($redis['ssl'] ?? []) : ($redis['context']['stream'] ?? []);
+        if (! is_array($ssl)) { throw new RuntimeException('Redis TLS options must be an array.'); }
+        if ($ssl && ($redis['scheme'] ?? 'tcp') !== 'tls') { throw new RuntimeException('Redis TLS options require scheme=tls.'); }
+        foreach ($ssl as $option => $value) {
+            if (in_array($option, ['verify_peer', 'verify_peer_name', 'SNI_enabled'], true)) {
+                if (filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) !== true) { throw new RuntimeException('Async Redis TLS requires peer and hostname verification.'); }
+            } elseif ($option === 'allow_self_signed') {
+                if (filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) !== false) { throw new RuntimeException('Async Redis TLS requires trusted server certificates.'); }
+            } elseif ($option === 'peer_name') {
+                if (! is_string($value) || ! preg_match('/^[a-zA-Z0-9_.:-]{1,253}$/D', $value)) { throw new RuntimeException('Redis TLS server name is invalid.'); }
+                $tls['server_name'] = $value;
+            } elseif (isset(['cafile' => true, 'local_cert' => true, 'local_pk' => true][$option])) {
+                if (is_string($value)) { clearstatcache(true, $value); }
+                if (! is_string($value) || strlen($value) > 4096 || str_contains($value, "\0") || ! is_file($value) || ! is_readable($value) || filesize($value) > 1048576) {
+                    throw new RuntimeException('Redis TLS certificate files must be readable and at most 1 MiB.');
+                }
+                $tls[['cafile' => 'ca', 'local_cert' => 'cert', 'local_pk' => 'key'][$option]] = realpath($value);
+            } else { throw new RuntimeException('This Redis TLS option cannot be mirrored by the collector.'); }
+        }
+        if ($tls['cert'] !== '' && $tls['key'] === '') { $tls['key'] = $tls['cert']; } // PHP also accepts a combined certificate/key PEM.
+        if ($tls['cert'] === '' && $tls['key'] !== '') { throw new RuntimeException('Redis TLS requires a client certificate with its key.'); }
+        return $tls;
     }
 
     private function sqlTls(array $options): array
@@ -109,18 +162,29 @@ final class Transport
         return $tls;
     }
 
-    public function client(): \Redis
+    public function client(): \Redis|PredisClient
     {
         return $this->clientForSettings($this->settings());
     }
 
-    private function clientForSettings(array $s): \Redis
+    private function clientForSettings(array $s): \Redis|PredisClient
     {
         if ($this->client) {
             return $this->client;
         }
+        if ($s['client'] === 'predis') {
+            $ssl = $this->redisSslOptions($s['redis_tls']);
+            return $this->client = new PredisClient(new \Predis\Client([
+                'scheme' => $s['tls'] ? 'tls' : 'tcp', 'host' => $s['host'], 'port' => $s['port'],
+                'database' => $s['database'], 'username' => $s['username'] === '' ? null : $s['username'],
+                'password' => $s['password'] === '' ? null : $s['password'],
+                'timeout' => 0.2, 'read_write_timeout' => 0.2, 'persistent' => false, 'protocol' => 2,
+                'ssl' => $ssl,
+            ], ['prefix' => $s['prefix'], 'exceptions' => true]));
+        }
         $r = new \Redis;
-        $r->connect(($s['tls'] ? 'tls://' : '').$s['host'], $s['port'], 0.2, null, 0, 0.2);
+        $r->connect(($s['tls'] ? 'tls://' : '').$s['host'], $s['port'], 0.2, null, 0, 0.2,
+            $s['tls'] ? ['stream' => $this->redisSslOptions($s['redis_tls'])] : []);
         if ($s['password'] !== '') {
             $r->auth($s['username'] !== '' ? [$s['username'], $s['password']] : $s['password']);
         }
@@ -130,7 +194,16 @@ final class Transport
         return $this->client = $r;
     }
 
-    public function cycle(string $uuid, string $connection, ?string $dispatchId = null): array
+    private function redisSslOptions(array $tls): array
+    {
+        $ssl = ['verify_peer' => true, 'verify_peer_name' => true];
+        foreach (['ca' => 'cafile', 'cert' => 'local_cert', 'key' => 'local_pk', 'server_name' => 'peer_name'] as $field => $option) {
+            if ($tls[$field] !== '') { $ssl[$option] = $tls[$field]; }
+        }
+        return $ssl;
+    }
+
+    public function cycle(string $uuid, string $connection, ?string $dispatchId = null, array $payload = []): array
     {
         $s = $this->settings();
         $r = $this->clientForSettings($s);
@@ -143,7 +216,7 @@ final class Transport
             }
         }
         // The collector resolves retained history; dispatch never reads history SQL.
-        $expires = $now + max(1, min((int) config('current.retention_days', 7), (int) config('current.max_retention_days', 30))) * 86400;
+        $expires = $now + \Current\Support\JobRetention::seconds($payload);
         $candidate = json_encode(['id' => (string) Str::ulid(), 'first_observed_at' => $now, 'expires_at' => $expires], JSON_THROW_ON_ERROR);
         $value = $r->eval("local old=redis.call('GET',KEYS[1]); if old and cjson.decode(old).expires_at > tonumber(ARGV[1]) then return old end redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); return ARGV[2]", [$key, $now, $candidate, max(60, min((int) ceil($expires - $now) + $s['max_age'], 2 * $s['max_age']))], 1);
 

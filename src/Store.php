@@ -124,8 +124,7 @@ final class Store
     /** Call inside the identity transaction. Lock absent keys too on InnoDB. */
     public function jobAction(string $uuid, string $connection, ?string $dispatch): ?object
     {
-        if ($dispatch === null) { return null; }
-        $action = $this->table('job_actions')->where('identity_hash', Support\DispatchIdentity::fingerprint($uuid, $connection, $dispatch))->lockForUpdate()->first();
+        $action = $this->table('job_actions')->where('identity_hash', Support\DispatchIdentity::fingerprint($uuid, $connection, $dispatch ?? ''))->lockForUpdate()->first();
         return $action && $action->expires_at > microtime(true) ? $action : null;
     }
 
@@ -133,7 +132,8 @@ final class Store
     {
         $id = (string) Str::ulid();
         $now = microtime(true);
-        $retention = max(1, min((int) config('current.retention_days', 7), (int) config('current.max_retention_days', 30)));
+        $retention = Support\JobRetention::seconds($payload);
+        $monitoredExpiry = ExecutionBackend::native() ? app(Native\MonitoredTags::class)->expiresAt($payload, $now) : null;
         $dispatchId = Support\DispatchIdentity::fromPayload($payload);
         $this->table('jobs')->insert(array_merge($dispatchId ? ['dispatch_id' => $dispatchId] : [], [
             'id' => $id, 'external_id' => mb_substr($externalId, 0, 100),
@@ -150,7 +150,7 @@ final class Store
             'payload_created_at' => is_numeric($payload['createdAt'] ?? null) ? (float) $payload['createdAt'] : null,
             'batch_id' => is_string(data_get($payload, 'data.batchId')) ? mb_substr($payload['data']['batchId'], 0, 100) : null,
             'first_observed_at' => $now, 'observed_at' => $now,
-            'expires_at' => $now + $retention * 86400,
+            'expires_at' => max($now + $retention, $monitoredExpiry ?? 0),
         ]));
         if (is_bool($payload['silenced'] ?? null)) {
             $this->table('meta')->insertOrIgnore(['key' => 'silenced_capture_started_at', 'value' => (string) $now]);

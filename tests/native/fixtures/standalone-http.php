@@ -5,7 +5,22 @@ foreach (['CURRENT_SUPERVISOR_NATIVE', 'CURRENT_SUPERVISOR_HISTORY'] as $flag) {
 putenv('APP_ENV=local'); $_ENV['APP_ENV'] = $_SERVER['APP_ENV'] = 'local';
 $_ENV['EXPERIMENT_ROOT'] = $_SERVER['EXPERIMENT_ROOT'] = getenv('EXPERIMENT_ROOT');
 $app = require __DIR__.'/boot.php';
+set_exception_handler(function (Throwable $error) { fwrite(STDERR, $error->getMessage()."\n".$error->getTraceAsString()."\n"); exit(1); });
 if (class_exists(Laravel\Horizon\Horizon::class)) { throw new RuntimeException('Horizon unexpectedly installed'); }
+// Resolve Laravel's lazy console first: historical Symfony versions initialize
+// Laravel's deprecation logging channel here, independently of these commands.
+Illuminate\Support\Facades\Artisan::all();
+$originalConfig = config()->all();
+$previewExit = Illuminate\Support\Facades\Artisan::call('current:migrate-horizon', ['--json' => true]);
+$preview = json_decode(Illuminate\Support\Facades\Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+if ($previewExit !== 1 || $preview['valid'] || $preview['issues'][0]['code'] !== 'horizon') { throw new RuntimeException('Missing-Horizon preview must fail clearly'); }
+Illuminate\Support\Facades\Artisan::call('current:doctor', ['--json' => true]);
+$doctor = json_decode(Illuminate\Support\Facades\Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+$checks = array_column($doctor['checks'], 'status', 'id');
+if (! is_bool($doctor['ready']) || $checks['backend'] !== 'pass' || $checks['history_schema'] !== 'pass' || config()->all() !== $originalConfig) {
+    $changedKeys = array_values(array_filter(array_keys(config()->all() + $originalConfig), fn ($key) => config($key) !== ($originalConfig[$key] ?? null)));
+    throw new RuntimeException('Standalone doctor check failed: '.json_encode(['checks' => $checks, 'changed_config_sections' => $changedKeys]));
+}
 config()->set('session.driver', 'array');
 config()->set('auth.guards.web', ['driver' => 'session', 'provider' => 'users']);
 config()->set('auth.defaults.guard', 'web');

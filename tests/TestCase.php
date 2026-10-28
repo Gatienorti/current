@@ -57,6 +57,10 @@ abstract class TestCase extends LaravelTestCase
         (require dirname(__DIR__).'/database/migrations/2026_10_28_000014_add_native_metric_snapshots.php')->up();
         (require dirname(__DIR__).'/database/migrations/2026_10_28_000015_add_async_identity_aliases.php')->up();
         (require dirname(__DIR__).'/database/migrations/2026_10_28_000016_add_native_maintenance.php')->up();
+        (require dirname(__DIR__).'/database/migrations/2026_10_28_000017_add_native_retry_claims.php')->up();
+        (require dirname(__DIR__).'/database/migrations/2026_10_28_000018_add_native_queue_samples.php')->up();
+        (require dirname(__DIR__).'/database/migrations/2026_10_28_000019_add_maintenance_operations.php')->up();
+        (require dirname(__DIR__).'/database/migrations/2026_10_28_000020_add_attempt_policy.php')->up();
         Schema::connection('app')->create('failed_jobs', function ($table) {
             $table->id();
             $table->string('uuid')->unique();

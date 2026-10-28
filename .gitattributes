@@ -33,3 +33,6 @@
 /collector/dist export-ignore
 /supervisor/current-supervisor export-ignore
 /supervisor/dist export-ignore
+
+# Public README images are not needed in Composer installations.
+/resources/images export-ignore

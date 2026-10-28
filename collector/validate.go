@@ -60,6 +60,9 @@ func validate(v Event) error {
 	if v.Job["expires_at"].(float64) > v.Observed+366*86400 {
 		return invalid
 	}
+	if v.MonitoredExpires != 0 && (v.Version != 2 || math.IsNaN(v.MonitoredExpires) || math.IsInf(v.MonitoredExpires, 0) || v.MonitoredExpires <= v.Observed || v.MonitoredExpires > v.Observed+30*86400) {
+		return invalid
+	}
 	if len(v.Enqueue) > 0 && v.Enqueue["id"] != v.Job["id"] {
 		return invalid
 	}

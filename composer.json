@@ -1,6 +1,6 @@
 {
     "name": "gatienorti/current",
-    "description": "Current: job investigation and execution history for Laravel Horizon.",
+    "description": "Current: Laravel queue operations, job investigation, webhooks and broadcasts.",
     "type": "library",
     "license": "MIT",
     "require": {
@@ -39,7 +39,11 @@
         "test:compatibility": "php tests/compatibility/run.php"
     },
     "suggest": {
-        "laravel/horizon": "Required for the default Horizon execution backend (^5.30)."
+        "predis/predis": "Optional alternative Redis client for native execution and async telemetry (^2.3 || ^3.0).",
+        "laravel/horizon": "Required for the default Horizon execution backend (^5.30).",
+        "illuminate/notifications": "Optional native queue wait notifications; match your Laravel major version.",
+        "laravel/slack-notification-channel": "Optional native queue wait alerts through Slack (^3.0).",
+        "laravel/vonage-notification-channel": "Optional native queue wait alerts through Vonage (^3.0)."
     },
     "conflict": {
         "laravel/horizon": "<5.30 || >=6.0"

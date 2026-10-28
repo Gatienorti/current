@@ -33,6 +33,13 @@ final class CollectCommand extends Command
             if (! $probe->isSuccessful() || ($capabilities['identity_protocol'] ?? 0) !== 2 || ($capabilities['maintenance_protocol'] ?? 0) !== 1) {
                 throw new \RuntimeException('Upgrade the collector binary for telemetry protocol 2 and maintenance support before starting it.');
             }
+            if (\Current\ExecutionBackend::native() && app(\Current\Native\MonitoredTags::class)->hasPolicies()
+                && ($capabilities['monitored_retention'] ?? 0) !== 1) {
+                throw new \RuntimeException('Upgrade the collector binary for monitored-tag retention before starting it with active monitored tags.');
+            }
+            if (array_filter($settings['redis_tls']) && ($capabilities['redis_tls'] ?? 0) !== 1) {
+                throw new \RuntimeException('Upgrade the collector binary for the configured Redis TLS options before starting it.');
+            }
             // Replace this CLI process, retaining its PID for the service manager.
             // The Go process obtains settings from a short-lived PHP child over a
             // bounded private pipe: no credentials in argv, environment or files.

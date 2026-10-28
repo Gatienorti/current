@@ -17,7 +17,9 @@ final class NativeWorkerOptionsTest extends TestCase
         config()->set('current.execution_backend', 'native');
         config()->set('queue.connections.redis.driver', 'current-redis');
         config()->set('current.native', ['state_directory' => '/tmp/current-test-plan', 'instance' => 'test', 'grace_seconds' => 10,
-            'pools' => ['payments' => ['connection' => 'redis', 'queues' => ['lens-demo'], 'timeout' => 2, 'tries' => 0, 'backoff' => [2, 4]]]]);
+            // These Artisan workers share PHPUnit's accumulated heap. Real
+            // subprocess workers retain their independently configured budget.
+            'pools' => ['payments' => ['connection' => 'redis', 'queues' => ['lens-demo'], 'timeout' => 2, 'memory' => 512, 'tries' => 0, 'backoff' => [2, 4]]]]);
     }
 
     protected function tearDown(): void

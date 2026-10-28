@@ -64,10 +64,10 @@ final class Supervisor
             }
             try {
                 $stat = fstat($file);
-                if (($stat['mode'] & 0170000) !== 0100000 || $stat['size'] > 1048576) {
+                if (($stat['mode'] & 0170000) !== 0100000 || $stat['size'] > 8388608) {
                     return $unavailable;
                 }
-                $data = json_decode(stream_get_contents($file, 1048577), true, 32, JSON_THROW_ON_ERROR);
+                $data = json_decode(stream_get_contents($file, 8388609), true, 32, JSON_THROW_ON_ERROR);
             } finally {
                 fclose($file);
             }
@@ -75,7 +75,7 @@ final class Supervisor
                 || ! is_string($data['owner'] ?? null) || ! preg_match('/^[a-f0-9]{32}$/D', $data['owner'])
                 || ! in_array($data['state'] ?? null, ['starting', 'running', 'degraded', 'partial', 'pausing', 'paused', 'stopping', 'stopped', 'failed'], true)
                 || ! is_string($data['updated_at'] ?? null) || ! preg_match('/^\d{4}-\d{2}-\d{2}T.+(?:Z|[+-]\d{2}:\d{2})$/D', $data['updated_at'])
-                || ! is_array($data['pools'] ?? null) || count($data['pools']) > 32 || ! $data['pools']) {
+                || ! is_array($data['pools'] ?? null) || count($data['pools']) > Plan::MAX_POOLS || ! $data['pools']) {
                 return $unavailable;
             }
             $observed = new DateTimeImmutable($data['updated_at']);
@@ -88,20 +88,20 @@ final class Supervisor
             foreach ($data['pools'] as $pool) {
                 if (! is_string($pool['name'] ?? null) || ! preg_match('/^[a-z][a-z0-9_-]{0,63}$/D', $pool['name']) || isset($names[$pool['name']])
                     || ! is_int($pool['workers'] ?? null) || ! is_int($pool['min_workers'] ?? null) || ! is_int($pool['max_workers'] ?? null)
-                    || $pool['min_workers'] < 1 || $pool['max_workers'] > 256 || $pool['workers'] < $pool['min_workers'] || $pool['workers'] > $pool['max_workers']
+                    || $pool['min_workers'] < 0 || $pool['max_workers'] < 1 || $pool['max_workers'] > Plan::MAX_WORKERS || $pool['workers'] < $pool['min_workers'] || $pool['workers'] > $pool['max_workers']
                     || (isset($pool['state']) && ! in_array($pool['state'], ['starting', 'running', 'degraded', 'pausing', 'paused', 'stopping', 'stopped', 'failed'], true))
-                    || ! is_array($pool['slots'] ?? null) || count($pool['slots']) < 1 || count($pool['slots']) > $pool['max_workers']) {
+                    || ! is_array($pool['slots'] ?? null) || count($pool['slots']) > $pool['max_workers']) {
                     return $unavailable;
                 }
                 $group = $pool['group'] ?? ''; $groupLimit = $pool['group_limit'] ?? 0; $queue = $pool['queue'] ?? '';
                 if (! is_string($group) || ! is_int($groupLimit) || ! is_string($queue)
-                    || ($group === '' ? ($groupLimit !== 0 || $queue !== '') : (! preg_match('/^[a-z][a-z0-9_-]{0,63}$/D', $group) || $groupLimit < 1 || $groupLimit > 256 || ! preg_match('/^[a-zA-Z0-9_.:{}-]{1,128}$/D', $queue)))) { return $unavailable; }
+                    || ($group === '' ? ($groupLimit !== 0 || $queue !== '') : (! preg_match('/^[a-z][a-z0-9_-]{0,63}$/D', $group) || $groupLimit < 1 || $groupLimit > Plan::MAX_WORKERS || ! preg_match('/^[a-zA-Z0-9_.:{}-]{1,128}$/D', $queue)))) { return $unavailable; }
                 $connection = $pool['connection'] ?? ''; $queues = $pool['queues'] ?? [];
-                if (! is_string($connection) || ! is_array($queues) || ! array_is_list($queues) || count($queues) > 32
+                if (! is_string($connection) || ! is_array($queues) || ! array_is_list($queues) || count($queues) > Plan::MAX_QUEUES
                     || ($connection === '' ? (bool) $queues : (! preg_match('/^[a-zA-Z0-9_-]{1,64}$/D', $connection) || ! $queues))) { return $unavailable; }
                 foreach ($queues as $q) { if (! is_string($q) || ! preg_match('/^[a-zA-Z0-9_.:{}-]{1,128}$/D', $q)) { return $unavailable; } }
                 $names[$pool['name']] = true;
-                $total += $pool['workers']; $running = 0;
+                $total += $pool['workers']; $running = 0; $consuming = 0;
                 foreach ($pool['slots'] as $slot) {
                     if (! in_array($slot['state'] ?? null, ['starting', 'running', 'backoff', 'stopping', 'stopped', 'paused', 'failed'], true)
                         || ! is_int($slot['pid'] ?? null) || $slot['pid'] < 0 || ! is_int($slot['starts'] ?? null) || $slot['starts'] < 0
@@ -109,11 +109,12 @@ final class Supervisor
                         return $unavailable;
                     }
                     $running += $slot['pid'] > 0 ? 1 : 0;
+                    $consuming += $slot['pid'] > 0 && $slot['state'] === 'running' ? 1 : 0;
                 }
                 $pools[] = ['name' => $pool['name'], 'connection' => $connection, 'queues' => $queues, 'group' => $group, 'group_limit' => $groupLimit, 'queue' => $queue, 'workers' => $pool['workers'], 'min' => $pool['min_workers'], 'max' => $pool['max_workers'],
-                    'running' => $stale ? null : $running, 'state' => $stale ? 'unknown' : ($pool['state'] ?? ($data['state'] === 'stopped' ? 'stopped' : ($running === $pool['workers'] ? 'running' : 'degraded')))];
+                    'running' => $stale ? null : $running, 'consuming' => $stale ? null : $consuming, 'state' => $stale ? 'unknown' : ($pool['state'] ?? ($data['state'] === 'stopped' ? 'stopped' : ($running === $pool['workers'] ? 'running' : 'degraded')))];
             }
-            if ($total > 256) {
+            if ($total > Plan::MAX_WORKERS) {
                 return $unavailable;
             }
 

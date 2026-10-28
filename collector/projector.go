@@ -8,16 +8,17 @@ import (
 )
 
 type Event struct {
-	Version      int                    `json:"version"`
-	ID           string                 `json:"id"`
-	Observed     float64                `json:"observed_at"`
-	Job          map[string]interface{} `json:"job"`
-	Enqueue      map[string]interface{} `json:"enqueue"`
-	Attempt      map[string]interface{} `json:"attempt"`
-	Step         map[string]interface{} `json:"step"`
-	Tags         []string               `json:"tags"`
-	Revision     int                    `json:"revision"`
-	StepRevision int                    `json:"step_revision"`
+	Version          int                    `json:"version"`
+	ID               string                 `json:"id"`
+	Observed         float64                `json:"observed_at"`
+	Job              map[string]interface{} `json:"job"`
+	Enqueue          map[string]interface{} `json:"enqueue"`
+	Attempt          map[string]interface{} `json:"attempt"`
+	Step             map[string]interface{} `json:"step"`
+	Tags             []string               `json:"tags"`
+	Revision         int                    `json:"revision"`
+	StepRevision     int                    `json:"step_revision"`
+	MonitoredExpires float64                `json:"monitored_expires_at,omitempty"`
 }
 
 var columns = map[string]map[string]bool{}

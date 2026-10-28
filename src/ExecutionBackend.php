@@ -14,7 +14,7 @@ final class ExecutionBackend
     {
         return match (config('current.execution_backend', 'horizon')) {
             'horizon' => true,
-            'native' => in_array($capability, ['queues', 'metrics', 'batches', 'silenced', 'retry', 'native', 'index', 'dashboard', 'monitoring', 'recent', 'pending', 'processing', 'completed', 'failed', 'show', 'schedule', 'webhooks', 'broadcasts', 'css', 'theme', 'filters', 'steps', 'map', 'refresh'], true),
+            'native' => in_array($capability, ['queues', 'metrics', 'batches', 'silenced', 'retry', 'native', 'index', 'dashboard', 'monitoring', 'recent', 'pending', 'processing', 'completed', 'failed', 'show', 'schedule', 'webhooks', 'broadcasts', 'css', 'theme', 'filters', 'steps', 'map', 'refresh', 'batch-retry'], true),
             default => false,
         };
     }

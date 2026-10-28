@@ -9,6 +9,16 @@ permissions:
   contents: read
 
 jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - run: node --test tests/frontend/*.test.cjs
   matrix:
     runs-on: ubuntu-latest
     outputs:
@@ -134,3 +144,34 @@ jobs:
           CURRENT_TEST_SQL_PASSWORD: current-test-only
         run: go test -race -count=1 -run TestSQLMaintenanceAbsenceLock ./...
       - run: vendor/bin/phpunit -c phpunit.xml --filter 'AsyncTelemetryTest|SynchronousSqlTest'
+  dynamodb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      dynamodb:
+        image: amazon/dynamodb-local@sha256:6ada631ec7aa5fc83446855eb17233e3dad184fec47477e8140c6c569cfe0c86
+        ports: ['8000:8000']
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, dom, simplexml, pdo_sqlite, sqlite3, redis, pcntl, posix
+          tools: composer:v2
+          coverage: none
+      - name: Install optional SDK in the disposable test checkout
+        run: composer require --dev aws/aws-sdk-php:3.402.2 --no-scripts --no-plugins --no-progress --no-interaction
+      - name: Prepare storage and wait for local service
+        run: |
+          mkdir -p prototype/bootstrap/cache prototype/storage/data prototype/storage/logs prototype/storage/framework/{views,cache,sessions}
+          for attempt in $(seq 1 30); do
+            if php -r '$socket = @fsockopen("127.0.0.1", 8000); exit($socket ? 0 : 1);'; then break; fi
+            if [ "$attempt" = 30 ]; then exit 1; fi
+            sleep 1
+          done
+      - name: Verify actual SDK pagination and conditional deletes
+        env:
+          CURRENT_DYNAMO_LOCAL_ENDPOINT: http://127.0.0.1:8000
+        run: vendor/bin/phpunit -c phpunit.xml --filter NativeDynamoIntegrationTest

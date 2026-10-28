@@ -6,7 +6,7 @@ use Current\Store;
 use InvalidArgumentException;
 use RuntimeException;
 
-/** SQL aggregation runs only in the isolated sampler command. */
+/** SQL aggregation runs only in the isolated sampler process. */
 final class RuntimeSnapshot
 {
     public const TTL = 30;
@@ -17,6 +17,37 @@ final class RuntimeSnapshot
         $source = config('database.connections.'.config('current.connection'));
         if (! is_array($source)) { throw new RuntimeException('History connection unavailable.'); }
         return $source;
+    }
+
+    /** Standard Laravel connections can be read without booting application providers. */
+    public function readerSource(): ?array
+    {
+        $manager = app('db');
+        if ($manager::class !== \Illuminate\Database\DatabaseManager::class
+            || app('db.factory')::class !== \Illuminate\Database\Connectors\ConnectionFactory::class) { return null; }
+        try {
+            $extensions = (new \ReflectionProperty(\Illuminate\Database\DatabaseManager::class, 'extensions'))->getValue($manager);
+            if ($extensions !== []) { return null; }
+        } catch (\Throwable) { return null; }
+        $connection = app(Store::class)->connection();
+        $driver = $connection->getDriverName();
+        $type = match ($driver) {
+            'sqlite' => \Illuminate\Database\SQLiteConnection::class,
+            'mysql' => \Illuminate\Database\MySqlConnection::class,
+            'mariadb' => \Illuminate\Database\MariaDbConnection::class,
+            'pgsql' => \Illuminate\Database\PostgresConnection::class,
+            'sqlsrv' => \Illuminate\Database\SqlServerConnection::class,
+            default => null,
+        };
+        if ($type === null || $connection::class !== $type || \Illuminate\Database\Connection::getResolver($driver)
+            || app()->bound('db.connector.'.$driver)) { return null; }
+        $grammar = 'Illuminate\\Database\\Query\\Grammars\\'.match ($driver) {
+            'sqlite' => 'SQLiteGrammar', 'mysql' => 'MySqlGrammar', 'mariadb' => 'MariaDbGrammar',
+            'pgsql' => 'PostgresGrammar', 'sqlsrv' => 'SqlServerGrammar',
+        };
+        if ($connection->getQueryGrammar()::class !== $grammar) { return null; }
+        // DatabaseManager has already resolved URL configuration; preserve all PDO/TLS options.
+        return $connection->getConfig();
     }
 
     public function routes(array $pools): array
@@ -44,12 +75,12 @@ final class RuntimeSnapshot
         if (! $count) { throw new InvalidArgumentException('Runtime observation routing is empty.'); }
     }
 
-    public function sample(array $routes): array
+    public function sample(array $routes, ?\Illuminate\Database\Connection $database = null): array
     {
         $this->validateRoutes($routes);
         $now = microtime(true); $rows = [];
         foreach ($routes as $connection => $queues) {
-            $runtimes = app(Store::class)->table('attempts as a')->join('lens_jobs as j', 'j.id', '=', 'a.job_id')
+            $runtimes = ($database ?? app(Store::class)->connection())->table('lens_attempts as a')->join('lens_jobs as j', 'j.id', '=', 'a.job_id')
                 ->where('j.connection', $connection)->whereIn('j.queue', $queues)->where('j.expires_at', '>', $now)
                 ->where('a.finished_at', '>=', $now - 300)->where('a.finished_at', '<=', $now)
                 ->whereIn('a.status', ['completed', 'failed'])->whereColumn('a.finished_at', '>=', 'a.started_at')

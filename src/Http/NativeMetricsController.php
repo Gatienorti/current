@@ -22,10 +22,15 @@ final class NativeMetricsController
         $range = $filters['range'] ?? '1h';
         $dimensions = $metricKind === 'jobs' ? [$filters['job_class']] : [$filters['connection'], $filters['queue']];
         $selection = array_intersect_key($filters, array_flip($metricKind === 'jobs' ? ['job_class'] : ['connection', 'queue']));
-        $available = true; $series = [];
-        try { $series = $metrics->series($metricKind, $dimensions, $range === '24h' ? 24 : 1); }
+        $available = true; $series = []; $now = time(); $hours = $range === '24h' ? 24 : 1;
+        try { $series = $metrics->series($metricKind, $dimensions, $hours, $now); }
         catch (Throwable) { $available = false; }
-        return view('current::native-metrics', ['section' => 'metrics', 'metricKind' => $metricKind, 'range' => $range,
+        $waits = []; $waitAvailable = true; $waitStart = intdiv($now, 300) * 300 - $hours * 3600;
+        if ($metricKind === 'queues') {
+            try { $waits = app(\Current\Native\QueueSamples::class)->series($dimensions, $hours, $now, $metrics->resetAt()); }
+            catch (Throwable) { $waitAvailable = false; }
+        }
+        return view('current::native-metrics', ['waits' => $waits, 'waitAvailable' => $waitAvailable, 'waitStart' => $waitStart, 'section' => 'metrics', 'metricKind' => $metricKind, 'range' => $range,
             'label' => implode(' / ', $dimensions), 'selection' => $selection, 'series' => $series, 'available' => $available]);
     }
 }

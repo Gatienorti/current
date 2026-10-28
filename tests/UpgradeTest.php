@@ -12,7 +12,7 @@ final class UpgradeTest extends TestCase
     {
         $originalConfig = config('current.connection');
         $originalPath = config_path();
-        foreach ([12, 13, 14, 15] as $completed) {
+        foreach ([12, 13, 14, 15, 16] as $completed) {
             $directory = sys_get_temp_dir().'/current-upgrade-'.bin2hex(random_bytes(6));
             mkdir($directory, 0700); mkdir($directory.'/migrations', 0700);
             touch($directory.'/history.sqlite');
@@ -42,7 +42,7 @@ final class UpgradeTest extends TestCase
                 foreach (['jobs', 'attempts', 'tags', 'steps', 'meta'] as $table) { $snapshots[$table] = $database->table('lens_'.$table)->get()->map(fn ($row) => (array) $row)->all(); }
                 $appTables = Schema::connection('app')->getTableListing();
                 $this->assertSame(0, Artisan::call('current:install'));
-                $this->assertSame(16, $database->table('migrations')->count());
+                $this->assertSame(20, $database->table('migrations')->count());
                 $this->assertSame($customConfig, file_get_contents($directory.'/current.php'));
                 foreach ($snapshots as $table => $rows) {
                     foreach ($rows as $before) {
@@ -55,9 +55,10 @@ final class UpgradeTest extends TestCase
                 $this->assertNull($database->table('lens_jobs')->where('id', $job)->value('cleared_at'));
                 $this->assertTrue(Schema::connection('upgrade')->hasTable('lens_async_aliases'));
                 $this->assertTrue(Schema::connection('upgrade')->hasTable('lens_job_actions'));
+                $this->assertTrue(Schema::connection('upgrade')->hasTable('lens_native_retry_claims'));
                 $this->assertSame($appTables, Schema::connection('app')->getTableListing());
                 $this->assertSame(0, Artisan::call('current:install'));
-                $this->assertSame(16, $database->table('migrations')->count());
+                $this->assertSame(20, $database->table('migrations')->count());
                 $this->assertSame(1, $database->table('lens_jobs')->count());
             } finally {
                 app('db')->purge('upgrade');

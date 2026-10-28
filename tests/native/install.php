@@ -15,6 +15,11 @@ $manifest = ['name' => 'current/native-install-fixture', 'repositories' => [['ty
 if (in_array($constraint, ['11.44.0', '12.0.0'], true)) {
     $manifest['require']['symfony/console'] = '~7.3.0';
 }
+if (getenv('NATIVE_REDIS_CLIENT') === 'predis') {
+    $version = getenv('NATIVE_PREDIS_VERSION') ?: '^3.0';
+    if (! preg_match('/^(?:2\.3\.0|3\.3\.0|\^3\.0)$/D', $version)) { throw new InvalidArgumentException('Unsupported fixture Predis version.'); }
+    $manifest['require']['predis/predis'] = $version;
+}
 file_put_contents($directory.'/composer.json', json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 function runNative(array $command, string $directory, array $environment): string {
     $p = proc_open($command, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => STDERR], $pipes, $directory, $environment);

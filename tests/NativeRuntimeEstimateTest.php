@@ -22,7 +22,9 @@ final class NativeRuntimeEstimateTest extends TestCase
     {
         dispatch(new PaymentJob('success'));
         dispatch((new PaymentJob('success'))->onQueue('other'));
-        $this->assertSame(0, Artisan::call('queue:work', ['connection' => 'redis', '--queue' => 'lens-demo,other', '--stop-when-empty' => true, '--max-jobs' => 2]));
+        // As in TestCase::work, this worker shares PHPUnit's accumulated heap.
+        // Fresh native consumers keep their real128MiB worker limits.
+        $this->assertSame(0, Artisan::call('queue:work', ['connection' => 'redis', '--queue' => 'lens-demo,other', '--stop-when-empty' => true, '--max-jobs' => 2, '--memory' => 512]));
         $end = microtime(true) - 1;
         foreach (['lens-demo' => 2, 'other' => 4] as $queue => $seconds) {
             $id = $this->store()->table('jobs')->where('queue', $queue)->value('id');

@@ -32,12 +32,21 @@ final class CurrentServiceProvider extends ServiceProvider
             ]);
         }
         $this->app->singleton(Store::class);
+        $this->app->singleton(Native\MonitoredTags::class);
         $this->app->singleton(Recorder::class);
         $this->app->singleton(SourceOutline::class);
+        $this->app->singleton(Support\AttemptPolicy::class);
     }
 
     public function boot(): void
     {
+        $this->app['events']->listen(\Illuminate\Console\Events\CommandStarting::class, function ($event) {
+            try { $this->app->make(Support\AttemptPolicy::class)->starting($event); } catch (\Throwable) {}
+        });
+        $this->app['events']->listen(\Illuminate\Console\Events\CommandFinished::class, function () {
+            try { $this->app->make(Support\AttemptPolicy::class)->finished(); } catch (\Throwable) {}
+        });
+        $this->app['events']->listen(Events\QueueWaitExceeded::class, Native\WaitNotifications::class);
         $this->app->afterResolving('queue', function ($manager) {
             $manager->addConnector('current-redis', fn () => new Native\RedisConnector($this->app['redis']));
         });
@@ -61,16 +70,20 @@ final class CurrentServiceProvider extends ServiceProvider
             $view->with('lensMapVersion', filemtime(__DIR__.'/../resources/js/map.js'));
             $view->with('lensStepsVersion', filemtime(__DIR__.'/../resources/js/steps.js'));
             $view->with('lensRefreshVersion', filemtime(__DIR__.'/../resources/js/refresh.js'));
+            $view->with('batchRetryVersion', filemtime(__DIR__.'/../resources/js/batch-retry.js'));
             $view->with('lensCssVersion', filemtime(__DIR__.'/../resources/css/lens.css'));
         });
         $this->publishes([__DIR__.'/../config/current.php' => config_path('current.php')], 'current-config');
-        Route::prefix(config('current.path'))->name('current.')->middleware(array_merge(config('current.middleware'), [Http\BackendCapabilities::class, Http\RefreshResponse::class]))->group(function () {
+        Route::domain(config('current.domain'))->prefix(config('current.path'))->name('current.')->middleware(array_merge(config('current.middleware'), [Http\BackendCapabilities::class, Http\RefreshResponse::class]))->group(function () {
             Route::post('/native/control', Http\NativeControlController::class)->name('native.control');
             Route::get('/', [Http\JobsController::class, 'index'])->name('index');
             foreach (['dashboard', 'recent', 'pending', 'processing', 'completed', 'failed', 'silenced'] as $section) {
                 $path = in_array($section, ['dashboard', 'silenced'], true) ? '/'.$section : '/jobs/'.$section;
                 Route::get($path, [Http\JobsController::class, 'index'])->defaults('section', $section)->name($section);
             }
+            Route::post('/monitoring/tags', [Http\MonitoredTagsController::class, 'store'])->name('monitoring.tags.store');
+            Route::post('/monitoring/tags/remove', [Http\MonitoredTagsController::class, 'destroy'])->name('monitoring.tags.destroy');
+            Route::get('/monitoring/tags/history', [Http\MonitoredTagsController::class, 'history'])->name('monitoring.tags.history');
             Route::get('/monitoring', [Http\JobsController::class, 'index'])->defaults('section', 'monitoring')->name('monitoring');
             Route::get('/queues', Http\QueuesController::class)->name('queues');
             Route::get('/schedule', Http\ScheduleController::class)->name('schedule');
@@ -100,6 +113,7 @@ final class CurrentServiceProvider extends ServiceProvider
             Route::get('/assets/steps.js', fn () => response(file_get_contents(__DIR__.'/../resources/js/steps.js'), 200, ['Content-Type' => 'text/javascript', 'Cache-Control' => 'public, max-age=3600']))->name('steps');
             Route::get('/assets/map.js', fn () => response(file_get_contents(__DIR__.'/../resources/js/map.js'), 200, ['Content-Type' => 'text/javascript', 'Cache-Control' => 'public, max-age=3600']))->name('map');
             Route::get('/assets/refresh.js', fn () => response(file_get_contents(__DIR__.'/../resources/js/refresh.js'), 200, ['Content-Type' => 'text/javascript', 'Cache-Control' => 'public, max-age=3600']))->name('refresh');
+            Route::get('/assets/batch-retry.js', fn () => response(file_get_contents(__DIR__.'/../resources/js/batch-retry.js'), 200, ['Content-Type' => 'text/javascript', 'Cache-Control' => 'public, max-age=3600']))->name('batch-retry');
             Route::post('/jobs/{id}/retry', Http\RetryController::class)->name('retry')->where('id', '[A-Z0-9]{26}');
             Route::get('/jobs/{id}', [Http\JobsController::class, 'show'])->name('show')->where('id', '[A-Z0-9]{26}');
         });
@@ -138,7 +152,7 @@ final class CurrentServiceProvider extends ServiceProvider
                 }
             });
         }
-        $this->commands([Console\ClearCommand::class, Console\ForgetCommand::class, Console\ClearMetricsCommand::class, Console\TerminateCommand::class, Console\RuntimeSnapshotCommand::class, Console\MonitorCommand::class, Console\SnapshotCommand::class, Console\SuperviseCommand::class, Console\PruneCommand::class, Console\CollectCommand::class, Console\CollectorConfigCommand::class, Console\InstallCollectorCommand::class, Console\TelemetryStatusCommand::class, Console\InstallCommand::class]);
+        $this->commands([Console\StatusCommand::class, Console\ControlCommand::class, Console\DoctorCommand::class, Console\MigrateHorizonCommand::class, Console\ListenCommand::class, Console\PurgeCommand::class, Console\ClearCommand::class, Console\ForgetCommand::class, Console\ClearMetricsCommand::class, Console\TerminateCommand::class, Console\RuntimeSnapshotCommand::class, Console\MonitorCommand::class, Console\SnapshotCommand::class, Console\SuperviseCommand::class, Console\PruneCommand::class, Console\CollectCommand::class, Console\CollectorConfigCommand::class, Console\InstallCollectorCommand::class, Console\TelemetryStatusCommand::class, Console\InstallCommand::class]);
         $this->app->afterResolving(Schedule::class, function (Schedule $schedule) {
             $schedule->command('current:prune')->hourly();
             $schedule->command('current:monitor')->everyMinute()->withoutOverlapping(2)

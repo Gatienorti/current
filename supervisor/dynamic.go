@@ -85,7 +85,9 @@ func runPool(ctx context.Context, p Pool, pi int, control *poolControl, h *healt
 				offset := h.value.Pools[pi].Slots[slot].Starts
 				h.mu.Unlock()
 				go func(slot, offset int) {
-					err := managedWorker(workerCtx, p.Command, grace, slot, p.Directory, 10, func(state string, pid, starts int) { h.slot(pi, slot, state, pid, starts+offset) })
+					err := managedWorkerIdentity(workerCtx, p.Command, grace, slot, p.Directory, 10, func(state string, pid, starts int, identity *ProcessIdentity) {
+						h.slot(pi, slot, state, pid, starts+offset, identity)
+					})
 					if groupCapacity != nil {
 						<-groupCapacity
 					}

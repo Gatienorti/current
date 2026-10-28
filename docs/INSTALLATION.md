@@ -2,9 +2,9 @@
 
 By default, Current runs alongside an existing Horizon installation. Laravel 11.44+, 12 and 13 are declared; see [tested combinations](COMPATIBILITY.md). Horizon continues to execute jobs. No frontend build or additional service is required for the dashboard.
 
-## 1. Install the development beta
+## 1. Install the beta
 
-The source is public at [Gatienorti/current](https://github.com/Gatienorti/current), and the first beta is available on [Packagist](https://packagist.org/packages/gatienorti/current). Its Composer identifier is `gatienorti/current`. Install the beta in a **disposable application** first:
+The source is public at [Gatienorti/current](https://github.com/Gatienorti/current), and beta releases are available on [Packagist](https://packagist.org/packages/gatienorti/current). Its Composer identifier is `gatienorti/current`. Install the beta in a **disposable application** first:
 
 ```sh
 composer require gatienorti/current:^0.1.0@beta
@@ -164,7 +164,7 @@ Remove the Composer dependency, clear/rebuild deployment caches and restart long
 
 For a complete clean jobs-only → optional integrations check, run `php tests/installation/fresh.php` **inside the isolated lab**. It creates a new Laravel 13 project under `/tmp/current-beta-install-*`, installs the local path package normally, checks default and config/route-cached boots, then installs Reverb and exercises synthetic incoming → queued job → outgoing retries/broadcasts, authorization rejection, investigation pages and cleanup. Outgoing requests are intercepted; Reverb listens only on loopback and stops afterward. Logs and the resolved lockfile stay in the temporary consumer. This requires Composer network/cache access and the lab Redis host `lens-redis`; do not run it against a host application.
 
-`tests/installation/smoke.php` accepts the absolute path of a disposable Laravel application already installed through Composer. Run it with `php tests/installation/smoke.php /path/to/disposable-app`, optionally adding `mysql` or `mariadb`; use `mariadb mysql` to check MariaDB through Laravel’s MySQL driver. It assumes the isolated lab Redis host `lens-redis` and, for database checks, the disposable `current-install-mysql` or `current-install-mariadb` container and `current` database; it must not be pointed at an ordinary application. The jobs-only smoke verifies normal provider discovery, all 16 package migrations, default-off optional collectors, untouched application schema, repeat install, `/current` authorization, actual queue completion/retry, automatic redaction, the step API, rendered job details and retention cleanup. Default and config/route-cached boots are checked separately. It intentionally prunes its synthetic history.
+`tests/installation/smoke.php` accepts the absolute path of a disposable Laravel application already installed through Composer. Run it with `php tests/installation/smoke.php /path/to/disposable-app`, optionally adding `mysql` or `mariadb`; use `mariadb mysql` to check MariaDB through Laravel’s MySQL driver. It assumes the isolated lab Redis host `lens-redis` and, for database checks, the disposable `current-install-mysql` or `current-install-mariadb` container and `current` database; it must not be pointed at an ordinary application. The jobs-only smoke verifies normal provider discovery, the package migrations, default-off optional collectors, untouched application schema, repeat install, `/current` authorization, actual queue completion/retry, automatic redaction, the step API, rendered job details and retention cleanup. Default and config/route-cached boots are checked separately. It intentionally prunes its synthetic history.
 
 ## Retrying a failed job
 
@@ -416,3 +416,11 @@ Rebuild Composer autoloading and Laravel config/route/view caches through your d
 ## Experimental native backend
 
 The source checkout also provides an explicit opt-in Linux Go supervisor for native Laravel Redis workers without Horizon. Follow [Native engine](NATIVE-ENGINE.md), including independent access gates, the `current-redis` connection, worker limits and compatibility restrictions. These instructions do not switch an existing application automatically.
+
+## Attempt timeline and execution settings
+
+Each new observed attempt stores a bounded policy snapshot: job overrides, standard `queue:work` / `horizon:work` options, and the instantiated Redis driver's reservation interval. The native supervisor uses the same Laravel worker command. This does not execute job policy methods or deserialize payloads. Custom/programmatic workers without a standard command context retain unknown worker defaults. Old attempts are not backfilled from current configuration.
+
+The job page shows policy provenance and applicable timeout/reservation, zero-backoff, retry-deadline and release-count notices. They identify configuration risks, not confirmed duplicate execution or root causes. Timeout enforcement still depends on Laravel's worker mode and platform. The all-attempt timeline offers true and compressed spacing; exact timings stay visible, and missing finishes or unknown gaps never become invented worker failures or backoff.
+
+Run `current:install` for migration 20 before restarting producers/workers. With async telemetry, follow the existing quiesce/drain/stop upgrade procedure and restart the collector after migrating, before restarting producers: the collector discovers columns at startup. No Go wire-protocol change is required.
