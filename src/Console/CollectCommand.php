@@ -11,7 +11,7 @@ final class CollectCommand extends Command
 {
     protected $signature = 'current:collect {--once : Drain currently available events and exit}';
 
-    protected $description = 'Run the opt-in Go telemetry collector (SQLite/MySQL/MariaDB, standalone Redis).';
+    protected $description = 'Run the opt-in Go telemetry collector (SQLite/MySQL/MariaDB/PostgreSQL, standalone Redis).';
 
     public function handle(Transport $transport): int
     {
@@ -39,6 +39,9 @@ final class CollectCommand extends Command
             }
             if (array_filter($settings['redis_tls']) && ($capabilities['redis_tls'] ?? 0) !== 1) {
                 throw new \RuntimeException('Upgrade the collector binary for the configured Redis TLS options before starting it.');
+            }
+            if ($settings['sql']['driver'] === 'pgsql' && ($capabilities['postgres'] ?? 0) !== 1) {
+                throw new \RuntimeException('Upgrade the collector binary for PostgreSQL support before starting it.');
             }
             // Replace this CLI process, retaining its PID for the service manager.
             // The Go process obtains settings from a short-lived PHP child over a

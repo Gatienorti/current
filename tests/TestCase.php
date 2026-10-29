@@ -13,6 +13,10 @@ use Illuminate\Support\Str;
 
 abstract class TestCase extends LaravelTestCase
 {
+    use Concerns\ServerSql;
+
+    private ?string $postgresHistoryDatabase = null;
+
     private array $databaseFiles = [];
 
     public function createApplication()
@@ -70,6 +74,16 @@ abstract class TestCase extends LaravelTestCase
             $table->longText('exception');
             $table->timestamp('failed_at')->useCurrent();
         });
+        if (getenv('CURRENT_TEST_HISTORY_POSTGRES') === '1') {
+            if (getenv('CURRENT_ASYNC_DB_DRIVER') !== 'pgsql') { throw new \RuntimeException('PostgreSQL history tests require the disposable pgsql server.'); }
+            $connection = $this->serverConnection();
+            config()->set('database.connections.history_admin', $connection);
+            $this->postgresHistoryDatabase = 'current_history_'.strtolower((string) Str::ulid());
+            app('db')->connection('history_admin')->statement('CREATE DATABASE "'.$this->postgresHistoryDatabase.'"');
+            app('db')->purge('lens');
+            config()->set('database.connections.lens', array_replace($connection, ['database' => $this->postgresHistoryDatabase]));
+            foreach (glob(dirname(__DIR__).'/database/migrations/*.php') as $migration) { (require $migration)->up(); }
+        }
         $this->app->bind(Authorize::class, fn () => new Authorize);
         $this->actingAs(new GenericUser(['id' => 1, 'is_admin' => true]));
     }
@@ -80,6 +94,10 @@ abstract class TestCase extends LaravelTestCase
             foreach (['app', 'lens'] as $connection) {
                 $this->app['db']->purge($connection);
             }
+        }
+        if ($this->postgresHistoryDatabase) {
+            $this->app['db']->connection('history_admin')->statement('DROP DATABASE "'.$this->postgresHistoryDatabase.'" WITH (FORCE)');
+            $this->app['db']->purge('history_admin');
         }
         parent::tearDown();
         foreach ($this->databaseFiles as $path) {

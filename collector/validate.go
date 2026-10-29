@@ -47,6 +47,13 @@ func validate(v Event) error {
 			return invalid
 		}
 	}
+	if postgresMode {
+		for _, row := range []map[string]interface{}{v.Job, v.Enqueue} {
+			if value := row["silenced"]; value != nil && value != float64(0) && value != float64(1) {
+				return invalid
+			}
+		}
+	}
 	for _, k := range []string{"id", "external_id", "connection", "queue", "job_class", "status", "coverage"} {
 		if _, ok := v.Job[k].(string); !ok {
 			return invalid

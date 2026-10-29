@@ -34,14 +34,24 @@ The default Horizon compatibility matrix is defined in `tests/compatibility/matr
 
 ## Storage and transport limits
 
-- Synchronous history has been tested with SQLite, MySQL 8.4 and MariaDB 11.4. Use a dedicated history connection outside application-owned transactions. Server-SQL concurrency checks cover producer/worker races; SQLite still serializes its writers.
-- Async job telemetry requires Linux, phpredis or optional Predis 2.3/3.x, standalone Redis 7, and either local SQLite or MySQL 8.4/MariaDB 11.4 InnoDB. See [async setup](ASYNC-TELEMETRY.md) for TLS, ownership, supervision and recovery requirements.
-- PostgreSQL, Redis Cluster/Sentinel, SQL table prefixes, SQL URLs/read-write splitting and unsupported PDO options are outside the async support boundary.
+- Synchronous history has been tested with SQLite, MySQL 8.4 and MariaDB 11.4; unreleased PostgreSQL coverage is described below. Use a dedicated history connection outside application-owned transactions. Server-SQL concurrency checks cover producer/worker races; SQLite still serializes its writers.
+- Async job telemetry requires Linux, phpredis or optional Predis 2.3/3.x, standalone Redis 7, and local SQLite, MySQL 8.4/MariaDB 11.4 InnoDB, or unreleased PostgreSQL 17/18 support. See [async setup](ASYNC-TELEMETRY.md) for TLS, ownership, supervision and recovery requirements.
+- Redis Cluster/Sentinel, SQL table prefixes, SQL URLs/read-write splitting and unsupported PDO options are outside the async support boundary.
 - Native enqueue confirmation supports standalone phpredis and optional Predis 2.3/3.x. Caller-owned pipelines/transactions are left under caller ownership and establish no fabricated enqueue confirmation; worker start-only history remains available. Redis Cluster and distributed coordination remain unsupported or unvalidated.
 - Local SQLite must not be hosted on a shared/network filesystem for the collector.
 - Async protocol 2 removes job-identity SQL reads from producers. MySQL/MariaDB network-pause checks verify buffered recovery; stopped-producer upgrades and matching collector/migrations are required. Native time-balancing/workload reads use short-lived Redis observations; SQL sampling is isolated behind a process timeout. This does not make application SQL or the separate webhook/broadcast recorders asynchronous.
 
 Passing finite tests does not establish production-scale performance, losslessness during Redis data loss, exactly-once external effects or unlimited outage recovery.
+
+## PostgreSQL (unreleased)
+
+PostgreSQL support covers Current history in both synchronous and async modes; queue storage remains Redis. Use PHP `pdo_pgsql`, a dedicated `pgsql` history connection and the [PostgreSQL setup instructions](ASYNC-TELEMETRY.md#postgresql-history-unreleased). Existing released collector binaries lack this support; build/install the matching source binary with capability `postgres: 1`.
+
+The PostgreSQL CI jobs target versions 17 and 18. They exercise installation/reinstallation, concurrent enqueue and worker observations, retries/releases, native maintenance, failed-job storage, lightweight runtime reads, collector ownership/restart, pending-event replay, transactional rollback, and dashboard/integration queries. Mandatory mutual TLS covers trusted certificates, wrong CA, wrong hostname and plaintext rejection. Randomized Go projection tests compare each committed summary batch with immediate updates, preserving aliases, revisions and observations.
+
+The async connection boundary is a direct primary TCP connection, UTF8, `public` search path and permanent, unpartitioned tables. No table prefixes, connection URLs, read/write splitting, arbitrary PDO options, custom schemas or transaction-pooling proxies. All cooperating writers must use the same primary. PostgreSQL advisory locks also serialize missing maintenance identities; row locks alone are insufficient. Collector transactions use explicit `READ COMMITTED`, independently of the server default.
+
+Local PostgreSQL 17.11 and 18.6 checks passed with PHP 8.4/Laravel 12, including mandatory mutual TLS, installation/reinstallation, lifecycle/maintenance concurrency, collector rollback/restart and a one-minute sustained run per server. PostgreSQL 18 also passed 101 page/integration checks (two optional Predis cases skipped because that dependency was absent); monitored retention was exercised with phpredis. Go race checks passed, including per-commit projection parity and collector ownership. SQLite, MySQL 8.4 and MariaDB 11.4 regression cohorts passed. Hosted checks run on each pull-request revision; consult the revision’s check results for CI status. No PostgreSQL performance, replication/failover or production-scale claim is made.
 
 ## Run compatibility checks
 

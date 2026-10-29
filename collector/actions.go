@@ -26,15 +26,20 @@ func jobAction(tx *sql.Tx, v Event, cache map[string]*JobAction) (*JobAction, er
 	if action, found := cache[hash]; found {
 		return action, nil
 	}
+	if postgresMode {
+		if _, err := execSQL(tx, "SELECT pg_advisory_xact_lock(?)", advisoryKey("current-action:"+hash)); err != nil {
+			return nil, err
+		}
+	}
 	// InnoDB current locking read serializes even an absent marker with maintenance
 	// inserts. Lock order is action identity before any job/attempt mutation.
 	query := "SELECT kind,observed_at,expires_at FROM lens_job_actions WHERE identity_hash=?"
-	if mysqlMode {
+	if mysqlMode || postgresMode {
 		query += " FOR UPDATE"
 	}
 	var kind string
 	var observed, expires float64
-	err := tx.QueryRow(query, hash).Scan(&kind, &observed, &expires)
+	err := queryRowSQL(tx, query, hash).Scan(&kind, &observed, &expires)
 	if err == sql.ErrNoRows {
 		cache[hash] = nil
 		return nil, nil
@@ -58,10 +63,10 @@ func jobAction(tx *sql.Tx, v Event, cache map[string]*JobAction) (*JobAction, er
 // its marker. Otherwise collector pruning can strand claims before PHP pruning.
 func pruneJobActions(tx *sql.Tx, now float64) error {
 	query := "SELECT identity_hash,kind,job_id FROM lens_job_actions WHERE expires_at<=? ORDER BY identity_hash LIMIT 500"
-	if mysqlMode {
+	if mysqlMode || postgresMode {
 		query += " FOR UPDATE"
 	}
-	rows, err := tx.Query(query, now)
+	rows, err := querySQL(tx, query, now)
 	if err != nil {
 		return err
 	}
@@ -85,13 +90,13 @@ func pruneJobActions(tx *sql.Tx, now float64) error {
 	}
 	marks := func(n int) string { return strings.TrimRight(strings.Repeat("?,", n), ",") }
 	if len(claims) > 0 {
-		if _, err = tx.Exec("DELETE FROM lens_meta WHERE `key` IN ("+marks(len(claims))+")", claims...); err != nil {
+		if _, err = execSQL(tx, "DELETE FROM lens_meta WHERE `key` IN ("+marks(len(claims))+")", claims...); err != nil {
 			return err
 		}
 	}
 	if len(hashes) > 0 {
 		args := append([]interface{}{now}, hashes...)
-		_, err = tx.Exec("DELETE FROM lens_job_actions WHERE expires_at<=? AND identity_hash IN ("+marks(len(hashes))+")", args...)
+		_, err = execSQL(tx, "DELETE FROM lens_job_actions WHERE expires_at<=? AND identity_hash IN ("+marks(len(hashes))+")", args...)
 	}
 	return err
 }

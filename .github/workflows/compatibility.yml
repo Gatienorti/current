@@ -144,6 +144,67 @@ jobs:
           CURRENT_TEST_SQL_PASSWORD: current-test-only
         run: go test -race -count=1 -run 'TestSQLMaintenanceAbsenceLock|TestDeferredSummariesOnServerSQL' ./...
       - run: vendor/bin/phpunit -c phpunit.xml --filter 'AsyncTelemetryTest|SynchronousSqlTest'
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ['17', '18']
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      LENS_REDIS_HOST: 127.0.0.1
+      CURRENT_REQUIRE_COLLECTOR_TESTS: '1'
+      CURRENT_ASYNC_DB_HOST: 127.0.0.1
+      CURRENT_ASYNC_DB_DRIVER: pgsql
+      CURRENT_ASYNC_DB_PASSWORD: current-test-only
+      CURRENT_ASYNC_TLS_DIR: /tmp/current-postgres-tls
+      CURRENT_ASYNC_TLS_WRONG_HOST: current-wrongname
+      CURRENT_ASYNC_SOAK_SECONDS: 60
+      CURRENT_TEST_PG_HOST: 127.0.0.1
+      CURRENT_TEST_PG_PASSWORD: current-test-only
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, dom, pdo_sqlite, pdo_pgsql, redis, pcntl
+          tools: composer:v2
+          coverage: none
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+      - run: composer install --no-interaction --prefer-dist
+      - name: Start PostgreSQL with mandatory mutual TLS
+        run: |
+          echo '127.0.0.1 current-wrongname' | sudo tee -a /etc/hosts
+          bash tests/telemetry/start-postgres.sh "$CURRENT_ASYNC_TLS_DIR" 'postgres:${{ matrix.version }}-alpine'
+      - name: Test PostgreSQL projection, locks and collector ownership
+        working-directory: collector
+        run: |
+          go test -race -count=1 -run TestPostgres ./...
+          go build -o current-collector .
+      - name: Build native runtime for SQL reader checks
+        working-directory: supervisor
+        run: go build -o current-supervisor .
+      - name: Prepare test storage
+        run: mkdir -p prototype/bootstrap/cache prototype/storage/data prototype/storage/logs prototype/storage/framework/{views,cache,sessions}
+      - name: Verify installation, concurrency, retries, TLS, rollback and recovery
+        run: vendor/bin/phpunit -c phpunit.xml --filter 'AsyncTelemetryTest|SynchronousSqlTest|TelemetrySettingsTest'
+      - name: Verify PostgreSQL investigation, integrations and native operations
+        env:
+          CURRENT_TEST_HISTORY_POSTGRES: '1'
+          CURRENT_MONITORING_COLLECTOR_BINARY: ${{ github.workspace }}/collector/current-collector
+        run: vendor/bin/phpunit -c phpunit.xml --filter 'PageAcceptanceTest|AutomaticContextTest|NativeSilencingTest|NativeTagRetentionTest|ActivityDashboardTest|InvestigationTest|JobDetailsTest|WebhookContextTest|WebhookFlowTest|BroadcastInvestigationTest|BroadcastToolsTest|NativeMetricsTest|NativeRetryTest|NativeMaintenanceTest|ReceiptGroupingTest|DeliveryGroupingTest|MonitoredTagsTest'
+      - name: Remove disposable PostgreSQL
+        if: always()
+        run: docker rm -fv current-postgres-test || true
   dynamodb:
     runs-on: ubuntu-latest
     timeout-minutes: 10

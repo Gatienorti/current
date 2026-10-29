@@ -62,14 +62,15 @@ final class NativeMaintenanceTest extends TestCase
     {
         dispatch(new PaymentJob('success'));
         $operation = (string) Str::ulid();
-        $this->store()->connection()->statement("CREATE TRIGGER maintenance_failure BEFORE INSERT ON lens_job_actions BEGIN SELECT RAISE(ABORT, 'fixture'); END");
+        if ($this->postgres()) { $this->postgresTrigger('maintenance_failure', 'lens_job_actions', 'INSERT', "RAISE EXCEPTION 'fixture';"); }
+        else { $this->store()->connection()->statement("CREATE TRIGGER maintenance_failure BEFORE INSERT ON lens_job_actions BEGIN SELECT RAISE(ABORT, 'fixture'); END"); }
         try {
             app(ClearQueue::class)->run('redis', 'lens-demo', $operation, false);
             $this->fail('SQL failure ignored');
         } catch (QueryException) {
             $this->assertSame(0, Redis::llen('queues:lens-demo'));
         }
-        $this->store()->connection()->statement('DROP TRIGGER maintenance_failure');
+        $this->dropTestTrigger('maintenance_failure', 'lens_job_actions');
         dispatch(new PaymentJob('success'));
         $record = app(ClearQueue::class)->run('redis', 'lens-demo', $operation, true);
         $this->assertSame(1, $record['removed']);
@@ -94,6 +95,34 @@ final class NativeMaintenanceTest extends TestCase
     public function test_old_or_unconfirmed_collector_ownership_blocks_maintenance_before_clear(): void
     {
         dispatch(new PaymentJob('success'));
+        if ($this->postgres()) {
+            config()->set('database.connections.owner_peer', config('database.connections.lens'));
+            $peer = app('db')->connection('owner_peer');
+            $key = \Current\Store::advisoryKey('current:'.$peer->getDatabaseName());
+            $peer->select('SELECT pg_advisory_lock(CAST(? AS BIGINT))', [$key]);
+            try {
+                $this->assertSame(1, Artisan::call('current:clear', ['connection' => 'redis', '--queue' => 'lens-demo']));
+                $this->assertSame(1, Redis::llen('queues:lens-demo'));
+            } finally {
+                $peer->select('SELECT pg_advisory_unlock(CAST(? AS BIGINT))', [$key]);
+                app('db')->purge('owner_peer');
+            }
+            return;
+        }
+        if ($this->postgres()) {
+            config()->set('database.connections.owner_peer', config('database.connections.lens'));
+            $peer = app('db')->connection('owner_peer');
+            $key = \Current\Store::advisoryKey('current:'.$peer->getDatabaseName());
+            $peer->select('SELECT pg_advisory_lock(CAST(? AS BIGINT))', [$key]);
+            try {
+                $this->assertSame(1, Artisan::call('current:clear', ['connection' => 'redis', '--queue' => 'lens-demo']));
+                $this->assertSame(1, Redis::llen('queues:lens-demo'));
+            } finally {
+                $peer->select('SELECT pg_advisory_unlock(CAST(? AS BIGINT))', [$key]);
+                app('db')->purge('owner_peer');
+            }
+            return;
+        }
         $original = config('database.connections.lens.database');
         $this->store()->connection()->statement('PRAGMA wal_checkpoint(TRUNCATE)');
         app('db')->purge('lens');
@@ -172,13 +201,14 @@ final class NativeMaintenanceTest extends TestCase
         dispatch($failed);
         $this->work();
         $job = $this->store()->table('jobs')->sole();
-        $this->store()->connection()->statement("CREATE TRIGGER forget_failure BEFORE DELETE ON lens_jobs BEGIN SELECT RAISE(ABORT, 'fixture'); END");
+        if ($this->postgres()) { $this->postgresTrigger('forget_failure', 'lens_jobs', 'DELETE', "RAISE EXCEPTION 'fixture';"); }
+        else { $this->store()->connection()->statement("CREATE TRIGGER forget_failure BEFORE DELETE ON lens_jobs BEGIN SELECT RAISE(ABORT, 'fixture'); END"); }
         $this->assertSame(1, Artisan::call('current:forget', ['id' => $job->id]));
         $this->assertStringContainsString('may have succeeded', Artisan::output());
         $this->assertNull(app('queue.failer')->find($job->external_id));
         $this->assertSame(1, $this->store()->table('jobs')->count());
         $this->assertSame(0, $this->store()->table('job_actions')->count());
-        $this->store()->connection()->statement('DROP TRIGGER forget_failure');
+        $this->dropTestTrigger('forget_failure', 'lens_jobs');
         $this->assertSame(0, Artisan::call('current:forget', ['id' => $job->id, '--history-only' => true]));
         $this->assertSame(0, $this->store()->table('jobs')->count());
     }

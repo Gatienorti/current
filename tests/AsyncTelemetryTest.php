@@ -14,6 +14,8 @@ use Symfony\Component\Process\Process;
 
 final class AsyncTelemetryTest extends TestCase
 {
+    use Concerns\ServerSql;
+
     private array $processes = [];
 
     private array $files = [];
@@ -30,14 +32,10 @@ final class AsyncTelemetryTest extends TestCase
         }
         parent::setUp();
         if ($host = getenv('CURRENT_ASYNC_DB_HOST')) {
-            $driver = getenv('CURRENT_ASYNC_DB_DRIVER') ?: 'mysql';
-            $connection = ['driver' => $driver, 'host' => $host, 'port' => 3306, 'database' => 'current_async_test', 'username' => 'root', 'password' => getenv('CURRENT_ASYNC_DB_PASSWORD'), 'charset' => 'utf8mb4', 'collation' => 'utf8mb4_unicode_ci', 'prefix' => '', 'strict' => true];
-            if ($tls = getenv('CURRENT_ASYNC_TLS_DIR')) {
-                $connection['options'] = [\PDO::MYSQL_ATTR_SSL_CA => $tls.'/ca.pem', \PDO::MYSQL_ATTR_SSL_CERT => $tls.'/client.pem', \PDO::MYSQL_ATTR_SSL_KEY => $tls.'/client-key.pem', \PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => true];
-            }
+            $connection = $this->serverConnection();
             config()->set('database.connections.async_admin', $connection);
             $this->serverDatabase = 'current_async_test_'.strtolower((string) Str::ulid());
-            app('db')->connection('async_admin')->statement('CREATE DATABASE `'.$this->serverDatabase.'`');
+            app('db')->connection('async_admin')->statement('CREATE DATABASE '.$this->serverDatabaseName());
             app('db')->purge('lens');
             config()->set('database.connections.lens', array_replace($connection, ['database' => $this->serverDatabase]));
             foreach (glob(dirname(__DIR__).'/database/migrations/*.php') as $migration) {
@@ -88,7 +86,7 @@ final class AsyncTelemetryTest extends TestCase
         }
         if ($this->serverDatabase) {
             app('db')->purge('lens');
-            app('db')->connection('async_admin')->statement('DROP DATABASE `'.$this->serverDatabase.'`');
+            app('db')->connection('async_admin')->statement('DROP DATABASE '.$this->serverDatabaseName());
             app('db')->purge('async_admin');
         } else {
             @unlink(config('database.connections.lens.database').'.collector.lock');
@@ -693,7 +691,8 @@ final class AsyncTelemetryTest extends TestCase
         dispatch(new PaymentJob('success'));
         $this->work();
         $db = $this->store()->connection();
-        $db->unprepared('CREATE TRIGGER current_test_slow BEFORE INSERT ON lens_async_receipts FOR EACH ROW DO SLEEP(0.05)');
+        if ($this->postgres()) { $this->postgresTrigger('current_test_slow', 'lens_async_receipts', 'INSERT', 'PERFORM pg_sleep(0.05);'); }
+        else { $db->unprepared('CREATE TRIGGER current_test_slow BEFORE INSERT ON lens_async_receipts FOR EACH ROW DO SLEEP(0.05)'); }
         try {
             $p = $this->collector(false);
             $r = app(Transport::class)->client();
@@ -717,7 +716,7 @@ final class AsyncTelemetryTest extends TestCase
             $this->assertSame(0, $r->xLen('events:v2'));
             $this->assertSame('completed', $this->store()->table('jobs')->sole()->status);
         } finally {
-            $db->unprepared('DROP TRIGGER current_test_slow');
+            $this->dropTestTrigger('current_test_slow', 'lens_async_receipts');
         }
     }
 
@@ -727,7 +726,7 @@ final class AsyncTelemetryTest extends TestCase
         if (! $tls || ! $this->serverDatabase) {
             $this->markTestSkipped('Requires disposable TLS-enforced SQL server.');
         }
-        $cipher = (array) $this->store()->connection()->selectOne("SHOW STATUS LIKE 'Ssl_cipher'");
+        $cipher = (array) $this->store()->connection()->selectOne($this->postgres() ? 'SELECT cipher AS "Value" FROM pg_stat_ssl WHERE pid=pg_backend_pid()' : "SHOW STATUS LIKE 'Ssl_cipher'");
         $this->assertNotEmpty($cipher['Value']);
         dispatch(new PaymentJob('success'));
         $this->work();
@@ -748,35 +747,36 @@ final class AsyncTelemetryTest extends TestCase
         }
         $this->drain();
         $this->assertSame('completed', $this->store()->table('jobs')->sole()->status);
-        $original = config('database.connections.lens.options');
+        $key = $this->postgres() ? 'database.connections.lens.sslmode' : 'database.connections.lens.options';
+        $original = config($key);
         try {
-            config()->set('database.connections.lens.options', [\PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => false]);
+            config()->set($key, $this->postgres() ? 'require' : [\PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => false]);
             $this->expectException(\RuntimeException::class);
-            $this->expectExceptionMessage('requires server certificate verification');
+            $this->expectExceptionMessage($this->postgres() ? 'requires sslmode=verify-full' : 'requires server certificate verification');
             app(Transport::class)->settings();
         } finally {
-            config()->set('database.connections.lens.options', $original);
+            config()->set($key, $original);
         }
     }
 
     public function test_server_database_requires_transactional_tables(): void
     {
         if (! $this->serverDatabase) {
-            $this->markTestSkipped('Server SQL engine check.');
+            $this->markTestSkipped('Server SQL durability check.');
         }
         dispatch(new PaymentJob('success'));
         $this->work();
         $db = $this->store()->connection();
-        $db->statement('ALTER TABLE lens_async_receipts ENGINE=MyISAM');
+        $db->statement($this->postgres() ? 'ALTER TABLE lens_async_receipts SET UNLOGGED' : 'ALTER TABLE lens_async_receipts ENGINE=MyISAM');
         try {
             $p = $this->collector();
             $p->wait();
             $this->assertFalse($p->isSuccessful());
-            $this->assertStringContainsString('must exist and use InnoDB', $p->getErrorOutput());
+            $this->assertStringContainsString($this->postgres() ? 'permanent PostgreSQL tables' : 'must exist and use InnoDB', $p->getErrorOutput());
             $this->assertSame(0, $this->store()->table('jobs')->count());
             $this->assertGreaterThan(0, app(Transport::class)->client()->xLen('events:v2'));
         } finally {
-            $db->statement('ALTER TABLE lens_async_receipts ENGINE=InnoDB');
+            $db->statement($this->postgres() ? 'ALTER TABLE lens_async_receipts SET LOGGED' : 'ALTER TABLE lens_async_receipts ENGINE=InnoDB');
         }
         $this->drain();
         $this->assertSame('completed', $this->store()->table('jobs')->sole()->status);
@@ -790,7 +790,8 @@ final class AsyncTelemetryTest extends TestCase
         dispatch(new PaymentJob('success'));
         $this->work();
         $db = $this->store()->connection();
-        $db->unprepared("CREATE TRIGGER current_test_fail BEFORE INSERT ON lens_attempts FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='test rollback'");
+        if ($this->postgres()) { $this->postgresTrigger('current_test_fail', 'lens_attempts', 'INSERT', "RAISE EXCEPTION 'test rollback';"); }
+        else { $db->unprepared("CREATE TRIGGER current_test_fail BEFORE INSERT ON lens_attempts FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='test rollback'"); }
         try {
             $p = $this->collector();
             $p->wait();
@@ -800,7 +801,7 @@ final class AsyncTelemetryTest extends TestCase
             }
             $this->assertGreaterThan(0, app(Transport::class)->client()->xLen('events:v2'));
         } finally {
-            $db->unprepared('DROP TRIGGER current_test_fail');
+            $this->dropTestTrigger('current_test_fail', 'lens_attempts');
         }
         $this->drain();
         $this->assertSame('completed', $this->store()->table('jobs')->sole()->status);
@@ -814,7 +815,8 @@ final class AsyncTelemetryTest extends TestCase
         $trigger = $this->serverDatabase
             ? "CREATE TRIGGER current_test_fail BEFORE UPDATE ON lens_jobs FOR EACH ROW BEGIN IF NEW.attempt_count <> OLD.attempt_count THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='test deferred summary rollback'; END IF; END"
             : "CREATE TRIGGER current_test_fail BEFORE UPDATE OF attempt_count ON lens_jobs WHEN NEW.attempt_count <> OLD.attempt_count BEGIN SELECT RAISE(ABORT, 'test deferred summary rollback'); END";
-        $db->unprepared($trigger);
+        if ($this->postgres()) { $this->postgresTrigger('current_test_fail', 'lens_jobs', 'UPDATE', "IF NEW.attempt_count <> OLD.attempt_count THEN RAISE EXCEPTION 'test deferred summary rollback'; END IF;"); }
+        else { $db->unprepared($trigger); }
         $transport = app(Transport::class)->client();
         $pending = $transport->xLen('events:v2');
         try {
@@ -828,7 +830,7 @@ final class AsyncTelemetryTest extends TestCase
             $this->assertSame($pending, $transport->xLen('events:v2'));
             $this->assertSame(0, (int) $transport->hGet('health', 'processed'));
         } finally {
-            $db->unprepared('DROP TRIGGER current_test_fail');
+            $this->dropTestTrigger('current_test_fail', 'lens_jobs');
         }
         $this->drain();
         $job = $this->store()->table('jobs')->sole();
@@ -850,10 +852,16 @@ final class AsyncTelemetryTest extends TestCase
             usleep(20000);
         }
         $this->assertTrue(app(Health::class)->snapshot()['running']);
+        if ($this->postgres()) {
+            $connection = $this->store()->connection()->selectOne("SELECT pid FROM pg_stat_activity WHERE datname=current_database() AND application_name='current-collector'")->pid;
+            $this->assertGreaterThan(0, (int) $connection);
+            $this->store()->connection()->select('SELECT pg_terminate_backend(?)', [$connection]);
+        } else {
         $lock = substr('current:'.hash('sha256', $this->serverDatabase), 0, 63);
         $connection = $this->store()->connection()->selectOne('SELECT IS_USED_LOCK(?) AS owner', [$lock])->owner;
         $this->assertGreaterThan(0, (int) $connection);
         $this->store()->connection()->statement('KILL CONNECTION '.(int) $connection);
+        }
         dispatch(new PaymentJob('success'));
         $this->work();
         $p->wait();

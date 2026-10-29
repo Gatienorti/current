@@ -20,6 +20,16 @@ final class Maintenance
         if (in_array($connection->getDriverName(), ['mysql', 'mariadb'], true)) {
             $key = substr('current:'.hash('sha256', $connection->getDatabaseName()), 0, 63);
             $busy = $connection->selectOne('SELECT IS_USED_LOCK(?) AS owner', [$key])->owner !== null;
+        } elseif ($connection->getDriverName() === 'pgsql') {
+            $pdo = $connection->getPdo();
+            $key = Store::advisoryKey('current:'.$connection->getDatabaseName());
+            $probe = $pdo->prepare('SELECT pg_try_advisory_lock(CAST(? AS BIGINT))');
+            $probe->execute([$key]);
+            $busy = ! filter_var($probe->fetchColumn(), FILTER_VALIDATE_BOOLEAN);
+            if (! $busy) {
+                $release = $pdo->prepare('SELECT pg_advisory_unlock(CAST(? AS BIGINT))');
+                $release->execute([$key]);
+            }
         } elseif ($connection->getDriverName() === 'sqlite') {
             $path = $connection->getDatabaseName().'.collector.lock';
             if (is_file($path)) {
@@ -56,6 +66,7 @@ final class Maintenance
 
     private function action(Store $store, string $uuid, string $connection, string $dispatch, string $kind, float $observed, ?string $jobId = null): void
     {
+        if ($store->connection()->getDriverName() === 'pgsql') { $store->jobAction($uuid, $connection, $dispatch); }
         $hash = DispatchIdentity::fingerprint($uuid, $connection, $dispatch);
         $old = $store->table('job_actions')->where('identity_hash', $hash)->lockForUpdate()->first();
         if ($old && $old->expires_at > microtime(true) && $old->kind === 'forgotten' && $kind !== 'forgotten') {

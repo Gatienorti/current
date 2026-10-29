@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add PostgreSQL history support for synchronous recording and the optional Go collector, including shared identity/maintenance locking, verified TLS, replay and durability checks. PostgreSQL async recording requires an updated collector with `postgres: 1`; existing beta.3 binaries are insufficient. Fix authorization-dashboard aggregation for PostgreSQL.
+
 - Async telemetry refreshes each affected job summary once per transaction batch, reducing repeated SQL work while retaining every observation. Summary failures roll back the batch and leave events pending for replay. Rebuild/update and restart the collector to use this change; no schema migration is required.
 
 ## v0.1.0-beta.3 — 2026-10-28

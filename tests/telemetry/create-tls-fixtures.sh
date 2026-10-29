@@ -7,7 +7,7 @@ openssl req -x509 -newkey rsa:2048 -nodes -keyout "$out/ca-key.pem" -out "$out/c
 openssl req -x509 -newkey rsa:2048 -nodes -keyout "$out/wrong-ca-key.pem" -out "$out/wrong-ca.pem" -days 2 -subj '/CN=Current untrusted test CA' >/dev/null 2>&1
 openssl req -newkey rsa:2048 -nodes -keyout "$out/server-key.pem" -out "$out/server.csr" -subj '/CN=localhost' >/dev/null 2>&1
 cat > "$out/server.ext" <<'EXT'
-subjectAltName=DNS:localhost,DNS:current-async-mysql-test,DNS:current-async-maria-test,IP:127.0.0.1
+subjectAltName=DNS:localhost,DNS:current-async-mysql-test,DNS:current-async-maria-test,DNS:current-postgres-test,IP:127.0.0.1
 extendedKeyUsage=serverAuth
 EXT
 openssl x509 -req -in "$out/server.csr" -CA "$out/ca.pem" -CAkey "$out/ca-key.pem" -CAcreateserial -out "$out/server.pem" -days 2 -extfile "$out/server.ext" >/dev/null 2>&1

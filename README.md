@@ -85,6 +85,8 @@ Restart long-lived workers after installation and keep Laravel’s scheduler run
 
 **Requirements:** PHP 8.2+, Laravel 11.44/12/13, and a compatible Horizon 5.30+ version within 5.x. Laravel 13 requires PHP 8.3+. See [tested version pairs and database support](docs/COMPATIBILITY.md).
 
+History defaults to a dedicated SQLite database. MySQL and MariaDB are supported; unreleased PostgreSQL support and its setup requirements are described in [storage compatibility](docs/COMPATIBILITY.md).
+
 No hosted account, Node build, or application WebSocket server is required for the jobs dashboard. Native execution and async recording each require their matching Linux binary and additional setup:
 
 - [Install and configure Current](docs/INSTALLATION.md)

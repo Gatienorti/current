@@ -33,15 +33,15 @@ final class Transport
         $input = [$sql, $redisSource, $telemetry, $prefix, $client, $options];
         if ($input !== $this->settingsInput) {
             $this->disconnect();
-        } elseif ($this->validatedSettings !== null && empty($sql['options'])
+        } elseif ($this->validatedSettings !== null && empty($sql['options']) && empty($sql['sslrootcert']) && empty($sql['sslcert']) && empty($sql['sslkey'])
             && empty($this->validatedSettings['redis_tls']['ca']) && empty($this->validatedSettings['redis_tls']['cert']) && empty($this->validatedSettings['redis_tls']['key'])) {
             return $this->validatedSettings;
         }
         // SQL/Redis TLS options include mutable filesystem inputs. Revalidate
         // those on each access, preserving readability and verification checks.
         $driver = $sql['driver'] ?? '';
-        if (! in_array($driver, ['sqlite', 'mysql', 'mariadb'], true) || empty($sql['database']) || ! empty($sql['prefix'])) {
-            throw new RuntimeException('Async telemetry requires SQLite, MySQL or MariaDB without a table prefix.');
+        if (! in_array($driver, ['sqlite', 'mysql', 'mariadb', 'pgsql'], true) || empty($sql['database']) || ! empty($sql['prefix'])) {
+            throw new RuntimeException('Async telemetry requires SQLite, MySQL, MariaDB or PostgreSQL without a table prefix.');
         }
         if ($driver === 'sqlite' && $sql['database'] === ':memory:') {
             throw new RuntimeException('Async telemetry requires a file-backed SQLite connection.');
@@ -77,7 +77,7 @@ final class Transport
         $settings = [
             'client' => $client,
             'protocol' => 2,
-            'sql' => ['driver' => $driver, 'host' => $sql['host'] ?? '', 'port' => (int) ($sql['port'] ?? 3306), 'socket' => $sql['unix_socket'] ?? '', 'database' => $sql['database'], 'username' => $sql['username'] ?? '', 'password' => $sql['password'] ?? '', 'tls' => $this->sqlTls($sql['options'] ?? [])],
+            'sql' => ['driver' => $driver, 'host' => $sql['host'] ?? '', 'port' => (int) ($sql['port'] ?? ($driver === 'pgsql' ? 5432 : 3306)), 'socket' => $sql['unix_socket'] ?? '', 'database' => $sql['database'], 'username' => $sql['username'] ?? '', 'password' => $sql['password'] ?? '', 'tls' => $driver === 'pgsql' ? $this->postgresTls($sql) : $this->sqlTls($sql['options'] ?? [])],
             'address' => $address, 'host' => $host,
             'port' => (int) ($redis['port'] ?? 6379), 'database' => (int) ($redis['database'] ?? 0),
             'username' => $redis['username'] ?? '', 'password' => $redis['password'] ?? '',
@@ -127,6 +127,33 @@ final class Transport
         }
         if ($tls['cert'] !== '' && $tls['key'] === '') { $tls['key'] = $tls['cert']; } // PHP also accepts a combined certificate/key PEM.
         if ($tls['cert'] === '' && $tls['key'] !== '') { throw new RuntimeException('Redis TLS requires a client certificate with its key.'); }
+        return $tls;
+    }
+
+    private function postgresTls(array $sql): array
+    {
+        if (! empty($sql['options']) || ($sql['search_path'] ?? 'public') !== 'public'
+            || isset($sql['schema']) || ! empty($sql['unix_socket'])
+            || ! in_array(strtolower($sql['charset'] ?? 'utf8'), ['utf8', 'utf-8'], true)
+            || str_contains($sql['host'], '/') || str_contains($sql['host'], ',') || str_contains($sql['host'], ';')) {
+            throw new RuntimeException('Async PostgreSQL requires UTF8, public search_path and one TCP host without custom PDO options.');
+        }
+        $mode = $sql['sslmode'] ?? 'prefer';
+        if (! in_array($mode, ['disable', 'verify-full'], true)) {
+            throw new RuntimeException('Async PostgreSQL requires sslmode=verify-full or explicit sslmode=disable; TLS downgrade is not supported.');
+        }
+        $tls = ['enabled' => $mode === 'verify-full', 'ca' => '', 'cert' => '', 'key' => ''];
+        foreach (['sslrootcert' => 'ca', 'sslcert' => 'cert', 'sslkey' => 'key'] as $option => $field) {
+            if (empty($sql[$option])) { continue; }
+            $value = $sql[$option];
+            if (! $tls['enabled'] || ! is_string($value)) { throw new RuntimeException('PostgreSQL certificate files require sslmode=verify-full.'); }
+            clearstatcache(true, $value);
+            if (! is_file($value) || ! is_readable($value) || filesize($value) > 1048576) {
+                throw new RuntimeException('SQL TLS certificate files must be readable and at most 1 MiB.');
+            }
+            $tls[$field] = realpath($value);
+        }
+        if (($tls['cert'] === '') !== ($tls['key'] === '')) { throw new RuntimeException('SQL TLS requires both client certificate and key.'); }
         return $tls;
     }
 

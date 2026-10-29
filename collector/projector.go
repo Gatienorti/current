@@ -63,7 +63,7 @@ func write(tx *sql.Tx, t string, row map[string]interface{}, update bool) error 
 	var args []interface{}
 	var marks, sets []string
 	for _, k := range names {
-		args = append(args, row[k])
+		args = append(args, columnValue(k, row[k]))
 		marks = append(marks, "?")
 		if k != "id" {
 			sets = append(sets, "`"+k+"`=excluded.`"+k+"`")
@@ -80,7 +80,7 @@ func write(tx *sql.Tx, t string, row map[string]interface{}, update bool) error 
 			for _, k := range names {
 				if k != "id" {
 					sets = append(sets, "`"+k+"`=?")
-					args = append(args, row[k])
+					args = append(args, columnValue(k, row[k]))
 				}
 			}
 		}
@@ -89,7 +89,7 @@ func write(tx *sql.Tx, t string, row map[string]interface{}, update bool) error 
 		}
 		suffix = " ON DUPLICATE KEY UPDATE " + strings.Join(sets, ",")
 	}
-	_, e := tx.Exec("INSERT INTO "+t+" (`"+strings.Join(names, "`,`")+"`) VALUES ("+strings.Join(marks, ",")+")"+suffix, args...)
+	_, e := execSQL(tx, "INSERT INTO "+t+" (`"+strings.Join(names, "`,`")+"`) VALUES ("+strings.Join(marks, ",")+")"+suffix, args...)
 	return e
 }
 func versioned(tx *sql.Tx, t string, row map[string]interface{}, revision int, expires float64) error {
@@ -104,7 +104,7 @@ func versioned(tx *sql.Tx, t string, row map[string]interface{}, revision int, e
 		return fmt.Errorf("invalid id")
 	}
 	var previous int
-	e := tx.QueryRow("SELECT revision FROM lens_async_versions WHERE entity=?", t+":"+id).Scan(&previous)
+	e := queryRowSQL(tx, "SELECT revision FROM lens_async_versions WHERE entity=?", t+":"+id).Scan(&previous)
 	if e != nil && e != sql.ErrNoRows {
 		return e
 	}
@@ -114,7 +114,7 @@ func versioned(tx *sql.Tx, t string, row map[string]interface{}, revision int, e
 	if e = write(tx, t, row, true); e != nil {
 		return e
 	}
-	_, e = tx.Exec(sqlFor("INSERT INTO lens_async_versions VALUES (?,?,?) ON CONFLICT(entity) DO UPDATE SET revision=?, expires_at=?", "INSERT INTO lens_async_versions VALUES (?,?,?) ON DUPLICATE KEY UPDATE revision=?, expires_at=?"), t+":"+id, revision, expires, revision, expires)
+	_, e = execSQL(tx, sqlFor("INSERT INTO lens_async_versions VALUES (?,?,?) ON CONFLICT(entity) DO UPDATE SET revision=?, expires_at=?", "INSERT INTO lens_async_versions VALUES (?,?,?) ON DUPLICATE KEY UPDATE revision=?, expires_at=?"), t+":"+id, revision, expires, revision, expires)
 	return e
 }
 func project(tx *sql.Tx, v Event, actionCaches ...map[string]*JobAction) error {
@@ -125,7 +125,7 @@ func projectWithSummaries(tx *sql.Tx, v Event, summaries map[string]float64, act
 	if v.ID == "" || len(v.Job) == 0 {
 		return fmt.Errorf("invalid event")
 	}
-	result, e := tx.Exec(sqlFor("INSERT INTO lens_async_receipts VALUES (?,?) ON CONFLICT(id) DO NOTHING", "INSERT INTO lens_async_receipts VALUES (?,?) ON DUPLICATE KEY UPDATE id=id"), v.ID, v.Observed+86400)
+	result, e := execSQL(tx, sqlFor("INSERT INTO lens_async_receipts VALUES (?,?) ON CONFLICT(id) DO NOTHING", "INSERT INTO lens_async_receipts VALUES (?,?) ON DUPLICATE KEY UPDATE id=id"), v.ID, v.Observed+86400)
 	if e != nil {
 		return e
 	}
@@ -169,7 +169,7 @@ func projectWithSummaries(tx *sql.Tx, v Event, summaries map[string]float64, act
 		return e
 	}
 	if action != nil && action.Kind == "cleared" {
-		if _, e = tx.Exec("UPDATE lens_jobs SET cleared_at=? WHERE id=?", action.Observed, v.Job["id"]); e != nil {
+		if _, e = execSQL(tx, "UPDATE lens_jobs SET cleared_at=? WHERE id=?", action.Observed, v.Job["id"]); e != nil {
 			return e
 		}
 	}
@@ -190,24 +190,24 @@ func projectWithSummaries(tx *sql.Tx, v Event, summaries map[string]float64, act
 			case "id", "status", "observed_at":
 				continue
 			case "first_observed_at":
-				sets = append(sets, sqlFor("first_observed_at=MIN(first_observed_at,?)", "first_observed_at=LEAST(first_observed_at,?)"))
+				sets = append(sets, sqlFor("first_observed_at=MIN(first_observed_at,?)", "first_observed_at=LEAST(first_observed_at,?)", "first_observed_at=LEAST(first_observed_at,?)"))
 			default:
 				sets = append(sets, "`"+k+"`=?")
 			}
-			args = append(args, v.Enqueue[k])
+			args = append(args, columnValue(k, v.Enqueue[k]))
 		}
 		args = append(args, v.Job["id"])
-		if _, e = tx.Exec("UPDATE lens_jobs SET "+strings.Join(sets, ",")+" WHERE id=?", args...); e != nil {
+		if _, e = execSQL(tx, "UPDATE lens_jobs SET "+strings.Join(sets, ",")+" WHERE id=?", args...); e != nil {
 			return e
 		}
 		for _, tag := range v.Tags {
-			if _, e = tx.Exec(sqlFor("INSERT INTO lens_tags VALUES (?,?) ON CONFLICT(job_id,tag) DO NOTHING", "INSERT INTO lens_tags VALUES (?,?) ON DUPLICATE KEY UPDATE job_id=job_id"), v.Job["id"], tag); e != nil {
+			if _, e = execSQL(tx, sqlFor("INSERT INTO lens_tags VALUES (?,?) ON CONFLICT(job_id,tag) DO NOTHING", "INSERT INTO lens_tags VALUES (?,?) ON DUPLICATE KEY UPDATE job_id=job_id"), v.Job["id"], tag); e != nil {
 				return e
 			}
 		}
 	}
 	if v.Job["silenced"] != nil {
-		if _, e = tx.Exec(sqlFor("INSERT INTO lens_meta VALUES ('silenced_capture_started_at',?) ON CONFLICT(key) DO NOTHING", "INSERT INTO lens_meta VALUES ('silenced_capture_started_at',?) ON DUPLICATE KEY UPDATE `key`=`key`"), v.Job["first_observed_at"]); e != nil {
+		if _, e = execSQL(tx, sqlFor("INSERT INTO lens_meta VALUES ('silenced_capture_started_at',?) ON CONFLICT(key) DO NOTHING", "INSERT INTO lens_meta VALUES ('silenced_capture_started_at',?) ON DUPLICATE KEY UPDATE `key`=`key`"), metaValue(v.Job["first_observed_at"])); e != nil {
 			return e
 		}
 	}
@@ -228,18 +228,26 @@ func projectWithSummaries(tx *sql.Tx, v Event, summaries map[string]float64, act
 		}
 	}
 
-	_, e = tx.Exec(sqlFor("INSERT INTO lens_meta VALUES ('collection_started_at',?) ON CONFLICT(key) DO UPDATE SET value=CAST(MIN(CAST(value AS REAL),?) AS TEXT)", "INSERT INTO lens_meta VALUES ('collection_started_at',?) ON DUPLICATE KEY UPDATE value=LEAST(value+0,?)"), v.Job["first_observed_at"], v.Job["first_observed_at"])
+	if postgresMode {
+		_, e = execSQL(tx, `INSERT INTO lens_meta VALUES ('collection_started_at',CAST(? AS TEXT)) ON CONFLICT(key) DO UPDATE SET value=CAST(LEAST(CAST(lens_meta.value AS DOUBLE PRECISION),CAST(? AS DOUBLE PRECISION)) AS TEXT)`, fmt.Sprint(v.Job["first_observed_at"]), v.Job["first_observed_at"])
+		if e != nil {
+			return e
+		}
+		_, e = execSQL(tx, `INSERT INTO lens_meta VALUES ('last_observed_at',CAST(? AS TEXT)) ON CONFLICT(key) DO UPDATE SET value=CAST(GREATEST(CAST(lens_meta.value AS DOUBLE PRECISION),CAST(? AS DOUBLE PRECISION)) AS TEXT)`, fmt.Sprint(v.Observed), v.Observed)
+		return e
+	}
+	_, e = execSQL(tx, sqlFor("INSERT INTO lens_meta VALUES ('collection_started_at',?) ON CONFLICT(key) DO UPDATE SET value=CAST(MIN(CAST(lens_meta.value AS REAL),?) AS TEXT)", "INSERT INTO lens_meta VALUES ('collection_started_at',?) ON DUPLICATE KEY UPDATE value=LEAST(value+0,?)"), v.Job["first_observed_at"], v.Job["first_observed_at"])
 	if e != nil {
 		return e
 	}
-	_, e = tx.Exec(sqlFor("INSERT INTO lens_meta VALUES ('last_observed_at',?) ON CONFLICT(key) DO UPDATE SET value=CAST(MAX(CAST(value AS REAL),?) AS TEXT)", "INSERT INTO lens_meta VALUES ('last_observed_at',?) ON DUPLICATE KEY UPDATE value=GREATEST(value+0,?)"), v.Observed, v.Observed)
+	_, e = execSQL(tx, sqlFor("INSERT INTO lens_meta VALUES ('last_observed_at',?) ON CONFLICT(key) DO UPDATE SET value=CAST(MAX(CAST(lens_meta.value AS REAL),?) AS TEXT)", "INSERT INTO lens_meta VALUES ('last_observed_at',?) ON DUPLICATE KEY UPDATE value=GREATEST(value+0,?)"), v.Observed, v.Observed)
 	return e
 }
 
 // Transaction-scoped derived fields only. All observations, revisions and
 // retention/maintenance fences are still written before committing the batch.
 func refreshSummary(tx *sql.Tx, id string, observed float64) error {
-	_, err := tx.Exec(`UPDATE lens_jobs SET attempt_count=(SELECT COUNT(*) FROM lens_attempts WHERE job_id=lens_jobs.id), status=COALESCE((SELECT CASE status WHEN 'released' THEN 'pending' WHEN 'exception' THEN 'unknown' WHEN 'timed_out' THEN 'unknown' ELSE status END FROM lens_attempts WHERE job_id=lens_jobs.id ORDER BY started_at DESC,id DESC LIMIT 1),'pending'), exception_class=(SELECT exception_class FROM lens_attempts WHERE job_id=lens_jobs.id AND exception_class IS NOT NULL ORDER BY started_at DESC,id DESC LIMIT 1), observed_at=`+sqlFor("MAX(observed_at,?)", "GREATEST(observed_at,?)")+` WHERE id=?`, observed, id)
+	_, err := execSQL(tx, `UPDATE lens_jobs SET attempt_count=(SELECT COUNT(*) FROM lens_attempts WHERE job_id=lens_jobs.id), status=COALESCE((SELECT CASE status WHEN 'released' THEN 'pending' WHEN 'exception' THEN 'unknown' WHEN 'timed_out' THEN 'unknown' ELSE status END FROM lens_attempts WHERE job_id=lens_jobs.id ORDER BY started_at DESC,id DESC LIMIT 1),'pending'), exception_class=(SELECT exception_class FROM lens_attempts WHERE job_id=lens_jobs.id AND exception_class IS NOT NULL ORDER BY started_at DESC,id DESC LIMIT 1), observed_at=`+sqlFor("MAX(observed_at,?)", "GREATEST(observed_at,?)", "GREATEST(observed_at,?)")+` WHERE id=?`, observed, id)
 	return err
 }
 func flushSummaries(tx *sql.Tx, summaries map[string]float64) error {
@@ -254,4 +262,18 @@ func flushSummaries(tx *sql.Tx, summaries map[string]float64) error {
 		}
 	}
 	return nil
+}
+
+func columnValue(key string, value interface{}) interface{} {
+	if postgresMode && key == "silenced" && value != nil {
+		return value == float64(1)
+	}
+	return value
+}
+
+func metaValue(value interface{}) interface{} {
+	if postgresMode {
+		return fmt.Sprint(value)
+	}
+	return value
 }
