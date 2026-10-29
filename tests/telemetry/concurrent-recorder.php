@@ -17,7 +17,7 @@ app('redis')->purge('default');
 app('redis')->purge('horizon');
 $role = $argv[2];
 $barrier = $fixture['barrier'];
-$id = app('db')->connection('lens')->selectOne('SELECT CONNECTION_ID() AS id')->id;
+$id = app('db')->connection('lens')->selectOne(app('db')->connection('lens')->getDriverName() === 'pgsql' ? 'SELECT pg_backend_pid() AS id' : 'SELECT CONNECTION_ID() AS id')->id;
 file_put_contents($barrier.'.'.$role.'.started', (string) $id);
 $seen = false;
 app('db')->listen(function ($query) use (&$seen, $role, $barrier, $fixture) {

@@ -205,7 +205,7 @@ final class MonitoredTagsTest extends TestCase
     {
         app(MonitoredTags::class)->add('order:tracked');
         $binary = tempnam(sys_get_temp_dir(), 'current-old-collector-');
-        file_put_contents($binary, '#!'.PHP_BINARY."\n<?php\necho json_encode(['identity_protocol'=>2,'maintenance_protocol'=>1]);\n");
+        file_put_contents($binary, '#!'.PHP_BINARY."\n<?php\necho json_encode(['identity_protocol'=>2,'maintenance_protocol'=>1,'postgres'=>1]);\n");
         chmod($binary, 0700);
         config()->set('current.telemetry.driver', 'redis'); config()->set('current.telemetry.binary', $binary);
         try {
@@ -238,12 +238,17 @@ final class MonitoredTagsTest extends TestCase
         $this->selectClient($client);
         $binary = getenv('CURRENT_MONITORING_COLLECTOR_BINARY');
         if (! $binary || ! is_executable($binary)) { $this->markTestSkipped('Requires the matching monitored-retention collector binary.'); }
-        (require dirname(__DIR__).'/database/migrations/2026_10_27_000012_add_async_telemetry_receipts.php')->up();
+        if (! $this->store()->connection()->getSchemaBuilder()->hasTable('lens_async_receipts')) {
+            (require dirname(__DIR__).'/database/migrations/2026_10_27_000012_add_async_telemetry_receipts.php')->up();
+        }
         config()->set('current.telemetry.driver', 'redis');
         $source = config('database.connections.lens.database');
-        $local = sys_get_temp_dir().'/current-monitoring-'.bin2hex(random_bytes(6)).'.sqlite';
-        $this->store()->connection()->statement('PRAGMA wal_checkpoint(TRUNCATE)'); app('db')->purge('lens'); copy($source, $local);
-        config()->set('database.connections.lens.database', $local);
+        $local = null;
+        if ($this->store()->connection()->getDriverName() === 'sqlite') {
+            $local = sys_get_temp_dir().'/current-monitoring-'.bin2hex(random_bytes(6)).'.sqlite';
+            $this->store()->connection()->statement('PRAGMA wal_checkpoint(TRUNCATE)'); app('db')->purge('lens'); copy($source, $local);
+            config()->set('database.connections.lens.database', $local);
+        }
         $transport = app(Transport::class);
         $collector = null;
         try {
@@ -269,7 +274,7 @@ final class MonitoredTagsTest extends TestCase
         } finally {
             if ($collector?->isRunning()) { $collector->signal(SIGTERM); $collector->wait(); }
             app('db')->purge('lens'); config()->set('database.connections.lens.database', $source);
-            foreach ([$local, $local.'-wal', $local.'-shm', $local.'.collector.lock'] as $file) { @unlink($file); }
+            if ($local !== null) { foreach ([$local, $local.'-wal', $local.'-shm', $local.'.collector.lock'] as $file) { @unlink($file); } }
             $settings = $transport->settings(); $client = $transport->client(); $keys = $client->keys('*');
             foreach ($keys as $key) { $client->del(substr($key, strlen($settings['prefix']))); }
         }

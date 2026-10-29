@@ -12,8 +12,8 @@ final class ActivityDashboard
     {
         $query = $this->store->table($table)->where('expires_at', '>', microtime(true))->where($time, '>=', $from)->where($time, '<', $to);
         $unfinished = $authorization ? '0' : 'CASE WHEN finished_at IS NULL THEN 1 ELSE 0 END';
-        $duration = $authorization ? 'NULL' : 'duration_ms';
-        $aggregate = "COUNT(*) AS total, SUM(CASE WHEN {$failure} THEN 1 ELSE 0 END) AS failures, SUM({$unfinished}) AS unfinished, AVG({$duration}) AS duration";
+        $duration = $authorization ? 'NULL' : 'AVG(duration_ms)';
+        $aggregate = "COUNT(*) AS total, SUM(CASE WHEN {$failure} THEN 1 ELSE 0 END) AS failures, SUM({$unfinished}) AS unfinished, {$duration} AS duration";
         $stats = (clone $query)->selectRaw($aggregate)->first();
         $width = ($to - $from) / $buckets;
         $bucket = $this->store->connection()->getDriverName() === 'sqlite' ? "CAST(({$time} - ?) / ? AS INTEGER)" : "FLOOR(({$time} - ?) / ?)";

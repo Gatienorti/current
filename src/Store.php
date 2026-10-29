@@ -68,6 +68,9 @@ final class Store
     public function transaction(callable $callback, int $attempts = 1): mixed
     {
         return $this->connection()->transaction(function () use ($callback) {
+            if ($this->connection()->getDriverName() === 'pgsql' && $this->connection()->transactionLevel() === 1) {
+                $this->connection()->statement('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+            }
             if ($this->connection()->getDriverName() === 'sqlite') {
                 // Older Laravel ignores SQLite's transaction_mode setting. Acquire
                 // the write lock before reading, avoiding a deferred read-to-write
@@ -85,7 +88,7 @@ final class Store
     public function cycleTransaction(string $uuid, string $queueConnection, callable $callback): mixed
     {
         $connection = $this->connection();
-        if (! in_array($connection->getDriverName(), ['mysql', 'mariadb'], true)) {
+        if (! in_array($connection->getDriverName(), ['mysql', 'mariadb', 'pgsql'], true)) {
             return $this->transaction($callback);
         }
 
@@ -98,9 +101,17 @@ final class Store
         $name = 'current-cycle:'.substr(hash('sha256', json_encode([
             $connection->getDatabaseName(), $connection->getTablePrefix(), $queueConnection, $uuid,
         ], JSON_THROW_ON_ERROR)), 0, 50);
-        $lock = $pdo->prepare('SELECT GET_LOCK(?, 1)');
-        $lock->execute([$name]);
-        if ((int) $lock->fetchColumn() !== 1) {
+        $postgres = $connection->getDriverName() === 'pgsql';
+        $lockKey = $postgres ? self::advisoryKey($name) : $name;
+        $lock = $pdo->prepare($postgres ? 'SELECT pg_try_advisory_lock(CAST(? AS BIGINT))' : 'SELECT GET_LOCK(?, 1)');
+        $deadline = microtime(true) + 1;
+        do {
+            $lock->execute([$lockKey]);
+            $owned = filter_var($lock->fetchColumn(), FILTER_VALIDATE_BOOLEAN);
+            if ($owned || ! $postgres) { break; }
+            usleep(10000);
+        } while (microtime(true) < $deadline);
+        if (! $owned) {
             throw new \RuntimeException('Current history identity lock unavailable.');
         }
 
@@ -116,16 +127,27 @@ final class Store
             });
         } finally {
             // Use the same physical session; no read replica or reconnect here.
-            $release = $pdo->prepare('SELECT RELEASE_LOCK(?)');
-            $release->execute([$name]);
+            $release = $pdo->prepare($postgres ? 'SELECT pg_advisory_unlock(CAST(? AS BIGINT))' : 'SELECT RELEASE_LOCK(?)');
+            $release->execute([$lockKey]);
         }
     }
 
     /** Call inside the identity transaction. Lock absent keys too on InnoDB. */
     public function jobAction(string $uuid, string $connection, ?string $dispatch): ?object
     {
-        $action = $this->table('job_actions')->where('identity_hash', Support\DispatchIdentity::fingerprint($uuid, $connection, $dispatch ?? ''))->lockForUpdate()->first();
+        $hash = Support\DispatchIdentity::fingerprint($uuid, $connection, $dispatch ?? '');
+        if ($this->connection()->getDriverName() === 'pgsql') {
+            if ($this->connection()->transactionLevel() === 0) { throw new \RuntimeException('History identity locking requires a transaction.'); }
+            $this->connection()->statement("SET LOCAL lock_timeout = '1s'");
+            $this->connection()->select('SELECT pg_advisory_xact_lock(CAST(? AS BIGINT))', [self::advisoryKey('current-action:'.$hash)]);
+        }
+        $action = $this->table('job_actions')->where('identity_hash', $hash)->lockForUpdate()->first();
         return $action && $action->expires_at > microtime(true) ? $action : null;
+    }
+
+    public static function advisoryKey(string $name): int
+    {
+        return (int) hexdec(substr(hash('sha256', $name), 0, 15));
     }
 
     public function newJob(string $externalId, string $connection, string $queue, array $payload, string $coverage = 'observed_enqueue', ?float $clearedAt = null): string

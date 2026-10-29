@@ -12,6 +12,8 @@ use Symfony\Component\Process\Process;
 
 final class SynchronousSqlTest extends TestCase
 {
+    use Concerns\ServerSql;
+
     private ?string $serverDatabase = null;
 
     private array $processes = [];
@@ -24,13 +26,10 @@ final class SynchronousSqlTest extends TestCase
             $this->markTestSkipped('Requires the disposable SQL integration server.');
         }
         parent::setUp();
-        $connection = ['driver' => getenv('CURRENT_ASYNC_DB_DRIVER') ?: 'mysql', 'host' => getenv('CURRENT_ASYNC_DB_HOST'), 'port' => 3306, 'database' => 'current_async_test', 'username' => 'root', 'password' => getenv('CURRENT_ASYNC_DB_PASSWORD'), 'charset' => 'utf8mb4', 'collation' => 'utf8mb4_unicode_ci', 'prefix' => '', 'strict' => true];
-        if ($tls = getenv('CURRENT_ASYNC_TLS_DIR')) {
-            $connection['options'] = [\PDO::MYSQL_ATTR_SSL_CA => $tls.'/ca.pem', \PDO::MYSQL_ATTR_SSL_CERT => $tls.'/client.pem', \PDO::MYSQL_ATTR_SSL_KEY => $tls.'/client-key.pem', \PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => true];
-        }
+        $connection = $this->serverConnection();
         config()->set('database.connections.sync_admin', $connection);
         $this->serverDatabase = 'current_sync_test_'.strtolower((string) Str::ulid());
-        app('db')->connection('sync_admin')->statement('CREATE DATABASE `'.$this->serverDatabase.'`');
+        app('db')->connection('sync_admin')->statement('CREATE DATABASE '.$this->serverDatabaseName());
         app('db')->purge('lens');
         config()->set('database.connections.lens', array_replace($connection, ['database' => $this->serverDatabase]));
         config()->set('current.telemetry.driver', 'sync');
@@ -49,7 +48,7 @@ final class SynchronousSqlTest extends TestCase
         if ($this->serverDatabase) {
             app('db')->purge('lens');
             app('db')->purge('sync_peer');
-            app('db')->connection('sync_admin')->statement('DROP DATABASE `'.$this->serverDatabase.'`');
+            app('db')->connection('sync_admin')->statement('DROP DATABASE '.$this->serverDatabaseName().(getenv('CURRENT_ASYNC_DB_DRIVER') === 'pgsql' ? ' WITH (FORCE)' : ''));
             app('db')->purge('sync_admin');
         }
         foreach ($this->files as $file) {
@@ -58,6 +57,28 @@ final class SynchronousSqlTest extends TestCase
             }
         }
         parent::tearDown();
+    }
+
+    public function test_public_install_and_reinstall_preserve_history_and_application_schema(): void
+    {
+        $db = $this->store()->connection();
+        $db->getSchemaBuilder()->dropAllTables();
+        $directory = sys_get_temp_dir().'/current-sql-install-'.bin2hex(random_bytes(6)); mkdir($directory, 0700);
+        $oldPath = config_path(); $this->app->useConfigPath($directory);
+        try {
+            $this->assertSame(0, \Illuminate\Support\Facades\Artisan::call('current:install'), \Illuminate\Support\Facades\Artisan::output());
+            $this->assertSame(20, $db->table('migrations')->count());
+            dispatch(new PaymentJob('success')); $this->work();
+            $id = $this->store()->table('jobs')->sole()->id;
+            $this->assertSame(0, \Illuminate\Support\Facades\Artisan::call('current:install'));
+            $this->assertSame($id, $this->store()->table('jobs')->sole()->id);
+            $this->assertFalse(app('db')->connection('app')->getSchemaBuilder()->hasTable('lens_jobs'));
+            $this->get('/current/jobs/'.$id)->assertOk()->assertSee('PaymentJob');
+        } finally {
+            $this->app->useConfigPath($oldPath);
+            foreach (glob($directory.'/*') as $file) { unlink($file); }
+            rmdir($directory);
+        }
     }
 
     public function test_lightweight_launcher_transfers_sql_reader_and_publishes_runtime(): void
@@ -312,7 +333,8 @@ final class SynchronousSqlTest extends TestCase
                 'failed_jobs' => 0, 'failed_job_ids' => '[]', 'options' => serialize([]), 'created_at' => time()]);
         }
         foreach ([false, true] as $noBackslash) {
-            if ($noBackslash) { $db->statement("SET SESSION sql_mode = CONCAT(@@sql_mode, ',NO_BACKSLASH_ESCAPES')"); }
+            if ($this->postgres()) { $db->statement('SET standard_conforming_strings = '.($noBackslash ? 'on' : 'off')); }
+            elseif ($noBackslash) { $db->statement("SET SESSION sql_mode = CONCAT(@@sql_mode, ',NO_BACKSLASH_ESCAPES')"); }
             $page = app(\Current\Native\Sections::class)->page('batches', 'jobs', ['query' => '%_!']);
             $this->assertTrue($page['available']);
             $this->assertCount(1, $page['rows']);
@@ -373,7 +395,8 @@ final class SynchronousSqlTest extends TestCase
             if (is_file($barrier.'.'.$second.'.read')) {
                 return true;
             }
-            $row = app('db')->connection('sync_admin')->selectOne('SELECT INFO FROM information_schema.PROCESSLIST WHERE ID = ?', [$id]);
+            $row = app('db')->connection('sync_admin')->selectOne($this->postgres() ? 'SELECT query AS info FROM pg_stat_activity WHERE pid = ?' : 'SELECT INFO FROM information_schema.PROCESSLIST WHERE ID = ?', [$id]);
+            if ($this->postgres()) { return str_contains($row->info ?? '', 'pg_try_advisory_lock'); }
 
             return str_contains(strtolower($row->INFO ?? ''), 'get_lock');
         });

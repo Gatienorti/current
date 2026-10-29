@@ -88,6 +88,8 @@ final class PageAcceptanceTest extends TestCase
         }
         file_put_contents($directory.'/acceptance.json', json_encode($health));
         $server = stream_socket_server('unix://'.$directory.'/acceptance.sock');
+        // The socket fixture must not inherit live PDO/TLS sessions.
+        foreach (app('db')->getConnections() as $connection) { $connection->disconnect(); }
         $pid = pcntl_fork(); $this->assertGreaterThanOrEqual(0, $pid);
         if ($pid === 0) {
             $requests = [];

@@ -19,16 +19,10 @@ final class NativeRetryTest extends TestCase
         config()->set('queue.connections.redis.driver', 'current-redis');
         Gate::define('viewCurrent', fn ($user) => true);
         if ($host = getenv('CURRENT_ASYNC_DB_HOST')) {
-            $connection = ['driver' => getenv('CURRENT_ASYNC_DB_DRIVER') ?: 'mysql', 'host' => $host, 'port' => 3306,
-                'database' => 'current_async_test', 'username' => 'root', 'password' => getenv('CURRENT_ASYNC_DB_PASSWORD'),
-                'charset' => 'utf8mb4', 'collation' => 'utf8mb4_unicode_ci', 'prefix' => '', 'strict' => true];
-            if ($tls = getenv('CURRENT_ASYNC_TLS_DIR')) {
-                $connection['options'] = [\PDO::MYSQL_ATTR_SSL_CA => $tls.'/ca.pem', \PDO::MYSQL_ATTR_SSL_CERT => $tls.'/client.pem',
-                    \PDO::MYSQL_ATTR_SSL_KEY => $tls.'/client-key.pem', \PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT => true];
-            }
+            $connection = $this->serverConnection();
             config()->set('database.connections.retry_admin', $connection);
             $this->failedDatabase = 'current_retry_test_'.strtolower((string) Str::ulid());
-            app('db')->connection('retry_admin')->statement('CREATE DATABASE `'.$this->failedDatabase.'`');
+            app('db')->connection('retry_admin')->statement('CREATE DATABASE '.(getenv('CURRENT_ASYNC_DB_DRIVER') === 'pgsql' ? '"'.$this->failedDatabase.'"' : '`'.$this->failedDatabase.'`'));
             app('db')->purge('app');
             config()->set('database.connections.app', array_replace($connection, ['database' => $this->failedDatabase]));
             Schema::connection('app')->create('failed_jobs', function ($table) {
@@ -42,7 +36,7 @@ final class NativeRetryTest extends TestCase
     {
         if ($this->failedDatabase) {
             app('db')->purge('app');
-            app('db')->connection('retry_admin')->statement('DROP DATABASE `'.$this->failedDatabase.'`');
+            app('db')->connection('retry_admin')->statement('DROP DATABASE '.(getenv('CURRENT_ASYNC_DB_DRIVER') === 'pgsql' ? '"'.$this->failedDatabase.'" WITH (FORCE)' : '`'.$this->failedDatabase.'`'));
             app('db')->purge('retry_admin');
         }
         parent::tearDown();

@@ -8,12 +8,44 @@ The opt-in implementation targets **Linux, PHP with phpredis or optional Predis 
 
 - **SQLite** on a local Linux filesystem.
 - **MySQL 8.4 or MariaDB 11.4**, with Current tables using InnoDB and one explicit server connection.
+- **PostgreSQL 17/18** (unreleased), with permanent, unpartitioned tables in the `public` schema and one direct TCP connection.
 
 Current uses the database configured by `current.connection`; it does not move existing history or change the application's default database. MySQL/MariaDB credentials are passed to the collector over a private pipe. The collector uses a pinned SQL connection, UTF-8 (`utf8mb4`), strict writes and a one-second InnoDB lock-wait timeout. Its own transactions explicitly request `REPEATABLE READ` so maintenance locking does not depend on a server's default isolation. Application sessions and server defaults are unchanged. It never uses `INSERT IGNORE`, which could hide truncation or other write errors.
 
-SQL URL-style connections, read/write splitting and table prefixes are rejected rather than silently ignored. The collector supports Laravel PDO TLS options `MYSQL_ATTR_SSL_CA`, `MYSQL_ATTR_SSL_CERT`, `MYSQL_ATTR_SSL_KEY` and `MYSQL_ATTR_SSL_VERIFY_SERVER_CERT`; other PDO options remain unsupported. TLS verifies the server certificate and hostname, requires TLS 1.2+, supports private CAs and mutual TLS, and never falls back to plaintext. Disabling verification is rejected. Certificate paths must be readable by both the PHP workers and the collector; configure the SQL host to match the certificate. A client certificate and key must be supplied together. PostgreSQL, Redis Cluster/Sentinel, SQLite memory databases, network filesystems and Docker Desktop host-shared database files are outside the validated boundary. The SQLite lock/recovery tests pass on container-local storage; a Docker Desktop bind-mounted fixture did not enforce the expected cross-process lock behavior.
+SQL URL-style connections, read/write splitting and table prefixes are rejected rather than silently ignored. The collector supports Laravel PDO TLS options `MYSQL_ATTR_SSL_CA`, `MYSQL_ATTR_SSL_CERT`, `MYSQL_ATTR_SSL_KEY` and `MYSQL_ATTR_SSL_VERIFY_SERVER_CERT`; other PDO options remain unsupported. TLS verifies the server certificate and hostname, requires TLS 1.2+, supports private CAs and mutual TLS, and never falls back to plaintext. Disabling verification is rejected. Certificate paths must be readable by both the PHP workers and the collector; configure the SQL host to match the certificate. A client certificate and key must be supplied together. Redis Cluster/Sentinel, SQLite memory databases, network filesystems and Docker Desktop host-shared database files are outside the validated boundary. The SQLite lock/recovery tests pass on container-local storage; a Docker Desktop bind-mounted fixture did not enforce the expected cross-process lock behavior.
 
 Use one collector per Current database/namespace. Async collection and the optional native supervisor are independent choices. Keeping the default Horizon backend retains Horizon execution, balancing and retries; selecting native execution uses the explicitly configured Current engine.
+
+## PostgreSQL history (unreleased)
+
+Install PHP's `pdo_pgsql` extension. Define a dedicated Laravel connection in `config/database.php` and select it with `CURRENT_CONNECTION=current_pgsql`:
+
+```php
+'current_pgsql' => [
+    'driver' => 'pgsql',
+    'host' => env('CURRENT_DB_HOST', '127.0.0.1'),
+    'port' => env('CURRENT_DB_PORT', 5432),
+    'database' => env('CURRENT_DB_DATABASE', 'current'),
+    'username' => env('CURRENT_DB_USERNAME', 'current'),
+    'password' => env('CURRENT_DB_PASSWORD'),
+    'charset' => 'utf8',
+    'prefix' => '',
+    'search_path' => 'public',
+    'sslmode' => 'verify-full',
+    'sslrootcert' => env('CURRENT_DB_SSLROOTCERT'),
+    // Optional mutual TLS; provide both together:
+    'sslcert' => env('CURRENT_DB_SSLCERT'),
+    'sslkey' => env('CURRENT_DB_SSLKEY'),
+],
+```
+
+Create the database and grant its application role permission to install and maintain Current's tables. Run `php artisan current:install`, then restart workers. This configuration also works with synchronous recording; Redis remains the queue backend. Changing the history connection does not transfer existing records.
+
+Async mode needs a matching collector built from this source with `postgres: 1` in `--version`; released beta.3 binaries do not support PostgreSQL. Build/update the binary before enabling this connection. No additional schema migration is needed beyond the existing package migrations.
+
+The collector verifies hostname and certificate with `verify-full`; use explicit `sslmode=disable` only for an intentionally unencrypted local/trusted connection. `prefer`, `allow`, `require` and `verify-ca` are rejected because they do not provide the same no-downgrade, hostname-verified contract. Certificate files must be readable by both processes; libpq requires a private client key (normally mode `0600`). Custom PDO options, schemas/search paths, Unix sockets, connection URLs, read/write splitting and transaction-pooling proxies are outside the async boundary. Use a direct primary connection: collector ownership is session-scoped.
+
+PostgreSQL uses [transaction advisory locks](https://www.postgresql.org/docs/current/explicit-locking.html#ADVISORY-LOCKS) shared by PHP and Go to serialize absent maintenance identities, plus a session advisory lock for the single collector. Transactions explicitly use `READ COMMITTED`, a one-second lock wait in the collector, and a five-second collector statement/socket timeout. Unlogged/temporary history tables are rejected. Lost collector sessions require restart and reacquisition of ownership; committed receipts make replay idempotent. These guarantees do not imply exactly-once business effects or recovery from Redis data loss.
 
 ## Install and start
 

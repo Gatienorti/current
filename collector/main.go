@@ -42,7 +42,7 @@ var version = "dev"
 
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == "--version" {
-		json.NewEncoder(os.Stdout).Encode(map[string]interface{}{"name": "current-collector", "version": version, "protocol": 1, "identity_protocol": 2, "maintenance_protocol": 1, "monitored_retention": 1, "redis_tls": 1, "laravel_bootstrap": bootstrapCapability(), "os": runtime.GOOS, "arch": runtime.GOARCH})
+		json.NewEncoder(os.Stdout).Encode(map[string]interface{}{"name": "current-collector", "version": version, "protocol": 1, "identity_protocol": 2, "maintenance_protocol": 1, "monitored_retention": 1, "redis_tls": 1, "postgres": 1, "laravel_bootstrap": bootstrapCapability(), "os": runtime.GOOS, "arch": runtime.GOARCH})
 		return
 	}
 	if e := run(); e != nil {
@@ -177,7 +177,7 @@ func run() error {
 		tx, err := db.Begin()
 		if err != nil {
 			r.HSet(ctx, health, "last_error", "database_unavailable")
-			if mysqlMode && db.conn.PingContext(ctx) != nil {
+			if (mysqlMode || postgresMode) && db.conn.PingContext(ctx) != nil {
 				return errors.New("database connection lost; restart to reacquire ownership")
 			}
 			if s.Once {
